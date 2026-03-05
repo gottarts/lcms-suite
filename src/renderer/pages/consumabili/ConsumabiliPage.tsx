@@ -70,7 +70,7 @@ export function ConsumabiliPage() {
   }
 
   const columns: Column<any>[] = [
-    { key: 'tipo', label: 'Tipo', render: (v) => <Badge variant="outline" className="text-xs">{tipoLabels[v as string] || v}</Badge> },
+    { key: 'tipo', label: 'Tipo', render: (v) => <Badge variant="outline" className="text-xs">{tipoLabels[v as string] || String(v)}</Badge> },
     { key: 'nome', label: 'Nome', className: 'font-medium cursor-pointer', render: (v, row) => <span onClick={() => handleEdit(row)} className="hover:text-primary">{String(v)}</span> },
     { key: 'lotto', label: 'Lotto' },
     { key: 'fornitore', label: 'Fornitore' },

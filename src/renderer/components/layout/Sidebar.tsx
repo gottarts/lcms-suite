@@ -18,9 +18,9 @@ export function Sidebar() {
   }, [])
 
   return (
-    <aside className="w-56 h-screen bg-[hsl(var(--sidebar-background))] border-r border-[hsl(var(--sidebar-border))] flex flex-col">
-      <div className="p-4 border-b border-[hsl(var(--sidebar-border))]">
-        <h1 className="font-heading font-bold text-lg text-[hsl(var(--sidebar-primary))]">
+    <aside className="w-56 h-screen bg-sidebar-background border-r border-sidebar-border flex flex-col">
+      <div className="p-4 border-b border-sidebar-border">
+        <h1 className="font-heading font-bold text-lg text-sidebar-primary">
           LC-MS/MS Suite
         </h1>
       </div>
@@ -33,8 +33,8 @@ export function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
                 isActive
-                  ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-accent-foreground))] font-medium'
-                  : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]'
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent'
               }`
             }
           >
@@ -44,7 +44,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="p-3 text-xs text-[hsl(var(--muted-foreground))] text-center border-t border-[hsl(var(--sidebar-border))]">
+      <div className="p-3 text-xs text-muted-foreground text-center border-t border-sidebar-border">
         {time.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
       </div>
     </aside>

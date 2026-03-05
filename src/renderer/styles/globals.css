@@ -1,42 +1,48 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --background: 210 20% 98%;
-    --foreground: 220 15% 15%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 15% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 15%;
-    --primary: 168 45% 35%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 220 15% 25%;
-    --muted: 210 15% 93%;
-    --muted-foreground: 220 10% 45%;
-    --accent: 168 30% 93%;
-    --accent-foreground: 168 45% 25%;
-    --destructive: 0 60% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 210 15% 88%;
-    --input: 210 15% 88%;
-    --ring: 168 45% 35%;
-    --radius: 0.375rem;
-    --sidebar-background: 210 20% 96%;
-    --sidebar-foreground: 220 15% 25%;
-    --sidebar-primary: 168 45% 35%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 168 30% 90%;
-    --sidebar-accent-foreground: 168 45% 25%;
-    --sidebar-border: 210 15% 88%;
-  }
+@theme {
+  --color-background: hsl(210 20% 98%);
+  --color-foreground: hsl(220 15% 15%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(220 15% 15%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(220 15% 15%);
+  --color-primary: hsl(168 45% 35%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(210 20% 96%);
+  --color-secondary-foreground: hsl(220 15% 25%);
+  --color-muted: hsl(210 15% 93%);
+  --color-muted-foreground: hsl(220 10% 45%);
+  --color-accent: hsl(168 30% 93%);
+  --color-accent-foreground: hsl(168 45% 25%);
+  --color-destructive: hsl(0 60% 50%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-border: hsl(210 15% 88%);
+  --color-input: hsl(210 15% 88%);
+  --color-ring: hsl(168 45% 35%);
+  --color-sidebar-background: hsl(210 20% 96%);
+  --color-sidebar-foreground: hsl(220 15% 25%);
+  --color-sidebar-primary: hsl(168 45% 35%);
+  --color-sidebar-primary-foreground: hsl(0 0% 100%);
+  --color-sidebar-accent: hsl(168 30% 90%);
+  --color-sidebar-accent-foreground: hsl(168 45% 25%);
+  --color-sidebar-border: hsl(210 15% 88%);
+
+  --radius-lg: 0.375rem;
+  --radius-md: calc(0.375rem - 2px);
+  --radius-sm: calc(0.375rem - 4px);
+
+  --font-sans: 'Lato', sans-serif;
+  --font-heading: 'Karla', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
   }
 }
