@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { loadConfig, saveConfig } from './config'
 import { openDatabase, closeDatabase, createDatabase, dbFileExists } from './db'
+import { registerStrumentiIpc } from './ipc/strumenti.ipc'
+import { registerAnagraficheIpc } from './ipc/anagrafiche.ipc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -83,6 +85,8 @@ ipcMain.handle('config:select-json', async () => {
 
 // ── App lifecycle ──
 app.whenReady().then(() => {
+  registerStrumentiIpc()
+  registerAnagraficheIpc()
   createWindow()
 
   const config = loadConfig()
