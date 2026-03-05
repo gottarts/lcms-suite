@@ -81,13 +81,17 @@ export interface CompostoStoria {
 export interface Preparazione {
   id: number
   composto_id: number
+  forma: string | null
+  stato: string | null
   flacone: string | null
   concentrazione: string | null
   solvente: string | null
   data_prep: string | null
   scadenza: string | null
   operatore: string | null
+  posizione: string | null
   note: string | null
+  data_dismissione: string | null
   created_at: string
 }
 

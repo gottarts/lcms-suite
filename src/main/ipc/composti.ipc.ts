@@ -130,6 +130,67 @@ export function registerCompostiIpc(): void {
     return { ok: true }
   })
 
+  ipcMain.handle('composti:create-mix', (_, data: {
+    forma_commerciale: string
+    forma: string
+    concentrazione: number | null
+    solvente: string | null
+    produttore: string | null
+    lotto: string | null
+    data_apertura: string | null
+    scadenza_prodotto: string | null
+    classe: string | null
+    destinazione_uso: string | null
+    nomi: string[]
+  }) => {
+    const db = getDb()
+    const mix_id = 'mix_' + Date.now().toString(36)
+    const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
+      'purezza', 'concentrazione', 'solvente', 'fiala', 'produttore', 'lotto',
+      'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
+      'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
+      'arpa', 'mix', 'mix_id']
+    const placeholders = cols.map(c => `@${c}`).join(', ')
+    const insert = db.prepare(
+      `INSERT INTO composti (${cols.join(', ')}) VALUES (${placeholders})`
+    )
+
+    const common = {
+      codice_interno: null,
+      formula: null,
+      classe: data.classe || null,
+      forma: data.forma || 'Solution',
+      forma_commerciale: data.forma_commerciale,
+      purezza: null,
+      concentrazione: data.concentrazione,
+      solvente: data.solvente || null,
+      fiala: null,
+      produttore: data.produttore || null,
+      lotto: data.lotto || null,
+      operatore_apertura: null,
+      data_apertura: data.data_apertura || null,
+      scadenza_prodotto: data.scadenza_prodotto || null,
+      data_dismissione: null,
+      destinazione_uso: data.destinazione_uso || null,
+      work_standard: null,
+      matrice: null,
+      peso_molecolare: null,
+      ubicazione: null,
+      arpa: 'N',
+      mix: data.forma_commerciale,
+      mix_id,
+    }
+
+    const count = db.transaction(() => {
+      for (const nome of data.nomi) {
+        insert.run({ ...common, nome })
+      }
+      return data.nomi.length
+    })()
+
+    return { mix_id, count }
+  })
+
   ipcMain.handle('composti:storia-add', (_, compostoId: number, data: { tipo: string; data: string; note?: string }) => {
     const result = getDb().prepare(
       'INSERT INTO composti_storia (composto_id, tipo, data, note) VALUES (?, ?, ?, ?)'

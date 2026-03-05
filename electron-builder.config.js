@@ -16,5 +16,10 @@ module.exports = {
     target: 'dir',
     signAndEditExecutable: false,
   },
+  mac: {
+    target: 'dmg',
+    category: 'public.app-category.developer-tools',
+    identity: null,
+  },
   artifactName: 'LCMS-Suite-${version}.${ext}',
 }

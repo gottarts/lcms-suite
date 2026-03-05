@@ -10,7 +10,17 @@ interface CompostiTableProps {
 
 export function CompostiTable({ data, onRowClick }: CompostiTableProps) {
   const columns: Column<any>[] = [
-    { key: 'nome', label: 'Nome', className: 'font-medium' },
+    {
+      key: 'nome',
+      label: 'Nome',
+      className: 'font-medium',
+      render: (v, row) => (
+        <span>
+          {row.mix_id && <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-100">MIX</Badge>}
+          {String(v)}
+        </span>
+      ),
+    },
     { key: 'codice_interno', label: 'Codice' },
     { key: 'classe', label: 'Classe', render: (v) => v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—' },
     { key: 'forma', label: 'Forma' },

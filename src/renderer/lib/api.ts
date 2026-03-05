@@ -24,6 +24,8 @@ export const compostiApi = {
   delete: (id: number) => api.invoke('composti:delete', id) as Promise<{ ok: boolean }>,
   addStoria: (compostoId: number, data: { tipo: string; data: string; note?: string }) =>
     api.invoke('composti:storia-add', compostoId, data) as Promise<{ id: number }>,
+  createMix: (data: Record<string, unknown>) =>
+    api.invoke('composti:create-mix', data) as Promise<{ mix_id: string; count: number }>,
 }
 
 export const preparazioniApi = {
@@ -31,6 +33,7 @@ export const preparazioniApi = {
   create: (data: Record<string, unknown>) => api.invoke('preparazioni:create', data) as Promise<any>,
   update: (id: number, data: Record<string, unknown>) => api.invoke('preparazioni:update', id, data) as Promise<any>,
   delete: (id: number) => api.invoke('preparazioni:delete', id) as Promise<{ ok: boolean }>,
+  dismiss: (id: number, data_dismissione: string) => api.invoke('preparazioni:dismiss', id, data_dismissione) as Promise<any>,
 }
 
 export const eluentiApi = {

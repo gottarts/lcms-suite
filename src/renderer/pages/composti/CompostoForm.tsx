@@ -116,8 +116,12 @@ export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormPr
                 </SelectContent>
               </Select>
             </div>
-            <div><Label className="text-xs">Mix</Label><Input value={form.mix || ''} onChange={e => set('mix', e.target.value)} /></div>
-            <div><Label className="text-xs">Mix ID</Label><Input value={form.mix_id || ''} onChange={e => set('mix_id', e.target.value)} /></div>
+            {form.mix_id && (
+              <div className="col-span-2">
+                <Label className="text-xs">Mix</Label>
+                <div className="text-sm text-muted-foreground mt-1 font-mono">{form.mix} ({form.mix_id})</div>
+              </div>
+            )}
           </div>
         </div>
 

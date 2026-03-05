@@ -4,12 +4,14 @@
   "description": "",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
+    "dev": "tsc -p tsconfig.node.json && concurrently -k \"npm run dev:renderer\" \"npm run dev:main\" \"npm run dev:electron\"",
     "dev:renderer": "vite --config vite.config.ts",
     "dev:main": "tsc -p tsconfig.node.json --watch",
+    "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "build": "tsc -p tsconfig.node.json && vite build --config vite.config.ts",
     "start": "electron .",
-    "package": "npm run build && electron-builder --config electron-builder.config.js"
+    "package": "npm run build && electron-builder --config electron-builder.config.js",
+    "package:mac": "npm run build && electron-builder --config electron-builder.config.js --mac"
   },
   "keywords": [],
   "author": "",
@@ -42,11 +44,13 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "electron": "^40.7.0",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.9",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "wait-on": "^9.0.4"
   }
 }

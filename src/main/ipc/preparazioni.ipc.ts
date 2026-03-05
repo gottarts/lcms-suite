@@ -10,8 +10,8 @@ export function registerPreparazioniIpc(): void {
 
   ipcMain.handle('preparazioni:create', (_, data: Record<string, unknown>) => {
     const result = getDb().prepare(
-      `INSERT INTO preparazioni (composto_id, flacone, concentrazione, solvente, data_prep, scadenza, operatore, note)
-       VALUES (@composto_id, @flacone, @concentrazione, @solvente, @data_prep, @scadenza, @operatore, @note)`
+      `INSERT INTO preparazioni (composto_id, flacone, concentrazione, solvente, data_prep, scadenza, operatore, note, forma, stato, posizione)
+       VALUES (@composto_id, @flacone, @concentrazione, @solvente, @data_prep, @scadenza, @operatore, @note, @forma, @stato, @posizione)`
     ).run(data)
     return getDb().prepare('SELECT * FROM preparazioni WHERE id = ?').get(result.lastInsertRowid)
   })
@@ -20,8 +20,15 @@ export function registerPreparazioniIpc(): void {
     getDb().prepare(
       `UPDATE preparazioni SET flacone=@flacone, concentrazione=@concentrazione,
        solvente=@solvente, data_prep=@data_prep, scadenza=@scadenza,
-       operatore=@operatore, note=@note WHERE id=@id`
+       operatore=@operatore, note=@note, forma=@forma, stato=@stato, posizione=@posizione WHERE id=@id`
     ).run({ ...data, id })
+    return getDb().prepare('SELECT * FROM preparazioni WHERE id = ?').get(id)
+  })
+
+  ipcMain.handle('preparazioni:dismiss', (_, id: number, data_dismissione: string) => {
+    getDb().prepare(
+      `UPDATE preparazioni SET stato='Dismessa', data_dismissione=@data_dismissione WHERE id=@id`
+    ).run({ id, data_dismissione })
     return getDb().prepare('SELECT * FROM preparazioni WHERE id = ?').get(id)
   })
 

@@ -3,11 +3,12 @@ import { compostiApi } from '@/lib/api'
 import { CompostiTable } from './CompostiTable'
 import { CompostoForm } from './CompostoForm'
 import { CompostoPanel } from './CompostoPanel'
+import { MixPesticidiForm } from './MixPesticidiForm'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { computeStato } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, FlaskConical } from 'lucide-react'
 
 export function CompostiPage() {
   const [composti, setComposti] = useState<any[]>([])
@@ -16,6 +17,7 @@ export function CompostiPage() {
   const [editComposto, setEditComposto] = useState<any>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [mixOpen, setMixOpen] = useState(false)
 
   const load = () => compostiApi.list().then(setComposti)
   useEffect(() => { load() }, [])
@@ -53,6 +55,9 @@ export function CompostiPage() {
         <h2 className="font-heading text-lg font-semibold">Standard di Riferimento</h2>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{filtered.length} composti</span>
+          <Button size="sm" variant="outline" onClick={() => setMixOpen(true)}>
+            <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
+          </Button>
           <Button size="sm" onClick={() => { setEditComposto(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
           </Button>
@@ -69,6 +74,7 @@ export function CompostiPage() {
       <CompostiTable data={filtered} onRowClick={row => setPanelId(row.id)} />
 
       <CompostoForm open={formOpen} onClose={() => setFormOpen(false)} composto={editComposto} onSave={load} />
+      <MixPesticidiForm open={mixOpen} onClose={() => setMixOpen(false)} onSave={load} />
       <CompostoPanel compostoId={panelId} onClose={() => setPanelId(null)} onEdit={handleEdit} onDelete={id => { setPanelId(null); setDeleteId(id) }} />
 
       <ConfirmDialog open={deleteId !== null} title="Elimina composto" message="Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?" confirmLabel="Elimina" variant="danger" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
