@@ -5,6 +5,7 @@ import { AnagrafichePage } from './pages/anagrafiche/AnagrafichePage'
 import { MetodiPage } from './pages/metodi/MetodiPage'
 import { StrumentiPage } from './pages/strumenti/StrumentiPage'
 import { ConsumabiliPage } from './pages/consumabili/ConsumabiliPage'
+import { CompostiPage } from './pages/composti/CompostiPage'
 import { useState, useEffect } from 'react'
 
 export function App() {
@@ -32,7 +33,7 @@ export function App() {
     <HashRouter>
       <Routes>
         <Route element={<AppLayout />}>
-          <Route path="/composti" element={<div className="text-muted-foreground">Composti — TODO</div>} />
+          <Route path="/composti" element={<CompostiPage />} />
           <Route path="/metodi" element={<MetodiPage />} />
           <Route path="/strumenti" element={<StrumentiPage />} />
           <Route path="/consumabili" element={<ConsumabiliPage />} />
