@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { SetupPage } from './pages/setup/SetupPage'
+import { AnagrafichePage } from './pages/anagrafiche/AnagrafichePage'
 import { useState, useEffect } from 'react'
 
 export function App() {
@@ -32,7 +33,7 @@ export function App() {
           <Route path="/metodi" element={<div className="text-muted-foreground">Metodi — TODO</div>} />
           <Route path="/strumenti" element={<div className="text-muted-foreground">Strumenti — TODO</div>} />
           <Route path="/consumabili" element={<div className="text-muted-foreground">Consumabili — TODO</div>} />
-          <Route path="/anagrafiche" element={<div className="text-muted-foreground">Anagrafiche — TODO</div>} />
+          <Route path="/anagrafiche" element={<AnagrafichePage />} />
           <Route path="*" element={<Navigate to="/composti" replace />} />
         </Route>
       </Routes>
