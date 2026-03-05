@@ -13,10 +13,8 @@ module.exports = {
     { from: 'src/main/migrations', to: 'migrations' },
   ],
   win: {
-    target: 'portable',
-    icon: 'build/icon.ico',
+    target: 'dir',
+    signAndEditExecutable: false,
   },
-  portable: {
-    artifactName: 'LCMS-Suite-${version}.exe',
-  },
+  artifactName: 'LCMS-Suite-${version}.${ext}',
 }
