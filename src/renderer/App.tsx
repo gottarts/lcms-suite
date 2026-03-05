@@ -3,6 +3,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { SetupPage } from './pages/setup/SetupPage'
 import { AnagrafichePage } from './pages/anagrafiche/AnagrafichePage'
 import { MetodiPage } from './pages/metodi/MetodiPage'
+import { StrumentiPage } from './pages/strumenti/StrumentiPage'
 import { useState, useEffect } from 'react'
 
 export function App() {
@@ -32,7 +33,7 @@ export function App() {
         <Route element={<AppLayout />}>
           <Route path="/composti" element={<div className="text-muted-foreground">Composti — TODO</div>} />
           <Route path="/metodi" element={<MetodiPage />} />
-          <Route path="/strumenti" element={<div className="text-muted-foreground">Strumenti — TODO</div>} />
+          <Route path="/strumenti" element={<StrumentiPage />} />
           <Route path="/consumabili" element={<div className="text-muted-foreground">Consumabili — TODO</div>} />
           <Route path="/anagrafiche" element={<AnagrafichePage />} />
           <Route path="*" element={<Navigate to="/composti" replace />} />
