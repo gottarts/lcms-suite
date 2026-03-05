@@ -4,6 +4,14 @@ import { loadConfig, saveConfig } from './config'
 import { openDatabase, closeDatabase, createDatabase, dbFileExists } from './db'
 import { registerStrumentiIpc } from './ipc/strumenti.ipc'
 import { registerAnagraficheIpc } from './ipc/anagrafiche.ipc'
+import { registerMetodiIpc } from './ipc/metodi.ipc'
+import { registerCompostiIpc } from './ipc/composti.ipc'
+import { registerPreparazioniIpc } from './ipc/preparazioni.ipc'
+import { registerEluentiIpc } from './ipc/eluenti.ipc'
+import { registerConsumabiliIpc } from './ipc/consumabili.ipc'
+import { registerDiarioIpc } from './ipc/diario.ipc'
+import { registerQueryIpc } from './ipc/query.ipc'
+import { registerMigrationIpc } from './ipc/migration.ipc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -87,6 +95,14 @@ ipcMain.handle('config:select-json', async () => {
 app.whenReady().then(() => {
   registerStrumentiIpc()
   registerAnagraficheIpc()
+  registerMetodiIpc()
+  registerCompostiIpc()
+  registerPreparazioniIpc()
+  registerEluentiIpc()
+  registerConsumabiliIpc()
+  registerDiarioIpc()
+  registerQueryIpc()
+  registerMigrationIpc()
   createWindow()
 
   const config = loadConfig()
