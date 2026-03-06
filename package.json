@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.node.json && vite build --config vite.config.ts",
     "start": "electron .",
     "package": "npm run build && electron-builder --config electron-builder.config.js",
-    "package:mac": "npm run build && electron-builder --config electron-builder.config.js --mac"
+    "package:mac": "npm run build && electron-builder --config electron-builder.config.js --mac",
+    "package:mac-legacy": "npm run build && electron-builder --config electron-builder.config.mac-legacy.js --mac"
   },
   "keywords": [],
   "author": "",
@@ -48,6 +49,7 @@
     "electron": "^40.7.0",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.9",
+    "esbuild": "^0.27.3",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
