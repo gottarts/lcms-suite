@@ -58,10 +58,13 @@ ipcMain.handle('config:get', () => {
 })
 
 ipcMain.handle('config:select-folder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
+  const dialogOpts: Electron.OpenDialogOptions = {
     properties: ['openDirectory'],
     title: 'Seleziona cartella per il database',
-  })
+  }
+  const result = process.platform === 'darwin'
+    ? await dialog.showOpenDialog(dialogOpts)
+    : await dialog.showOpenDialog(mainWindow!, dialogOpts)
   if (result.canceled || !result.filePaths.length) return { ok: false }
 
   const folder = result.filePaths[0]
@@ -82,11 +85,14 @@ ipcMain.handle('config:select-folder', async () => {
 })
 
 ipcMain.handle('config:select-json', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
+  const dialogOpts: Electron.OpenDialogOptions = {
     properties: ['openFile'],
     filters: [{ name: 'JSON', extensions: ['json'] }],
     title: 'Seleziona lcms-data.json da importare',
-  })
+  }
+  const result = process.platform === 'darwin'
+    ? await dialog.showOpenDialog(dialogOpts)
+    : await dialog.showOpenDialog(mainWindow!, dialogOpts)
   if (result.canceled || !result.filePaths.length) return { ok: false }
   return { ok: true, path: result.filePaths[0] }
 })
