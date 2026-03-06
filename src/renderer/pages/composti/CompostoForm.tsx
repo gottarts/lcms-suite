@@ -18,6 +18,7 @@ interface CompostoFormProps {
 export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormProps) {
   const isEdit = !!composto
   const [form, setForm] = useState<Record<string, any>>({})
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (composto) {
@@ -38,22 +39,30 @@ export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormPr
 
   const handleSave = async () => {
     if (!form.nome?.trim()) return
-    const data = { ...form }
-    // Convert numeric fields
-    if (data.purezza) data.purezza = parseFloat(data.purezza) || null
-    if (data.concentrazione) data.concentrazione = parseFloat(data.concentrazione) || null
-    if (data.peso_molecolare) data.peso_molecolare = parseFloat(data.peso_molecolare) || null
-    // Convert empty strings to null
-    for (const k of Object.keys(data)) {
-      if (k !== 'nome' && k !== 'arpa' && data[k] === '') data[k] = null
+    setSaving(true)
+    try {
+      const data = { ...form }
+      // Convert numeric fields
+      if (data.purezza) data.purezza = parseFloat(data.purezza) || null
+      if (data.concentrazione) data.concentrazione = parseFloat(data.concentrazione) || null
+      if (data.peso_molecolare) data.peso_molecolare = parseFloat(data.peso_molecolare) || null
+      // Convert empty strings to null
+      for (const k of Object.keys(data)) {
+        if (k !== 'nome' && k !== 'arpa' && data[k] === '') data[k] = null
+      }
+      if (isEdit) {
+        await compostiApi.update(composto.id, data)
+      } else {
+        await compostiApi.create(data)
+      }
+      onSave()
+      onClose()
+    } catch (error) {
+      console.error('Errore nel salvare il composto:', error)
+      // TODO: mostra un toast di errore se necessario
+    } finally {
+      setSaving(false)
     }
-    if (isEdit) {
-      await compostiApi.update(composto.id, data)
-    } else {
-      await compostiApi.create(data)
-    }
-    onSave()
-    onClose()
   }
 
   return (
@@ -127,8 +136,8 @@ export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormPr
 
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>Annulla</Button>
-          <Button onClick={handleSave} disabled={!form.nome?.trim()}>
-            {isEdit ? 'Salva' : 'Crea'}
+          <Button onClick={handleSave} disabled={!form.nome?.trim() || saving}>
+            {saving ? 'Salvando...' : isEdit ? 'Salva' : 'Crea'}
           </Button>
         </DialogFooter>
       </DialogContent>

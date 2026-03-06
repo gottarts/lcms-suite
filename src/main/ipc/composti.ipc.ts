@@ -63,8 +63,35 @@ export function registerCompostiIpc(): void {
   ipcMain.handle('composti:create', (_, data: Record<string, unknown>) => {
     const db = getDb()
     const metodiIds = (data.metodi_ids as string[] | undefined) || []
-    const compostoData = { ...data }
-    delete compostoData.metodi_ids
+    delete data.metodi_ids
+
+    // Costruisci un oggetto completo con tutti i campi della tabella, usando null per i campi mancanti
+    const row = {
+      nome: data.nome,
+      codice_interno: data.codice_interno ?? null,
+      formula: data.formula ?? null,
+      classe: data.classe ?? null,
+      forma: data.forma ?? null,
+      forma_commerciale: data.forma_commerciale ?? null,
+      purezza: data.purezza ?? null,
+      concentrazione: data.concentrazione ?? null,
+      solvente: data.solvente ?? null,
+      fiala: data.fiala ?? null,
+      produttore: data.produttore ?? null,
+      lotto: data.lotto ?? null,
+      operatore_apertura: data.operatore_apertura ?? null,
+      data_apertura: data.data_apertura ?? null,
+      scadenza_prodotto: data.scadenza_prodotto ?? null,
+      data_dismissione: data.data_dismissione ?? null,
+      destinazione_uso: data.destinazione_uso ?? null,
+      work_standard: data.work_standard ?? null,
+      matrice: data.matrice ?? null,
+      peso_molecolare: data.peso_molecolare ?? null,
+      ubicazione: data.ubicazione ?? null,
+      arpa: data.arpa ?? 'N',
+      mix: data.mix ?? null,
+      mix_id: data.mix_id ?? null,
+    }
 
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
       'purezza', 'concentrazione', 'solvente', 'fiala', 'produttore', 'lotto',
@@ -81,7 +108,7 @@ export function registerCompostiIpc(): void {
 
     let newId: number | bigint = 0
     db.transaction(() => {
-      const result = insertComposto.run(compostoData)
+      const result = insertComposto.run(row)
       newId = result.lastInsertRowid
       for (const mid of metodiIds) {
         insertLink.run(newId, mid)
@@ -94,8 +121,36 @@ export function registerCompostiIpc(): void {
   ipcMain.handle('composti:update', (_, id: number, data: Record<string, unknown>) => {
     const db = getDb()
     const metodiIds = (data.metodi_ids as string[] | undefined) || []
-    const compostoData = { ...data }
-    delete compostoData.metodi_ids
+    delete data.metodi_ids
+
+    // Costruisci un oggetto completo con tutti i campi della tabella, usando null per i campi mancanti
+    const row = {
+      id,
+      nome: data.nome,
+      codice_interno: data.codice_interno ?? null,
+      formula: data.formula ?? null,
+      classe: data.classe ?? null,
+      forma: data.forma ?? null,
+      forma_commerciale: data.forma_commerciale ?? null,
+      purezza: data.purezza ?? null,
+      concentrazione: data.concentrazione ?? null,
+      solvente: data.solvente ?? null,
+      fiala: data.fiala ?? null,
+      produttore: data.produttore ?? null,
+      lotto: data.lotto ?? null,
+      operatore_apertura: data.operatore_apertura ?? null,
+      data_apertura: data.data_apertura ?? null,
+      scadenza_prodotto: data.scadenza_prodotto ?? null,
+      data_dismissione: data.data_dismissione ?? null,
+      destinazione_uso: data.destinazione_uso ?? null,
+      work_standard: data.work_standard ?? null,
+      matrice: data.matrice ?? null,
+      peso_molecolare: data.peso_molecolare ?? null,
+      ubicazione: data.ubicazione ?? null,
+      arpa: data.arpa ?? 'N',
+      mix: data.mix ?? null,
+      mix_id: data.mix_id ?? null,
+    }
 
     const updateComposto = db.prepare(
       `UPDATE composti SET nome=@nome, codice_interno=@codice_interno, formula=@formula,
@@ -115,7 +170,7 @@ export function registerCompostiIpc(): void {
     )
 
     db.transaction(() => {
-      updateComposto.run({ ...compostoData, id })
+      updateComposto.run(row)
       deleteLinks.run(id)
       for (const mid of metodiIds) {
         insertLink.run(id, mid)
