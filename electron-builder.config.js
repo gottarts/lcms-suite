@@ -13,7 +13,9 @@ module.exports = {
     { from: 'src/main/migrations', to: 'migrations' },
   ],
   win: {
-    target: 'dir',
+    target: [
+      { target: 'dir', arch: ['x64', 'ia32'] },
+    ],
     signAndEditExecutable: false,
   },
   mac: {
