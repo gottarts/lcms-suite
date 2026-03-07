@@ -27,12 +27,14 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         <span>
           {row.mix_id && <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-100">MIX</Badge>}
           {String(v)}
+          {row.prep_attive_count > 0 && <Badge variant="outline" className="ml-2 text-xs">{row.prep_attive_count} prep.</Badge>}
+          {row.prep_scadute_count > 0 && <Badge variant="destructive" className="ml-2 text-xs">⚠</Badge>}
         </span>
       ),
     },
     { key: 'codice_interno', label: 'Codice' },
     { key: 'classe', label: 'Classe', render: (v) => v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—' },
-    { key: 'forma', label: 'Forma' },
+    { key: 'forma', label: 'Forma', render: (v, row) => row.mix_id ? 'Mix' : v },
     { key: 'produttore', label: 'Produttore' },
     { key: 'lotto', label: 'Lotto' },
     { key: 'scadenza_prodotto', label: 'Scadenza', render: (v) => formatDate(v as string) },

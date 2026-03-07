@@ -43,6 +43,13 @@ function isExpiringSoon(scadenza: string | null): boolean {
   return diff > 0 && diff < 30 * 24 * 60 * 60 * 1000
 }
 
+function computeStatoPrep(p: any): string {
+  if (p.stato === 'Dismessa') return 'Dismessa'
+  if (p.stato === 'Esaurita') return 'Esaurita'
+  if (p.scadenza && new Date(p.scadenza) < new Date()) return 'Scaduta'
+  return p.stato ?? 'Attiva'
+}
+
 export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: PreparazioniTabProps) {
   const [formOpen, setFormOpen] = useState(false)
   const [calcOpen, setCalcOpen] = useState(false)
@@ -172,11 +179,8 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
             {/* Card header */}
             <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold font-mono text-primary">
-                  {p.forma || '—'} — {p.flacone || '#?'}
-                </span>
-                <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', statusBadgeClass(p.stato || 'Attiva'))}>
-                  {p.stato || 'Attiva'}
+                <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', statusBadgeClass(computeStatoPrep(p)))}>
+                  {computeStatoPrep(p)}
                 </Badge>
               </div>
               <div className="flex gap-1">
@@ -197,7 +201,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
             </div>
             {/* Card body */}
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 px-3 py-2.5">
-              <Field label="Concentrazione" value={p.concentrazione ? `${p.concentrazione} mg/L` : null} />
+              <Field label="Concentrazione" value={p.concentrazione ?? null} />
               {p.concentrazione_reale != null && (
                 <Field label="Conc. reale (mg/L)" value={p.concentrazione_reale.toFixed(2)} className="text-primary font-semibold" />
               )}

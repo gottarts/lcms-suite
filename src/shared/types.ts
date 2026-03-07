@@ -67,6 +67,8 @@ export interface Composto {
   // Joined/computed fields
   metodi_ids?: string[]
   stato?: CompostoStato
+  prep_attive_count?: number
+  prep_scadute_count?: number
 }
 
 export type CompostoStato = 'attivo' | 'in_scadenza' | 'scaduto' | 'rivalidato' | 'dismesso'

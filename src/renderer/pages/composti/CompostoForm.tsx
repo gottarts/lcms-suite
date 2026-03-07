@@ -116,7 +116,13 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
           <Separator />
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Forma e Concentrazione</div>
           <div className="grid grid-cols-3 gap-3">
-            <div><Label className="text-xs">Forma</Label><Input value={form.forma || ''} onChange={e => set('forma', e.target.value)} /></div>
+            <div><Label className="text-xs">Forma</Label><Select value={form.forma || ''} onValueChange={v => set('forma', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Neat">Neat</SelectItem>
+                  <SelectItem value="Solution">Solution</SelectItem>
+                </SelectContent>
+              </Select></div>
             <div><Label className="text-xs">Forma Commerciale</Label><Input value={form.forma_commerciale || ''} onChange={e => set('forma_commerciale', e.target.value)} /></div>
             <div><Label className="text-xs">Fiala</Label><Input value={form.fiala || ''} onChange={e => set('fiala', e.target.value)} /></div>
             <div><Label className="text-xs">Purezza (%)</Label><Input type="number" step="0.1" value={form.purezza || ''} onChange={e => set('purezza', e.target.value)} /></div>

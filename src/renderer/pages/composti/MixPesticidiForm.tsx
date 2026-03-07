@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,6 @@ interface MixPesticidiFormProps {
 export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProps) {
   const [form, setForm] = useState({
     forma_commerciale: '',
-    forma: 'Solution',
     concentrazione: '',
     solvente: '',
     produttore: '',
@@ -26,18 +25,40 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     scadenza_prodotto: '',
     classe: '',
     destinazione_uso: '',
+    stoccaggio: '',
+    accreditamento_crm: 'ISO 17034',
+    codice_interno: '',
   })
   const [nomi, setNomi] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [vociStoccaggio, setVociStoccaggio] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
 
+  useEffect(() => {
+    try {
+      window.electronAPI.invoke('anagrafiche:list').then((anagrafiche: any[]) => {
+        const anagrafica = anagrafiche.find(
+          (a: any) => a.nome.toLowerCase().includes('stoccaggio') ||
+                      a.nome.toLowerCase().includes('posizioni')
+        )
+        if (anagrafica?.voci) {
+          setVociStoccaggio(anagrafica.voci.map((v: any) => v.valore))
+        }
+      }).catch(err => console.error('Error loading anagrafiche:', err))
+    } catch (err) {
+      console.error('Error in useEffect:', err)
+    }
+  }, [])
+
   const reset = () => {
     setForm({
-      forma_commerciale: '', forma: 'Solution', concentrazione: '',
+      forma_commerciale: '', concentrazione: '',
       solvente: '', produttore: '', lotto: '', data_apertura: '',
       scadenza_prodotto: '', classe: '', destinazione_uso: '',
+      stoccaggio: '', accreditamento_crm: 'ISO 17034',
+      codice_interno: '',
     })
     setNomi([])
     if (fileRef.current) fileRef.current.value = ''
@@ -61,6 +82,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     try {
       const data = {
         ...form,
+        forma: 'mix',
         concentrazione: form.concentrazione ? parseFloat(form.concentrazione) : null,
         nomi,
       }
@@ -94,15 +116,9 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
               <Label className="text-xs">Nome mix (Forma Commerciale) *</Label>
               <Input value={form.forma_commerciale} onChange={e => set('forma_commerciale', e.target.value)} placeholder="es. CRM Mix IA16" />
             </div>
-            <div>
-              <Label className="text-xs">Forma</Label>
-              <Select value={form.forma} onValueChange={v => set('forma', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Solution">Solution</SelectItem>
-                  <SelectItem value="Stock">Stock</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="col-span-2">
+              <Label className="text-xs">Codice Interno</Label>
+              <Input value={form.codice_interno} onChange={e => set('codice_interno', e.target.value)} placeholder="es. MIX-001" />
             </div>
             <div>
               <Label className="text-xs">Concentrazione mg/L (per componente)</Label>
@@ -155,6 +171,68 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
                   <SelectItem value="Taratura e QC">Taratura e QC</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Stoccaggio e Accreditamento CRM */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Stoccaggio</Label>
+              {vociStoccaggio.length > 0 ? (
+                <Select
+                  value={form.stoccaggio || '_none'}
+                  onValueChange={v => set('stoccaggio', v === '_none' ? '' : v)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Seleziona posizione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">— Nessuna —</SelectItem>
+                    {vociStoccaggio.map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={form.stoccaggio || ''}
+                  onChange={e => set('stoccaggio', e.target.value)}
+                  placeholder="es. Frigo 1 — Scaffale A"
+                />
+              )}
+              {vociStoccaggio.length === 0 && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Aggiungi posizioni in Anagrafiche → Posizioni stoccaggio per abilitare la tendina.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label className="text-xs">Accreditamento CRM Provider</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={['ISO 17034', 'ISO 17511', 'ISO 15189', 'NIST'].includes(form.accreditamento_crm || '') ? form.accreditamento_crm : 'Altro'}
+                  onValueChange={v => {
+                    if (v !== 'Altro') set('accreditamento_crm', v)
+                    else set('accreditamento_crm', '')
+                  }}
+                >
+                  <SelectTrigger className="w-40 shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ISO 17034">ISO 17034</SelectItem>
+                    <SelectItem value="ISO 17511">ISO 17511</SelectItem>
+                    <SelectItem value="ISO 15189">ISO 15189</SelectItem>
+                    <SelectItem value="NIST">NIST</SelectItem>
+                    <SelectItem value="Altro">Altro / libero</SelectItem>
+                  </SelectContent>
+                </Select>
+                {!['ISO 17034', 'ISO 17511', 'ISO 15189', 'NIST'].includes(form.accreditamento_crm || '') && (
+                  <Input
+                    value={form.accreditamento_crm || ''}
+                    onChange={e => set('accreditamento_crm', e.target.value)}
+                    placeholder="es. DAkkS, COFRAC..."
+                    className="flex-1"
+                  />
+                )}
+              </div>
             </div>
           </div>
 

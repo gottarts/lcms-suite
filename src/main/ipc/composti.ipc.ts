@@ -9,7 +9,11 @@ export function registerCompostiIpc(): void {
     metodo_id?: string
   }) => {
     const db = getDb()
-    let sql = 'SELECT DISTINCT c.* FROM composti c'
+    let sql = `SELECT c.*,
+  COUNT(CASE WHEN p.stato = 'Attiva' THEN 1 END) AS prep_attive_count,
+  COUNT(CASE WHEN p.stato = 'Attiva' AND p.scadenza < date('now') THEN 1 END) AS prep_scadute_count
+FROM composti c
+LEFT JOIN preparazioni p ON p.composto_id = c.id`
     const params: unknown[] = []
     const conditions: string[] = []
 
@@ -35,7 +39,7 @@ export function registerCompostiIpc(): void {
     if (conditions.length) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
-    sql += ' ORDER BY c.nome'
+    sql += ' GROUP BY c.id ORDER BY c.nome'
 
     return db.prepare(sql).all(...params)
   })
@@ -209,7 +213,7 @@ export function registerCompostiIpc(): void {
       'purezza', 'concentrazione', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
       'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
-      'arpa', 'mix', 'mix_id']
+      'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm']
     const placeholders = cols.map(c => `@${c}`).join(', ')
     const insert = db.prepare(
       `INSERT INTO composti (${cols.join(', ')}) VALUES (${placeholders})`
@@ -239,6 +243,8 @@ export function registerCompostiIpc(): void {
       arpa: 'N',
       mix: data.forma_commerciale,
       mix_id,
+      stoccaggio: null,
+      accreditamento_crm: null,
     }
 
     const count = db.transaction(() => {

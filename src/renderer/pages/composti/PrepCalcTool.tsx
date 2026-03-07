@@ -273,8 +273,11 @@ export function PrepCalcTool({
                 <>
                   <div className="text-xs bg-white/50 dark:bg-black/20 rounded p-2">
                     <div>{modalita === 'volume' ? 'Aggiungere' : 'Pesare'}:</div>
-                    <div className="font-mono text-sm font-bold mt-1">
-                      {calculations.volumeSolvente.toFixed(2)} {modalita === 'volume' ? 'mL' : 'g'}
+                    <div className="font-mono text-sm font-bold mt-1 flex items-center gap-3">
+                      <span>{modalita === 'volume' ? calculations.volumeSolvente.toFixed(2) : massaSolvente} {modalita === 'volume' ? 'mL' : 'g'}</span>
+                      {modalita === 'pesata' && calculations.volumeSolvente > 0 && (
+                        <span className="text-muted-foreground font-normal">→ {calculations.volumeSolvente.toFixed(2)} mL</span>
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">di {solventeDisplay}</div>
                   </div>
