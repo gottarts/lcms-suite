@@ -60,6 +60,8 @@ export interface Composto {
   arpa: string
   mix: string | null
   mix_id: string | null
+  stoccaggio: string | null
+  accreditamento_crm: string | null
   created_at: string
   updated_at: string
   // Joined/computed fields
@@ -75,6 +77,9 @@ export interface CompostoStoria {
   tipo: 'Rivalidazione' | 'Dismissione'
   data: string
   note: string | null
+  n_registro_qc: string | null
+  batch_analitico: string | null
+  lotto_crm_valido: string | null
   created_at: string
 }
 
@@ -92,6 +97,12 @@ export interface Preparazione {
   posizione: string | null
   note: string | null
   data_dismissione: string | null
+  massa_pesata: number | null
+  purezza_usata: number | null
+  densita_solvente: number | null
+  modalita_aggiunta: 'volume' | 'pesata' | null
+  concentrazione_reale: number | null
+  concentrazione_target: number | null
   created_at: string
 }
 

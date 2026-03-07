@@ -4,8 +4,8 @@ import { CompostiTable } from './CompostiTable'
 import { CompostoForm } from './CompostoForm'
 import { CompostoPanel } from './CompostoPanel'
 import { MixPesticidiForm } from './MixPesticidiForm'
+import { StoriaDialog } from './StoriaDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { computeStato } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Plus, Search, FlaskConical } from 'lucide-react'
@@ -15,9 +15,11 @@ export function CompostiPage() {
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editComposto, setEditComposto] = useState<any>(null)
+  const [template, setTemplate] = useState<any>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
+  const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
 
   const load = () => compostiApi.list().then(setComposti)
   useEffect(() => { load() }, [])
@@ -49,6 +51,21 @@ export function CompostiPage() {
     setFormOpen(true)
   }
 
+  const handleNewLotto = (composto: any) => {
+    setTemplate(composto)
+    setEditComposto(null)
+    setPanelId(null)
+    setFormOpen(true)
+  }
+
+  const handleRivalida = (row: any) => {
+    setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Rivalidazione' })
+  }
+
+  const handleDismetti = (row: any) => {
+    setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Dismissione' })
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -58,7 +75,7 @@ export function CompostiPage() {
           <Button size="sm" variant="outline" onClick={() => setMixOpen(true)}>
             <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
           </Button>
-          <Button size="sm" onClick={() => { setEditComposto(null); setFormOpen(true) }}>
+          <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
           </Button>
         </div>
@@ -71,13 +88,46 @@ export function CompostiPage() {
         </div>
       </div>
 
-      <CompostiTable data={filtered} onRowClick={row => setPanelId(row.id)} />
+      <CompostiTable
+        data={filtered}
+        onRowClick={row => setPanelId(row.id)}
+        onNewLotto={handleNewLotto}
+        onRivalida={handleRivalida}
+        onDismetti={handleDismetti}
+      />
 
-      <CompostoForm open={formOpen} onClose={() => setFormOpen(false)} composto={editComposto} onSave={load} />
+      <CompostoForm
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setTemplate(null) }}
+        composto={editComposto}
+        template={template}
+        onSave={() => { load(); setTemplate(null) }}
+      />
       <MixPesticidiForm open={mixOpen} onClose={() => setMixOpen(false)} onSave={load} />
-      <CompostoPanel compostoId={panelId} onClose={() => setPanelId(null)} onEdit={handleEdit} onDelete={id => { setPanelId(null); setDeleteId(id) }} />
-
-      <ConfirmDialog open={deleteId !== null} title="Elimina composto" message="Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?" confirmLabel="Elimina" variant="danger" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+      <CompostoPanel
+        compostoId={panelId}
+        onClose={() => setPanelId(null)}
+        onEdit={handleEdit}
+        onDelete={id => { setPanelId(null); setDeleteId(id) }}
+        onNewLotto={handleNewLotto}
+      />
+      <StoriaDialog
+        open={storiaTarget !== null}
+        onOpenChange={v => !v && setStoriaTarget(null)}
+        compostoId={storiaTarget?.id ?? null}
+        compostoNome={storiaTarget?.nome}
+        tipo={storiaTarget?.tipo ?? ''}
+        onSaved={() => { load(); setStoriaTarget(null) }}
+      />
+      <ConfirmDialog
+        open={deleteId !== null}
+        title="Elimina composto"
+        message="Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?"
+        confirmLabel="Elimina"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   )
 }

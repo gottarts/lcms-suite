@@ -12,28 +12,59 @@ interface CompostoFormProps {
   open: boolean
   onClose: () => void
   composto?: any | null
+  template?: any | null
   onSave: () => void
 }
 
-export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormProps) {
+export function CompostoForm({ open, onClose, composto, template, onSave }: CompostoFormProps) {
   const isEdit = !!composto
   const [form, setForm] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
+  const [vociStoccaggio, setVociStoccaggio] = useState<string[]>([])
 
   useEffect(() => {
     if (composto) {
       setForm({ ...composto })
+    } else if (template) {
+      setForm({
+        ...template,
+        lotto: '',
+        data_apertura: '',
+        scadenza_prodotto: '',
+        operatore_apertura: '',
+        purezza: '',
+        data_dismissione: '',
+        metodi_ids: template.metodi_ids || [],
+        stoccaggio: template.stoccaggio,
+        accreditamento_crm: template.accreditamento_crm ?? 'ISO 17034',
+      })
     } else {
       setForm({
         nome: '', codice_interno: '', formula: '', classe: '', forma: '',
         forma_commerciale: '', purezza: '', concentrazione: '', solvente: '',
         fiala: '', produttore: '', lotto: '', operatore_apertura: '',
         data_apertura: '', scadenza_prodotto: '', destinazione_uso: '',
-        work_standard: '', matrice: '', peso_molecolare: '', ubicazione: '',
-        arpa: 'N', mix: '', mix_id: '',
+        work_standard: '', peso_molecolare: '', ubicazione: '',
+        stoccaggio: '', accreditamento_crm: 'ISO 17034',
       })
     }
-  }, [composto, open])
+  }, [composto, template, open])
+
+  useEffect(() => {
+    try {
+      window.electronAPI.invoke('anagrafiche:list').then((anagrafiche: any[]) => {
+        const anagrafica = anagrafiche.find(
+          (a: any) => a.nome.toLowerCase().includes('stoccaggio') ||
+                      a.nome.toLowerCase().includes('posizioni')
+        )
+        if (anagrafica?.voci) {
+          setVociStoccaggio(anagrafica.voci.map((v: any) => v.valore))
+        }
+      }).catch(err => console.error('Error loading anagrafiche:', err))
+    } catch (err) {
+      console.error('Error in useEffect:', err)
+    }
+  }, [])
 
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
 
@@ -42,11 +73,9 @@ export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormPr
     setSaving(true)
     try {
       const data = { ...form }
-      // Convert numeric fields
       if (data.purezza) data.purezza = parseFloat(data.purezza) || null
       if (data.concentrazione) data.concentrazione = parseFloat(data.concentrazione) || null
       if (data.peso_molecolare) data.peso_molecolare = parseFloat(data.peso_molecolare) || null
-      // Convert empty strings to null
       for (const k of Object.keys(data)) {
         if (k !== 'nome' && k !== 'arpa' && data[k] === '') data[k] = null
       }
@@ -59,7 +88,6 @@ export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormPr
       onClose()
     } catch (error) {
       console.error('Errore nel salvare il composto:', error)
-      // TODO: mostra un toast di errore se necessario
     } finally {
       setSaving(false)
     }
@@ -69,7 +97,9 @@ export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormPr
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-heading">{isEdit ? 'Modifica composto' : 'Nuovo composto'}</DialogTitle>
+          <DialogTitle className="font-heading">
+            {isEdit ? 'Modifica composto' : template ? `Nuovo lotto — ${template.nome}` : 'Nuovo composto'}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -115,16 +145,68 @@ export function CompostoForm({ open, onClose, composto, onSave }: CompostoFormPr
             <div><Label className="text-xs">Destinazione d'Uso</Label><Input value={form.destinazione_uso || ''} onChange={e => set('destinazione_uso', e.target.value)} /></div>
             <div><Label className="text-xs">Work Standard</Label><Input value={form.work_standard || ''} onChange={e => set('work_standard', e.target.value)} /></div>
             <div><Label className="text-xs">Ubicazione</Label><Input value={form.ubicazione || ''} onChange={e => set('ubicazione', e.target.value)} /></div>
-            <div>
-              <Label className="text-xs">ARPA</Label>
-              <Select value={form.arpa || 'N'} onValueChange={v => set('arpa', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="N">No</SelectItem>
-                  <SelectItem value="S">Si</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* Stoccaggio con tendina anagrafiche */}
+            <div className="col-span-2">
+              <Label className="text-xs">Stoccaggio</Label>
+              {vociStoccaggio.length > 0 ? (
+                <Select
+                  value={form.stoccaggio || '_none'}
+                  onValueChange={v => set('stoccaggio', v === '_none' ? '' : v)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Seleziona posizione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">— Nessuna —</SelectItem>
+                    {vociStoccaggio.map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={form.stoccaggio || ''}
+                  onChange={e => set('stoccaggio', e.target.value)}
+                  placeholder="es. Frigo 1 — Scaffale A"
+                />
+              )}
+              {vociStoccaggio.length === 0 && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Aggiungi posizioni in Anagrafiche → Posizioni stoccaggio per abilitare la tendina.
+                </p>
+              )}
             </div>
+
+            {/* Accreditamento CRM Provider */}
+            <div className="col-span-1">
+              <Label className="text-xs">Accreditamento CRM Provider</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={['ISO 17034', 'ISO 17511', 'ISO 15189', 'NIST'].includes(form.accreditamento_crm || '') ? form.accreditamento_crm : 'Altro'}
+                  onValueChange={v => {
+                    if (v !== 'Altro') set('accreditamento_crm', v)
+                    else set('accreditamento_crm', '')
+                  }}
+                >
+                  <SelectTrigger className="w-40 shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ISO 17034">ISO 17034</SelectItem>
+                    <SelectItem value="ISO 17511">ISO 17511</SelectItem>
+                    <SelectItem value="ISO 15189">ISO 15189</SelectItem>
+                    <SelectItem value="NIST">NIST</SelectItem>
+                    <SelectItem value="Altro">Altro / libero</SelectItem>
+                  </SelectContent>
+                </Select>
+                {!['ISO 17034', 'ISO 17511', 'ISO 15189', 'NIST'].includes(form.accreditamento_crm || '') && (
+                  <Input
+                    value={form.accreditamento_crm || ''}
+                    onChange={e => set('accreditamento_crm', e.target.value)}
+                    placeholder="es. DAkkS, COFRAC..."
+                    className="flex-1"
+                  />
+                )}
+              </div>
+            </div>
+
             {form.mix_id && (
               <div className="col-span-2">
                 <Label className="text-xs">Mix</Label>

@@ -1,471 +1,256 @@
-# LC-MS/MS Reparto — Analisi Funzionale
+# Analisi Funzionale — LC-MS/MS Suite
 
-**Versione:** 1.0
-**Data:** 2026-03-05
-**Stato:** Documento di stato corrente
+**Versione:** 2.2  
+**Data:** 2026-03-06  
+**Fonte:** codice sorgente repository
 
 ---
 
 ## 1. Descrizione Generale
 
-Suite gestionale web per un reparto di analisi LC-MS/MS (Liquid Chromatography - Tandem Mass Spectrometry). L'applicazione gestisce strumenti, metodi analitici, standard di riferimento, consumabili e dati operativi del laboratorio.
+Suite gestionale desktop per un reparto di analisi LC-MS/MS. Gestisce standard di riferimento (CRM), metodi analitici, strumenti, eluenti, consumabili, preparazioni e anagrafiche.
 
-Il software e' progettato per funzionare interamente lato client (browser Chrome/Edge), senza server backend, con persistenza dei dati su cartella di rete condivisa (NAS) e fallback locale.
+App **Electron** packaged come singolo `.exe` portabile. Database SQLite su file esterno collocabile su cartella di rete condivisa (NAS/SMB), accessibile da più PC in uso sequenziale (un utente alla volta scrive, nessuna concorrenza reale).
 
 ---
 
-## 2. Architettura Tecnica
-
-### 2.1 Stack
+## 2. Stack Tecnico
 
 | Componente | Tecnologia |
 |---|---|
-| Frontend | HTML5 + CSS3 + JavaScript vanilla (nessun framework) |
-| Shell di navigazione | `index.html` — sidebar + iframe |
-| Pagine funzionali | File HTML standalone caricati in iframe |
-| Stili condivisi | `_shared.css` (design system) |
-| Storage Layer | `storage.js` — modulo `LabStorage` (v5) |
-| Formato dati | `lcms-data.json` (JSON) |
-| Font | IBM Plex Mono, IBM Plex Sans, Fraunces |
-
-### 2.2 Persistenza Dati (Triple Mirror)
-
-Il modulo `LabStorage` implementa una strategia di persistenza a tre livelli:
-
-1. **File JSON su cartella di rete** (sorgente di verita') — via File System Access API
-2. **IndexedDB** (mirror locale) — database `lcms_lab`, store `kv`
-3. **localStorage** (fallback) — chiave `lcms_data`
-
-Il nome della cartella e' salvato in `localStorage` (`lcms_folder_name`) per sopravvivere a pulizia dell'IndexedDB.
-
-### 2.3 Sincronizzazione
-
-| Caratteristica | Dettaglio |
-|---|---|
-| Polling | Ogni 10 secondi legge il file dalla cartella di rete |
-| Merge | Smart merge per array (composti, metodi, colonne, eluenti, diario, spe, solventi, strumenti) basato su `_id`/`id`/`Name` |
-| Conflitti | Il record piu' recente (`_savedAt`) ha priorita'; i record mancanti vengono aggiunti senza perdita |
-| Flush | Debounced a 300ms dopo ogni modifica |
-| Cross-tab | Evento `storage` su localStorage per sincronizzare tab multipli |
-| Cross-iframe | `postMessage` con tipo `lcms-updated` / `storage-reload` |
-
-### 2.4 Stati di Connessione
-
-| Stato | Descrizione |
-|---|---|
-| `connected` | Cartella di rete collegata, permessi concessi, sync attivo |
-| `needs-perm` | Handle salvato in IDB ma permesso scaduto (richiesto ad ogni sessione dal browser) |
-| `folder-forgotten` | Memoria browser pulita, nome cartella in localStorage ma handle perso |
-| `local` | Nessuna cartella configurata, solo dati locali |
-
-### 2.5 Struttura Navigazione (Shell)
-
-L'`index.html` funge da shell applicativa con:
-- **Sidebar sinistra** (200px): logo, menu di navigazione, indicatori strumenti, widget connessione rete, orologio, backup/ripristino
-- **Barra superiore**: titolo pagina, contatore strumenti online, orologio
-- **Area iframe**: contenuto della pagina selezionata
-- **Overlay modale**: gestione connessione rete (visibile di default, nascosto solo se `connected`)
-- **Barra di sincronizzazione**: avvisi persistenti per stato non sincronizzato
+| Runtime | Electron |
+| Frontend | React + TypeScript + Vite |
+| UI | Shadcn/ui + Tailwind CSS |
+| Font | Karla (heading) · Lato (body) · IBM Plex Mono |
+| Database | SQLite via better-sqlite3 |
+| Comunicazione | IPC Electron (invoke/handle) + contextBridge |
+| Routing | React Router v6 — HashRouter |
+| Packaging | electron-builder → `.exe` (Windows x64/ia32) + `.dmg` (Mac) |
 
 ---
 
-## 3. Modello Dati
+## 3. Flusso di Avvio
 
-### 3.1 Schema Principale (`lcms-data.json`)
+`App.tsx` chiama `window.electronAPI.getConfig()` all'avvio. Se `dbPath` è null o il file non esiste → **SetupPage** (first-run), altrimenti entra nel layout principale.
+
+**SetupPage** — card centrata a schermo intero (no sidebar), con questi stati:
+
+| Step | Descrizione |
+|---|---|
+| `welcome` | Pulsante "Seleziona cartella" → `config:select-folder` IPC |
+| `choose-import` | DB nuovo: offre "Importa da lcms-data.json" o "Inizia da zero" |
+| `importing` | Spinner durante `config:import-legacy` IPC |
+| `done` | Mostra riepilogo conteggi importati, pulsante "Continua" |
+| `error` | Mostra errore, offre Riprova o Continua senza importare |
+
+Config salvata in `%APPDATA%/lcms-suite/config.json` — campi: `dbPath`, `windowBounds`.
+
+---
+
+## 4. Layout Principale
+
+**Sidebar** (w-56) — logo "LC-MS/MS Suite", link di navigazione con icone emoji e stato attivo, orologio in fondo (aggiornato ogni minuto).
+
+**Topbar** — titolo pagina corrente a sinistra, percorso del file DB (font mono, troncato) a destra.
+
+**Main** — `<Outlet />` con padding, scrollabile.
+
+---
+
+## 5. Navigazione
 
 ```
-{
-  version: 5,
-  _savedAt: timestamp,
-
-  composti: [                  // Standard di riferimento
-    {
-      _id: number,             // ID univoco auto-incrementale
-      Name: string,            // Nome sostanza
-      CodiceInterno: string,   // Codice interno laboratorio
-      Formula: string,         // Formula bruta
-      Classe: string,          // Antibiotico|Antiviral|FANS|Antimicotico|Diuretico|psyco|cardio
-      Forma: string,           // Solution|Neat|Stock
-      FormaCommer: string,     // Nome commerciale
-      Purezza: string,         // % purezza (solo Neat)
-      Conc: string,            // Concentrazione mg/L (solo Solution/Stock)
-      Solvente: string,        // Solvente (solo Solution/Stock)
-      Fiala: string,           // Identificativo fiala
-      Azienda: string,         // Produttore
-      Lotto: string,           // Numero di lotto
-      OperatoreApertura: string,
-      DataApertura: date,      // Data apertura CRM
-      ScadenzaProdotto: date,  // Scadenza prodotto
-      DataDismissione: date,   // Data dismissione/rivalidazione
-      DestinazioneUso: string, // Taratura|QC|Taratura e QC
-      WorkStandard: string,
-      Matrice: string,
-      MW: string,              // Peso molecolare
-      Ubicazione: string,      // Posizione di stoccaggio
-      ARPA: string,            // Y|N — flag ARPA
-      Mix: string,             // Identificativo miscela
-      mix_id: string,          // ID gruppo mix
-      metodiIds: [string],     // Array di ID metodi associati
-      _storia: [               // Storico rivalidazioni/dismissioni
-        { tipo, data, note, ... }
-      ]
-    }
-  ],
-
-  preps: {                     // Preparazioni (chiave = _id composto)
-    "0": [
-      {
-        _pid: number,
-        flacone: string,
-        conc: string,
-        solvente: string,
-        data_prep: date,
-        scadenza: date,
-        operatore: string,
-        note: string
-      }
-    ]
-  },
-
-  strumenti: [                 // Piattaforme analitiche
-    {
-      id: string,              // tq1|tq2|tq3|qtof|instr_*
-      code: string,            // TQ1|TQ2|TQ3|QTOF
-      type: string,            // Triple Quadrupole · LC-MS/MS | High-Resolution MS · QTOF
-      serial: string,          // Numero seriale
-      status: string           // on|idle|off
-    }
-  ],
-
-  metodi: [                    // Metodi analitici
-    {
-      id: string,              // met_* (generato)
-      nome: string,            // Nome metodo
-      strumentoId: string,     // Riferimento a strumento
-      matrice: string,         // Urine|Sangue|Plasma|Siero|...
-      colonna: string,         // Colonna HPLC usata
-      phA: string,             // Fase mobile A
-      phB: string,             // Fase mobile B
-      gradiente: string,       // Programma gradiente
-      flusso: string,          // Flusso
-      ionizzazione: string,    // Tipo ionizzazione MS
-      polarita: string,        // Polarita' MS
-      acquisizione: string,    // Tipo acquisizione MS
-      srm: string,             // SRM/MRM transitions
-      limsId: string,          // ID integrazione LIMS (futuro)
-      oqlabId: string,         // ID integrazione OQLab (futuro)
-      note: string
-    }
-  ],
-
-  metodi (strumenti.html): [   // Vista strumento-centrica
-    {
-      id: string,
-      strumentoId: string,
-      codice: string,          // Codice metodo
-      nome: string,
-      versione: string,
-      matrice: string,
-      eluenteA_id: string,     // Riferimento eluente A
-      eluenteB_id: string,     // Riferimento eluente B
-      stdIds: [string],        // ID composti associati
-      note: string
-    }
-  ],
-
-  eluenti: [                   // Eluenti installati per strumento
-    {
-      id: string,
-      strumentoId: string,
-      nome: string,            // es. "Acqua + 0.1% HCOOH"
-      dataInizio: date,
-      dataFine: date|null,     // null = in uso
-      componenti: [
-        { sostanza, lotto, fornitore }
-      ]
-    }
-  ],
-
-  diario: [                    // Note operative per strumento
-    {
-      id: string,
-      strumentoId: string,
-      data: date,
-      autore: string,
-      metodoId: string|null,
-      testo: string
-    }
-  ],
-
-  colonne: [],                 // HPLC columns (struttura prevista ma non implementata)
-  spe: [],                     // SPE cartridges (non implementato)
-  solventi: [],                // Solventi & sali (non implementato)
-
-  anagrafiche: [               // Dizionari configurabili
-    {
-      id: string,
-      nome: string,            // es. "Operatori", "Posizioni stoccaggio"
-      voci: [string]           // Lista ordinata di valori
-    }
-  ],
-
-  customCols: [],              // Colonne personalizzate tabella composti
-  colOrder: [string],          // Ordine colonne tabella composti
-  colVisible: { key: bool }    // Visibilita' colonne tabella composti
-}
+AppLayout (Sidebar + Topbar + <Outlet>)
+  /composti     → Standard di Riferimento
+  /metodi       → Metodi Analitici
+  /strumenti    → Strumenti
+  /consumabili  → Consumabili
+  /anagrafiche  → Anagrafiche
+  *             → redirect /composti
 ```
 
 ---
 
-## 4. Moduli Funzionali — Stato Attuale
+## 6. Database — Schema SQLite
 
-### 4.1 Composti / Standard DB (`composti.html`) — IMPLEMENTATO
+Migrazioni automatiche via `PRAGMA user_version` — file `.sql` inclusi come `extraResources`. WAL mode + foreign keys ON.
 
-Modulo principale per la gestione degli standard di riferimento (CRM, neat, solution).
-
-**Funzionalita':**
-
-| Funzione | Descrizione |
+| Tabella | Contenuto |
 |---|---|
-| Tabella completa | Griglia con tutte le colonne di sistema + colonne personalizzate |
-| Ricerca full-text | Su tutti i campi testuali |
-| Filtri combinabili | Per classe, forma (Neat/Solution/Stock), solvente, stato, metodo |
-| Ordinamento | Per qualsiasi colonna (click su header), toggle asc/desc |
-| Stato calcolato | Automatico: Attivo / In scadenza (2 mesi) / Scaduto / Rivalidato / Dismesso |
-| Pannello laterale | Dettaglio composto con tab Preparazioni / Dettaglio / Storico |
-| Preparazioni | CRUD completo: flacone, concentrazione, solvente, data prep, scadenza, operatore |
-| Rivalidazione | Estensione scadenza con registrazione in storico |
-| Dismissione | Marcatura dismissione con data e note in storico |
-| Import Excel/CSV | Parsing client-side con mappatura colonne, anteprima, importazione batch |
-| Gestione colonne | Aggiungi/rimuovi colonne custom, riordina con drag&drop, toggle visibilita' |
-| Associazione metodi | Multi-select per associare composti a metodi analitici |
-| Colonne sistema | 21 campi predefiniti (Name, CodiceInterno, Classe, Forma, Purezza, Conc, Solvente, Fiala, Azienda, Lotto, OperatoreApertura, DataApertura, ScadenzaProdotto, DataDismissione, DestinazioneUso, WorkStandard, metodiIds, Matrice, MW, Ubicazione, FormaCommer) |
-| Badge visivi | Classe (pill colorata), forma (dot verde/arancione), stato (badge semantico) |
-| Contatori | Header con totali, visualizzati, filtrati |
-
-**UI:** Tabella scrollabile a larghezza completa + pannello laterale (420px) con animazione slide.
+| `strumenti` | Piattaforme analitiche |
+| `metodi` | Metodi analitici (LC + MS) |
+| `composti` | Standard di riferimento |
+| `composti_metodi` | N:M composti ↔ metodi |
+| `composti_storia` | Storico rivalidazioni e dismissioni |
+| `preparazioni` | Soluzioni stock per composto |
+| `eluenti` | Eluenti installati per strumento |
+| `eluenti_componenti` | Componenti di ogni eluente (sostanza, lotto, fornitore) |
+| `consumabili` | Colonne HPLC, SPE, solventi, sali |
+| `consumabili_metodi` | N:M consumabili ↔ metodi |
+| `diario` | Note operative per strumento |
+| `anagrafiche` | Categorie dizionari configurabili |
+| `anagrafiche_voci` | Voci per categoria (UNIQUE per anagrafica) |
 
 ---
 
-### 4.2 Metodi Analitici (`metodi.html`) — IMPLEMENTATO
+## 7. Moduli
 
-Gestione dei metodi analitici con vista a griglia di card.
+### 7.1 Composti / Standard DB (`/composti`)
 
-**Funzionalita':**
+**Tabella** (`CompostiTable`) — colonne: Nome (con badge blu MIX se `mix_id` presente), Codice, Classe (badge outline), Forma, Produttore, Lotto, Scadenza, Stato.
 
-| Funzione | Descrizione |
+**Ricerca** — client-side su: nome, codice_interno, classe, produttore, lotto.
+
+**Filtri IPC** (applicati SQL lato main su `composti:list`): search (LIKE su nome e codice_interno), classe, forma, metodo_id (JOIN `composti_metodi`).
+
+**Stato calcolato** (`computeStato` in `StatusBadge.tsx`):
+
+| Stato | Condizione |
 |---|---|
-| Griglia card | Card responsive (min 340px) con info metodo |
-| Ricerca | Su nome, matrice, colonna, fasi, gradiente, note |
-| Filtri | Per strumento, per matrice (Urine, Sangue, Plasma, Siero, Tessuto, Capelli, Acqua, Suolo, Alimento, Altro) |
-| CRUD completo | Crea, modifica, elimina metodo via modal |
-| Drawer dettaglio | Pannello laterale con tutte le info + composti associati |
-| Associazione bidirezionale | I composti associati al metodo sono visibili e conteggiati |
-| Eliminazione safe | Conferma con conteggio composti impattati; pulizia `metodiIds` dai composti |
-| Statistiche | Totali, visualizzati, composti associati |
+| `dismesso` | `data_dismissione` presente |
+| `scaduto` | `scadenza_prodotto` < oggi |
+| `in_scadenza` | scadenza entro 30 giorni |
+| `attivo` | altrimenti |
 
-**Campi metodo:** Nome, strumento, matrice, colonna HPLC, fase A, fase B, gradiente, LIMS ID (futuro), OQLab ID (futuro), note.
+**Pannello laterale** (`CompostoPanel`, SlidePanel 520px) — tre tab:
 
-**Campi MS (solo drawer):** Ionizzazione, polarita', acquisizione, SRM/MRM.
+*Dettaglio* — tutti i campi readonly: classe, forma, forma commerciale, formula, MW, purezza, concentrazione, solvente, fiala, produttore, lotto, operatore apertura, data apertura, scadenza prodotto, data dismissione, destinazione uso, work standard, matrice, ubicazione, ARPA, mix, mix_id.
+
+*Preparazioni* — lista con badge stato colorato (Attiva=verde, Esaurita=ambra, Scaduta=rosso, Dismessa=grigio). Badge arancione se scadenza entro 30 giorni. CRUD via modal. Campi: forma (Solido/Liquido), stato, concentrazione mg/L, volume mL, solvente, operatore, data prep, scadenza, posizione, note. Azione "Dismetti" con data dismissione.
+
+*Storico* — lista eventi `composti_storia`. Pulsanti "Rivalidazione" e "Dismissione" → inseriscono record con data e note.
+
+**Azioni panel**: Modifica (apre `CompostoForm`), Elimina (confirm dialog con avviso cascata).
+
+**Aggiungi Mix Pesticidi** (`MixPesticidiForm`) — carica file `.txt` (un nome per riga), inserisce N record con metadati comuni (forma commerciale, forma, concentrazione, solvente, produttore, lotto, date, classe, destinazione uso). Tutti i record dello stesso flacone condividono il `mix_id` generato.
 
 ---
 
-### 4.3 Strumenti (`strumenti.html`) — IMPLEMENTATO
+### 7.2 Metodi Analitici (`/metodi`)
 
-Gestione delle piattaforme analitiche (strumenti LC-MS/MS) con vista tabbed.
+Grid di card responsive. Ricerca su nome e matrice. Filtro per strumento (select).
 
-**Funzionalita':**
+**Card** (`MetodoCard`) — nome, badge strumento, matrice, colonna, gradiente, flusso.
 
-| Funzione | Descrizione |
-|---|---|
-| Strip selezione strumento | Tab orizzontali con codice, tipo, seriale |
-| Barra anagrafica | Dettaglio fisso: codice, tipo, seriale + bottone modifica |
-| Tab interni | Eluenti / Metodi / Diario / Query storico |
-| CRUD strumenti | Aggiungi, modifica, elimina strumento (con cascata su eluenti, metodi, diario) |
+**Drawer** (`MetodoDrawer`, SlidePanel 480px) — sezioni: Identificazione (matrice, LIMS ID, OQLab ID), Cromatografia LC (colonna, fase A/B, gradiente, flusso), MS (ionizzazione, polarità, acquisizione, SRM), Note, lista badge composti associati (caricati da `composti:list` con filtro `metodo_id`).
 
-**Sub-modulo Eluenti:**
+**Form** (`MetodoForm`, modal) — campi: nome*, strumento (select), matrice, LIMS ID, OQLab ID, colonna, fase A, fase B, gradiente, flusso, ionizzazione, polarità, acquisizione, SRM, note.
 
-| Funzione | Descrizione |
-|---|---|
-| Tabella storica | Eluenti con componenti, lotti, date installazione/esaurimento |
-| Stato | IN USO (dataFine null) / ESAURITO |
-| Componenti dinamici | N componenti per eluente: sostanza, lotto, fornitore |
-| Esaurisci | Marca eluente come esaurito con data odierna |
-
-**Sub-modulo Metodi (vista strumento):**
-
-| Funzione | Descrizione |
-|---|---|
-| Card espanse | Dettaglio metodo con eluenti A/B associati e standard |
-| Snapshot temporale | Query "lotti attivi al giorno X" per un metodo: eluenti, colonna, standard con preparazioni attive |
-
-**Sub-modulo Diario:**
-
-| Funzione | Descrizione |
-|---|---|
-| Note operative | Per data, con operatore e metodo opzionali |
-| Ordinamento | Cronologico inverso |
-
-**Sub-modulo Query Storico:**
-
-| Funzione | Descrizione |
-|---|---|
-| Interrogazione per data | Stato completo strumento ad una data: eluenti attivi con lotti, colonna installata, metodi, diario |
-| Filtro per metodo | Opzionale, restringe diario e dettaglio |
-| Output strutturato | Pannello formattato con tutte le info di tracciabilita' |
+Elimina con confirm — CASCADE su `composti_metodi` e `consumabili_metodi`.
 
 ---
 
-### 4.4 Anagrafiche (`anagrafiche.html`) — IMPLEMENTATO
+### 7.3 Strumenti (`/strumenti`)
 
-Dizionari configurabili per popolare i menu a tendina nei form.
+Strip di selezione strumento (pill per strumento con dot stato verde/giallo/grigio). Info tipo e seriale sotto. CRUD via modal (id, codice, tipo, seriale, status).
 
-**Funzionalita':**
+Quattro tab interni:
 
-| Funzione | Descrizione |
+**Eluenti** — tabella: nome, data inizio, data fine, componenti (badge sostanza+lotto), stato Attivo/Esaurito. CRUD con componenti dinamici (N righe). "Esaurisci" → `eluenti:close` → `data_fine = oggi`.
+
+**Metodi** — lista read-only metodi con `strumento_id` corrispondente. Solo visualizzazione.
+
+**Diario** — note ordinate per data decrescente. CRUD via modal: data, autore, metodo (select opzionale), testo.
+
+**Query Storico** — date picker + filtro metodo opzionale → `query:snapshot` IPC → risultato strutturato:
+- Eluenti attivi a quella data con componenti (SQL: `data_inizio <= data AND (data_fine IS NULL OR data_fine >= data)`)
+- Consumabili attivi per il metodo (solo se metodo selezionato, SQL analogo su date apertura/chiusura)
+- Composti del metodo con preparazione attiva a quella data (LEFT JOIN `preparazioni` su date)
+
+---
+
+### 7.4 Consumabili (`/consumabili`)
+
+Tab orizzontali: Tutti / Colonna HPLC / SPE / Solvente / Sale / Altro. Ricerca client-side su nome, lotto, fornitore.
+
+**Tabella** — colonne: tipo (badge), nome, lotto, fornitore, data apertura, data chiusura, stato Aperto/Chiuso, azioni.
+
+**Azioni**: modifica, "Chiudi lotto" (`consumabili:close` → `data_chiusura = oggi`), elimina.
+
+**Form** (modal) — campi: tipo (select), nome*, lotto, fornitore, data apertura, data chiusura, note, multi-select metodi associati.
+
+---
+
+### 7.5 Anagrafiche (`/anagrafiche`)
+
+Grid di card. Ogni card = una categoria. Titolo rinominabile inline. Voci aggiungibili/modificabili/eliminabili inline. CRUD completo su categorie e voci.
+
+---
+
+## 8. Componenti Condivisi
+
+| Componente | Descrizione |
 |---|---|
-| Sezioni dinamiche | N anagrafiche creabili dall'utente (es. Operatori, Posizioni stoccaggio, Fornitori) |
-| Voci per sezione | Lista ordinata alfabeticamente, inline editing |
-| CRUD completo | Crea/rinomina/elimina anagrafica; aggiungi/modifica/elimina voce |
-| Migrazione | Supporto vecchio formato `{operatori:[], posizioni:[]}` -> array |
-| Note informative | Disclaimer: non collegate alla tracciabilita', rinominare non modifica dati esistenti |
+| `DataTable` | Tabella generica con columns definition, sort, row click, render custom per cella |
+| `SlidePanel` | Pannello slide destro (Shadcn `Sheet` side="right") — props: open, onClose, title, subtitle, width |
+| `StatusBadge` + `computeStato` | Badge stato composto con logica di calcolo (soglia 30 giorni) |
+| `ConfirmDialog` | Shadcn `AlertDialog` con variante danger |
 
 ---
 
-## 5. Moduli Previsti — NON IMPLEMENTATI
+## 9. IPC Handlers (Main Process)
 
-I seguenti moduli sono referenziati nella sidebar dell'index.html ma le relative pagine HTML non esistono.
+| Handler | Operazioni |
+|---|---|
+| `composti.ipc.ts` | list (filtri SQL), get (+metodi_ids, storia, preparazioni), create, update, delete, create-mix, storia-add |
+| `metodi.ipc.ts` | list (join strumenti → `strumento_codice`), get (+composti_ids), create, update, delete |
+| `strumenti.ipc.ts` | list, get, create, update, delete |
+| `eluenti.ipc.ts` | list (+componenti), create, update, close, delete |
+| `preparazioni.ipc.ts` | list, create, update, dismiss (stato + data_dismissione), delete |
+| `consumabili.ipc.ts` | list, create, update, close, delete |
+| `diario.ipc.ts` | list per strumento, create, update, delete |
+| `anagrafiche.ipc.ts` | list (+voci), create, rename, delete; add-voce, update-voce, delete-voce |
+| `migration.ipc.ts` | `config:import-legacy` — import `lcms-data.json` → SQLite in transazione atomica con rollback |
+| `query.ipc.ts` | `query:snapshot` — stato completo strumento a una data |
 
-### 5.1 Dashboard (`dashboard.html`)
-
-**Scopo previsto:** Riepilogo generale del reparto.
-
-**Contenuto suggerito:**
-- Contatori sintetici: composti totali, attivi, in scadenza, scaduti
-- Stato strumenti (on/idle/off) in tempo reale
-- Ultimi eventi dal diario
-- Composti in scadenza prossima (alert)
-- Statistiche per classe/forma/solvente
-
-### 5.2 Colonne HPLC (`colonne.html`)
-
-**Scopo previsto:** Inventario colonne cromatografiche per strumento.
-
-**Struttura dati prevista (da `strumenti.html`):**
-```
-{
-  id, marca, modello, dimensioni, faseStaz, seriale,
-  strumentoNote, dataInstallazione, dataDismissione, note
-}
-```
-
-### 5.3 SPE Cartridge (`spe.html`)
-
-**Scopo previsto:** Gestione cartucce per estrazione in fase solida.
-
-**Dati:** Array `spe[]` nel data model, attualmente vuoto.
-
-### 5.4 Solventi & Sali (`solventi.html`)
-
-**Scopo previsto:** Gestione consumabili LC (solventi, sali, acidi).
-
-**Dati:** Array `solventi[]` nel data model, attualmente vuoto.
-
-### 5.5 Per Stoccaggio (`stoccaggio.html`)
-
-**Scopo previsto:** Vista trasversale dei composti raggruppati per area di conservazione (ubicazione).
-
-**Dati:** Basato sul campo `Ubicazione` dei composti.
-
-### 5.6 Per Metodo (`per_metodo.html`)
-
-**Scopo previsto:** Vista trasversale dei composti raggruppati per metodo analitico associato.
-
-**Dati:** Basato su `metodiIds` dei composti + tabella `metodi`.
+**Config IPC** (in `main/index.ts`): `config:get`, `config:select-folder`, `config:select-json`.
 
 ---
 
-## 6. Funzionalita' Trasversali
+## 10. Migrazione da JSON Legacy
 
-### 6.1 Backup / Ripristino
+`migration.ipc.ts` legge `lcms-data.json` e inserisce tutto in SQLite in **singola transazione** con rollback su errore. Restituisce conteggi per entità (`{ strumenti: N, metodi: N, composti: N, ... }`).
 
-- **Export**: Download completo del JSON come file `lcms_backup_YYYY-MM-DD.json`
-- **Import**: Upload file JSON con sostituzione completa dei dati + reload
+Mapping campi: `Name→nome`, `Azienda→produttore`, `MW→peso_molecolare`, `Conc→concentrazione`, `FormaCommer→forma_commerciale`, `_storia[]→composti_storia`, `preps{}→preparazioni`, `metodiIds[]→composti_metodi`.
 
-### 6.2 Design System (`_shared.css`)
+---
 
-Palette coerente con variabili CSS:
-- **Base:** warm paper (#f5f4f0), surface (#faf9f7)
-- **Accent:** forest green (#1a3a2a / #2a5a40)
-- **Teal:** #1a6b5c / #228570 / #2da384
-- **Semantici:** brass (warning), danger (red), info (blue), success (green)
-- **Componenti:** card, table, modal, badge, button, toast, progress, stat-card, form, empty-state
+## 11. Gap Funzionali Noti
 
-### 6.3 Pattern di Comunicazione
+**Preparazioni work standard / soluzioni di lavoro** — Le preparazioni attuali sono collegate a un singolo composto (stock solution). Mancano le soluzioni di lavoro multi-composto (mix taratura/QC) legate a un metodo, con N composti ciascuno a concentrazione propria nella soluzione finale.
 
-```
-index.html (shell)
-    |
-    |--- postMessage('lcms-updated') ---> iframe (pagina)
-    |<-- postMessage('lcms-updated') --- iframe (pagina)
-    |
-    |--- LabStorage.onChange() ---> updateBadges()
-    |--- LabStorage.onSyncChange() ---> applyState()
-    |--- LabStorage.onPollUpdate() ---> broadcastReload()
+**Eluenti non collegati ai metodi** — `eluenti` ha FK su `strumenti` ma nessuna relazione con `metodi`. I campi `fase_a` e `fase_b` del metodo sono testo libero. Nel form metodo non è possibile selezionare tra gli eluenti installati sullo strumento scelto; manca tracciabilità diretta eluente↔metodo.
+
+---
+
+## 12. Sviluppi Futuri (da design doc)
+
+| Modulo | Note |
+|---|---|
+| Dashboard | Contatori sintetici, alert scadenze prossime, stato strumenti |
+| Gestione utenze | Autenticazione e log operatore (v2) |
+
+---
+
+## 13. Packaging
+
+- **Windows:** directory x64 + ia32, senza firma
+- **Mac:** `.dmg` (config separata `electron-builder.config.mac-legacy.js`)
+- Migrazioni SQL incluse come `extraResources`
+- Aggiornamento manuale: sostituire l'exe, le migrazioni partono automaticamente alla prima apertura
+
+---
+
+## 14. Git — Workflow
+
+```bash
+git status
+git log --oneline --graph --all
+
+git checkout -b feat/nome-feature
+git add -A
+git commit -m "feat: descrizione"
+git checkout main && git merge feat/nome-feature
 ```
 
-### 6.4 Sicurezza
-
-- Escaping HTML sistematico (`esc()`) in tutti i moduli per prevenire XSS
-- File System Access API richiede interazione utente esplicita
-- Nessun dato sensibile trasmesso in rete (tutto locale/NAS)
-- Nessuna dipendenza esterna runtime (solo Google Fonts CDN)
-
----
-
-## 7. File di Progetto
-
-| File | Dimensione | Ruolo |
-|---|---|---|
-| `index.html` | 25 KB | Shell applicativa + sidebar + overlay rete |
-| `composti.html` | 76 KB | Standard DB (modulo piu' complesso) |
-| `strumenti.html` | 48 KB | Gestione strumenti con sub-moduli |
-| `metodi.html` | 26 KB | Metodi analitici |
-| `anagrafiche.html` | 17 KB | Dizionari configurabili |
-| `storage.js` | 13 KB | Layer di persistenza |
-| `_shared.css` | 18 KB | Design system condiviso |
-| `lcms-data.json` | 21 KB | Dati correnti (~200 composti) |
-| `Book1.xlsx` | 20 KB | Dati di importazione (sorgente) |
-| `Old/` | — | Revisioni precedenti (archivio) |
-
----
-
-## 8. Limitazioni Note
-
-1. **Browser-only:** Richiede Chrome o Edge con supporto File System Access API (no Firefox/Safari)
-2. **Single-file data:** Tutti i dati in un unico JSON — potenziale collo di bottiglia con dataset grandi
-3. **No autenticazione:** Nessun controllo accesso utente
-4. **No versioning dati:** Lo storico e' limitato al campo `_storia` dei composti
-5. **Polling-based sync:** Latenza fino a 10s tra modifiche su PC diversi
-6. **No offline queue:** Le modifiche offline vengono merge al reconnect, ma non c'e' coda ordinata
-7. **Duplicazione logica metodi:** Il modulo metodi esiste sia in `metodi.html` (vista per card) che in `strumenti.html` (vista per strumento) con strutture dati leggermente diverse
-
----
-
-## 9. Riepilogo Stato Implementazione
-
-| Modulo | File | Stato | Complessita' |
-|---|---|---|---|
-| Shell / Navigazione | `index.html` | Completo | Media |
-| Storage Layer | `storage.js` | Completo | Alta |
-| Design System | `_shared.css` | Completo | Media |
-| Standard DB | `composti.html` | Completo | Alta |
-| Metodi Analitici | `metodi.html` | Completo | Media |
-| Strumenti | `strumenti.html` | Completo | Alta |
-| Anagrafiche | `anagrafiche.html` | Completo | Bassa |
-| Dashboard | `dashboard.html` | **Da fare** | Media |
-| Colonne HPLC | `colonne.html` | **Da fare** | Media |
-| SPE Cartridge | `spe.html` | **Da fare** | Bassa |
-| Solventi & Sali | `solventi.html` | **Da fare** | Bassa |
-| Per Stoccaggio | `stoccaggio.html` | **Da fare** | Bassa |
-| Per Metodo | `per_metodo.html` | **Da fare** | Bassa |
+Convenzione commit usata nel progetto: `feat:` · `fix:` · `chore:` · `refactor:`

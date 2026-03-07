@@ -91,13 +91,15 @@ export function registerCompostiIpc(): void {
       arpa: data.arpa ?? 'N',
       mix: data.mix ?? null,
       mix_id: data.mix_id ?? null,
+      stoccaggio: data.stoccaggio ?? null,
+      accreditamento_crm: data.accreditamento_crm ?? null,
     }
 
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
       'purezza', 'concentrazione', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
       'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
-      'arpa', 'mix', 'mix_id']
+      'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm']
     const placeholders = cols.map(c => `@${c}`).join(', ')
     const insertComposto = db.prepare(
       `INSERT INTO composti (${cols.join(', ')}) VALUES (${placeholders})`
@@ -150,6 +152,8 @@ export function registerCompostiIpc(): void {
       arpa: data.arpa ?? 'N',
       mix: data.mix ?? null,
       mix_id: data.mix_id ?? null,
+      stoccaggio: data.stoccaggio ?? null,
+      accreditamento_crm: data.accreditamento_crm ?? null,
     }
 
     const updateComposto = db.prepare(
@@ -162,6 +166,7 @@ export function registerCompostiIpc(): void {
        destinazione_uso=@destinazione_uso, work_standard=@work_standard,
        matrice=@matrice, peso_molecolare=@peso_molecolare, ubicazione=@ubicazione,
        arpa=@arpa, mix=@mix, mix_id=@mix_id,
+       stoccaggio=@stoccaggio, accreditamento_crm=@accreditamento_crm,
        updated_at=datetime('now') WHERE id=@id`
     )
     const deleteLinks = db.prepare('DELETE FROM composti_metodi WHERE composto_id = ?')
@@ -246,10 +251,46 @@ export function registerCompostiIpc(): void {
     return { mix_id, count }
   })
 
-  ipcMain.handle('composti:storia-add', (_, compostoId: number, data: { tipo: string; data: string; note?: string }) => {
+  ipcMain.handle('composti:storia-add', (_, compostoId: number, data: {
+    tipo: string
+    data: string
+    note?: string
+    n_registro_qc?: string
+    batch_analitico?: string
+    lotto_crm_valido?: string
+  }) => {
     const result = getDb().prepare(
-      'INSERT INTO composti_storia (composto_id, tipo, data, note) VALUES (?, ?, ?, ?)'
-    ).run(compostoId, data.tipo, data.data, data.note || null)
+      `INSERT INTO composti_storia (composto_id, tipo, data, note, n_registro_qc, batch_analitico, lotto_crm_valido)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      compostoId,
+      data.tipo,
+      data.data,
+      data.note || null,
+      data.n_registro_qc || null,
+      data.batch_analitico || null,
+      data.lotto_crm_valido || null
+    )
     return { id: result.lastInsertRowid }
+  })
+
+  ipcMain.handle('composti:lotti-validi', (_, compostoId: number) => {
+    const db = getDb()
+    // Prima prendo il nome del composto corrente
+    const corrente = db.prepare('SELECT nome FROM composti WHERE id = ?').get(compostoId) as any
+    if (!corrente) return []
+    
+    const oggi = new Date().toISOString().split('T')[0]
+    
+    // Cerco tutti i composti con lo stesso nome, non scaduti, non dismessi, diversi da quello corrente
+    return db.prepare(`
+      SELECT id, nome, lotto, scadenza_prodotto, produttore, forma_commerciale
+      FROM composti
+      WHERE LOWER(nome) = LOWER(?)
+        AND id != ?
+        AND (data_dismissione IS NULL OR data_dismissione = '')
+        AND (scadenza_prodotto IS NULL OR scadenza_prodotto > ?)
+      ORDER BY scadenza_prodotto DESC
+    `).all(corrente.nome, compostoId, oggi)
   })
 }

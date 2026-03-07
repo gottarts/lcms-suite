@@ -22,7 +22,7 @@ export const compostiApi = {
   create: (data: Record<string, unknown>) => api.invoke('composti:create', data) as Promise<any>,
   update: (id: number, data: Record<string, unknown>) => api.invoke('composti:update', id, data) as Promise<any>,
   delete: (id: number) => api.invoke('composti:delete', id) as Promise<{ ok: boolean }>,
-  addStoria: (compostoId: number, data: { tipo: string; data: string; note?: string }) =>
+  addStoria: (compostoId: number, data: { tipo: string; data: string; note?: string; n_registro_qc?: string; batch_analitico?: string; lotto_crm_valido?: string }) =>
     api.invoke('composti:storia-add', compostoId, data) as Promise<{ id: number }>,
   createMix: (data: Record<string, unknown>) =>
     api.invoke('composti:create-mix', data) as Promise<{ mix_id: string; count: number }>,

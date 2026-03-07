@@ -11,6 +11,7 @@ import { Plus, Pencil, Trash2, X } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { PrepCalcTool } from './PrepCalcTool'
 
 interface PreparazioniTabProps {
   compostoId: number
@@ -22,6 +23,8 @@ const EMPTY_FORM = {
   forma: '', stato: 'Attiva', concentrazione: '', solvente: '',
   flacone: '', operatore: '', data_prep: '', scadenza: '',
   posizione: '', note: '',
+  massa_pesata: '', purezza_usata: '', densita_solvente: null,
+  modalita_aggiunta: '', concentrazione_reale: null, concentrazione_target: null,
 }
 
 function statusBadgeClass(stato: string) {
@@ -42,11 +45,13 @@ function isExpiringSoon(scadenza: string | null): boolean {
 
 export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: PreparazioniTabProps) {
   const [formOpen, setFormOpen] = useState(false)
+  const [calcOpen, setCalcOpen] = useState(false)
   const [editPrep, setEditPrep] = useState<any>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [dismissId, setDismissId] = useState<number | null>(null)
   const [dismissDate, setDismissDate] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
+  const [filtroStato, setFiltroStato] = useState<'tutte' | 'attive' | 'scadute'>('attive')
 
   const openNew = () => {
     setEditPrep(null)
@@ -62,6 +67,11 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
       flacone: p.flacone || '', operatore: p.operatore || '',
       data_prep: p.data_prep || '', scadenza: p.scadenza || '',
       posizione: p.posizione || '', note: p.note || '',
+      massa_pesata: p.massa_pesata || '', purezza_usata: p.purezza_usata || '',
+      densita_solvente: p.densita_solvente ?? null,
+      modalita_aggiunta: p.modalita_aggiunta || '',
+      concentrazione_reale: p.concentrazione_reale ?? null,
+      concentrazione_target: p.concentrazione_target ?? null,
     })
     setFormOpen(true)
   }
@@ -79,6 +89,12 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
       scadenza: form.scadenza || null,
       posizione: form.posizione || null,
       note: form.note || null,
+      massa_pesata: form.massa_pesata ? Number(form.massa_pesata) : null,
+      purezza_usata: form.purezza_usata ? Number(form.purezza_usata) : null,
+      densita_solvente: form.densita_solvente ? Number(form.densita_solvente) : null,
+      modalita_aggiunta: form.modalita_aggiunta || null,
+      concentrazione_reale: form.concentrazione_reale ? Number(form.concentrazione_reale) : null,
+      concentrazione_target: form.concentrazione_target ? Number(form.concentrazione_target) : null,
     }
     if (editPrep) {
       await preparazioniApi.update(editPrep.id, data)
@@ -106,18 +122,49 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
     }
   }
 
+  const preparazioniFiltrate = preparazioni.filter(p => {
+    if (filtroStato === 'tutte') return true
+    const isDismessa = p.stato === 'Dismessa'
+    const isScaduta = p.stato === 'Scaduta' || (p.scadenza && new Date(p.scadenza) < new Date())
+    if (filtroStato === 'attive') return !isDismessa && !isScaduta
+    if (filtroStato === 'scadute') return isDismessa || isScaduta
+    return true
+  })
+
   return (
     <div className="space-y-3">
-      <div className="flex justify-between items-center">
-        <span className="text-xs text-muted-foreground">{preparazioni.length} preparazioni</span>
-        <Button size="sm" variant="outline" onClick={openNew}><Plus className="h-3.5 w-3.5 mr-1" /> Nuova preparazione</Button>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {preparazioniFiltrate.length} / {preparazioni.length}
+          </span>
+          <div className="flex rounded-md border text-xs overflow-hidden">
+            {(['attive', 'tutte', 'scadute'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFiltroStato(f)}
+                className={cn(
+                  'px-2.5 py-1 capitalize transition-colors',
+                  filtroStato === f
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-muted text-muted-foreground'
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Button size="sm" onClick={openNew}>
+          <Plus className="h-4 w-4 mr-1" /> Nuova preparazione
+        </Button>
       </div>
 
       {preparazioni.length === 0 && (
         <p className="text-xs text-muted-foreground text-center py-5">Nessuna preparazione registrata.</p>
       )}
 
-      {preparazioni.map(p => {
+      {preparazioniFiltrate.map(p => {
         const isDismessa = p.stato === 'Dismessa'
         const expiring = !isDismessa && isExpiringSoon(p.scadenza)
         return (
@@ -151,6 +198,9 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
             {/* Card body */}
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 px-3 py-2.5">
               <Field label="Concentrazione" value={p.concentrazione ? `${p.concentrazione} mg/L` : null} />
+              {p.concentrazione_reale != null && (
+                <Field label="Conc. reale (mg/L)" value={p.concentrazione_reale.toFixed(2)} className="text-primary font-semibold" />
+              )}
               <Field label="Solvente" value={p.solvente} />
               <Field label="Volume (mL)" value={p.flacone} />
               <Field label="Operatore" value={p.operatore} />
@@ -166,11 +216,31 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
         )
       })}
 
+      {preparazioniFiltrate.length === 0 && (
+        <div className="text-center text-muted-foreground py-8 text-sm">
+          {filtroStato === 'attive'
+            ? 'Nessuna preparazione attiva'
+            : filtroStato === 'scadute'
+            ? 'Nessuna preparazione scaduta o dismessa'
+            : 'Nessuna preparazione registrata'}
+        </div>
+      )}
+
       {/* Form dialog */}
       <Dialog open={formOpen} onOpenChange={v => !v && setFormOpen(false)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-heading">{editPrep ? 'Modifica preparazione' : 'Nuova preparazione stock'}</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="font-heading">{editPrep ? 'Modifica preparazione' : 'Nuova preparazione stock'}</DialogTitle>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCalcOpen(true)}
+              >
+                🧪 Calcolatore
+              </Button>
+            </div>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -231,6 +301,31 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
       </Dialog>
 
       <ConfirmDialog open={deleteId !== null} title="Elimina preparazione" message="Eliminare questa preparazione?" confirmLabel="Elimina" variant="danger" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+
+      {/* Prep Calculator */}
+      <PrepCalcTool
+        open={calcOpen}
+        onOpenChange={setCalcOpen}
+        purezzeDefault={null}
+        onConfirm={(result) => {
+          setForm(f => ({
+            ...f,
+            concentrazione: result.concentrazione,
+            solvente: result.solvente,
+            flacone: result.volume_solvente != null
+              ? result.volume_solvente.toFixed(2)
+              : f.flacone,
+            note: f.note ? f.note + '\n' + result.note : result.note,
+            massa_pesata: result.massa_pesata,
+            purezza_usata: result.purezza_usata,
+            densita_solvente: result.densita_solvente,
+            modalita_aggiunta: result.modalita_aggiunta,
+            concentrazione_reale: result.concentrazione_reale,
+            concentrazione_target: result.concentrazione_target,
+          }))
+          setCalcOpen(false)
+        }}
+      />
     </div>
   )
 }
