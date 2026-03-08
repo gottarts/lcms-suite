@@ -12,7 +12,7 @@
     "start": "electron .",
     "package": "npm run build && electron-builder --config electron-builder.config.js",
     "package:mac": "npm run build && electron-builder --config electron-builder.config.js --mac",
-    "package:mac-legacy": "npm run build && electron-builder --config electron-builder.config.mac-legacy.js --mac"
+    "package:mac-legacy": "npm run build && electron-builder --config electron-builder.config.mac-legacy.js --mac --dir && hdiutil create -volname 'LCMS Suite' -srcfolder release/mac/'LCMS Suite.app' -ov -format UDZO release/LCMS-Suite-1.0.0-legacy.dmg"
   },
   "keywords": [],
   "author": "",

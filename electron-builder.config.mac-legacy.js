@@ -11,7 +11,6 @@ module.exports = {
     target: 'dmg',
     category: 'public.app-category.developer-tools',
     identity: null,
-    dmgBuilderVersion: '0.12.0',
   },
   artifactName: 'LCMS-Suite-${version}-legacy.${ext}',
 }
