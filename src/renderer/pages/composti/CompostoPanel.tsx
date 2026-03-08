@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Pencil, Trash2, RotateCcw, XCircle, Copy } from 'lucide-react'
 import { compostiApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
+import { parseConcentrazione } from '@/lib/unita'
 import { PreparazioniTab } from './PreparazioniTab'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
@@ -100,7 +101,9 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
         <Tabs defaultValue="dettaglio">
           <TabsList className="w-full">
             <TabsTrigger value="dettaglio" className="flex-1">Dettaglio</TabsTrigger>
-            <TabsTrigger value="preparazioni" className="flex-1">Preparazioni ({composto.preparazioni?.length || 0})</TabsTrigger>
+            {composto.forma === 'Neat' && (
+              <TabsTrigger value="preparazioni" className="flex-1">Preparazioni ({composto.preparazioni?.length || 0})</TabsTrigger>
+            )}
             <TabsTrigger value="storico" className="flex-1">Storico</TabsTrigger>
           </TabsList>
 
@@ -112,7 +115,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
             <Field label="MW" value={composto.peso_molecolare} />
             <Separator />
             <Field label="Purezza" value={composto.purezza ? `${composto.purezza}%` : null} />
-            <Field label="Concentrazione" value={composto.concentrazione} />
+            <Field label="Concentrazione" value={composto.concentrazione ? `${parseConcentrazione(composto.concentrazione)} ${composto.unita_conc ?? 'mg/L'}` : null} />
             <Field label="Solvente" value={composto.solvente} />
             <Field label="Fiala" value={composto.fiala} />
             <Separator />
@@ -131,9 +134,11 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
             <Field label="Accreditamento CRM" value={composto.accreditamento_crm} />
           </TabsContent>
 
-          <TabsContent value="preparazioni" className="mt-3">
-            <PreparazioniTab compostoId={composto.id} preparazioni={composto.preparazioni || []} onRefresh={load} />
-          </TabsContent>
+          {composto.forma === 'Neat' && (
+            <TabsContent value="preparazioni" className="mt-3">
+              <PreparazioniTab compostoId={composto.id} preparazioni={composto.preparazioni || []} onRefresh={load} />
+            </TabsContent>
+          )}
 
           <TabsContent value="storico" className="mt-3 space-y-3">
             <div className="flex gap-2">

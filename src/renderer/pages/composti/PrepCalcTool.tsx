@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { SOLVENT_LIST } from '@/lib/solventDensities'
+import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 import { cn } from '@/lib/utils'
 
 export interface PrepCalcToolProps {
@@ -12,7 +13,8 @@ export interface PrepCalcToolProps {
   onOpenChange: (v: boolean) => void
   purezzeDefault?: number | null
   onConfirm: (result: {
-    concentrazione: string
+    concentrazione: number
+    unita_conc: string
     solvente: string
     note: string
     volume_solvente: number
@@ -39,6 +41,7 @@ export function PrepCalcTool({
   const [densita, setDensita] = useState('')
   const [modalita, setModalita] = useState<'volume' | 'pesata'>('volume')
   const [massaSolvente, setMassaSolvente] = useState('')
+  const [unitaConc, setUnitaConc] = useState<string>(UNITA_DEFAULT)
 
   // Calcoli in tempo reale
   const calculations = useMemo(() => {
@@ -88,13 +91,14 @@ export function PrepCalcTool({
     const concTargetNum = parseFloat(concTarget) || 0
 
     onConfirm({
-      concentrazione: `${calculations.concReale.toFixed(1)} mg/L`,
+      concentrazione: calculations.concReale,
+      unita_conc: unitaConc,
       solvente: solventeDisplay,
       note: `[Calc] Pesata: ${massaPesata} mg, purezza: ${purezza}%, ` +
         (modalita === 'volume'
           ? `aggiunto ${calculations.volumeSolvente.toFixed(2)} mL ${solventeDisplay}`
           : `pesato ${massaSolvente} g ${solventeDisplay} (d=${densita})`) +
-        ` → Conc. reale: ${calculations.concReale.toFixed(1)} mg/L`,
+        ` → Conc. reale: ${calculations.concReale.toFixed(1)} ${unitaConc}`,
       volume_solvente: calculations.volumeSolvente,
       massa_pesata: parseFloat(massaPesata) || 0,
       purezza_usata: parseFloat(purezza) || 0,
@@ -167,9 +171,9 @@ export function PrepCalcTool({
             </div>
           </div>
 
-          {/* Sezione 2 — Solvente */}
+          {/* Sezione 2 — Solvente e Unità */}
           <div className="border rounded-md p-3 space-y-3">
-            <div className="text-xs font-semibold text-foreground mb-2">Solvente</div>
+            <div className="text-xs font-semibold text-foreground mb-2">Solvente e Unità</div>
 
             {/* Solvente select */}
             <div>
@@ -200,6 +204,21 @@ export function PrepCalcTool({
                 />
               </div>
             )}
+
+            {/* Unità concentrazione */}
+            <div>
+              <Label className="text-xs">Unità concentrazione</Label>
+              <Select value={unitaConc} onValueChange={setUnitaConc}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNITA_CONCENTRAZIONE.map(u => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Modalita */}
             <div className="space-y-2">
@@ -289,7 +308,7 @@ export function PrepCalcTool({
                     <div className="text-2xl font-bold text-primary font-mono">
                       {calculations.concReale.toFixed(1)}
                     </div>
-                    <div className="text-xs text-muted-foreground">mg/L</div>
+                    <div className="text-xs text-muted-foreground">{unitaConc}</div>
                   </div>
                 </>
               ) : (

@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { compostiApi } from '@/lib/api'
+import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 import { Upload } from 'lucide-react'
 
 interface MixPesticidiFormProps {
@@ -18,6 +19,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
   const [form, setForm] = useState({
     forma_commerciale: '',
     concentrazione: '',
+    unita_conc: UNITA_DEFAULT,
     solvente: '',
     produttore: '',
     lotto: '',
@@ -54,7 +56,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
 
   const reset = () => {
     setForm({
-      forma_commerciale: '', concentrazione: '',
+      forma_commerciale: '', concentrazione: '', unita_conc: UNITA_DEFAULT,
       solvente: '', produttore: '', lotto: '', data_apertura: '',
       scadenza_prodotto: '', classe: '', destinazione_uso: '',
       stoccaggio: '', accreditamento_crm: 'ISO 17034',
@@ -84,6 +86,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         ...form,
         forma: 'mix',
         concentrazione: form.concentrazione ? parseFloat(form.concentrazione) : null,
+        unita_conc: form.unita_conc || UNITA_DEFAULT,
         nomi,
       }
       const result = await compostiApi.createMix(data)
@@ -121,8 +124,19 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
               <Input value={form.codice_interno} onChange={e => set('codice_interno', e.target.value)} placeholder="es. MIX-001" />
             </div>
             <div>
-              <Label className="text-xs">Concentrazione mg/L (per componente)</Label>
+              <Label className="text-xs">Concentrazione</Label>
               <Input type="number" step="any" value={form.concentrazione} onChange={e => set('concentrazione', e.target.value)} placeholder="es. 100" />
+            </div>
+            <div>
+              <Label className="text-xs">Unità</Label>
+              <Select value={form.unita_conc || UNITA_DEFAULT} onValueChange={v => set('unita_conc', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {UNITA_CONCENTRAZIONE.map(u => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-xs">Solvente</Label>

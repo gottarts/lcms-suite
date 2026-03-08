@@ -1,0 +1,2 @@
+ALTER TABLE composti ADD COLUMN unita_conc TEXT NOT NULL DEFAULT 'mg/L';
+ALTER TABLE preparazioni ADD COLUMN unita_conc TEXT NOT NULL DEFAULT 'mg/L';

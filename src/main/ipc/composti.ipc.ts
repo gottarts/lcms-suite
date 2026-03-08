@@ -79,6 +79,7 @@ LEFT JOIN preparazioni p ON p.composto_id = c.id`
       forma_commerciale: data.forma_commerciale ?? null,
       purezza: data.purezza ?? null,
       concentrazione: data.concentrazione ?? null,
+      unita_conc: (data.unita_conc as string) ?? 'mg/L',
       solvente: data.solvente ?? null,
       fiala: data.fiala ?? null,
       produttore: data.produttore ?? null,
@@ -100,7 +101,7 @@ LEFT JOIN preparazioni p ON p.composto_id = c.id`
     }
 
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
-      'purezza', 'concentrazione', 'solvente', 'fiala', 'produttore', 'lotto',
+      'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
       'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
       'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm']
@@ -140,6 +141,7 @@ LEFT JOIN preparazioni p ON p.composto_id = c.id`
       forma_commerciale: data.forma_commerciale ?? null,
       purezza: data.purezza ?? null,
       concentrazione: data.concentrazione ?? null,
+      unita_conc: (data.unita_conc as string) ?? 'mg/L',
       solvente: data.solvente ?? null,
       fiala: data.fiala ?? null,
       produttore: data.produttore ?? null,
@@ -163,7 +165,7 @@ LEFT JOIN preparazioni p ON p.composto_id = c.id`
     const updateComposto = db.prepare(
       `UPDATE composti SET nome=@nome, codice_interno=@codice_interno, formula=@formula,
        classe=@classe, forma=@forma, forma_commerciale=@forma_commerciale,
-       purezza=@purezza, concentrazione=@concentrazione, solvente=@solvente,
+       purezza=@purezza, concentrazione=@concentrazione, unita_conc=@unita_conc, solvente=@solvente,
        fiala=@fiala, produttore=@produttore, lotto=@lotto,
        operatore_apertura=@operatore_apertura, data_apertura=@data_apertura,
        scadenza_prodotto=@scadenza_prodotto, data_dismissione=@data_dismissione,
@@ -198,6 +200,7 @@ LEFT JOIN preparazioni p ON p.composto_id = c.id`
     forma_commerciale: string
     forma: string
     concentrazione: number | null
+    unita_conc?: string
     solvente: string | null
     produttore: string | null
     lotto: string | null
@@ -210,7 +213,7 @@ LEFT JOIN preparazioni p ON p.composto_id = c.id`
     const db = getDb()
     const mix_id = 'mix_' + Date.now().toString(36)
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
-      'purezza', 'concentrazione', 'solvente', 'fiala', 'produttore', 'lotto',
+      'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
       'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
       'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm']
@@ -227,6 +230,7 @@ LEFT JOIN preparazioni p ON p.composto_id = c.id`
       forma_commerciale: data.forma_commerciale,
       purezza: null,
       concentrazione: data.concentrazione,
+      unita_conc: (data.unita_conc as string) ?? 'mg/L',
       solvente: data.solvente || null,
       fiala: null,
       produttore: data.produttore || null,

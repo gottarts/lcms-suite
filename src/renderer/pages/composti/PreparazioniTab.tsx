@@ -11,6 +11,7 @@ import { Plus, Pencil, Trash2, X } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { parseConcentrazione, UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 import { PrepCalcTool } from './PrepCalcTool'
 
 interface PreparazioniTabProps {
@@ -20,7 +21,7 @@ interface PreparazioniTabProps {
 }
 
 const EMPTY_FORM = {
-  forma: '', stato: 'Attiva', concentrazione: '', solvente: '',
+  forma: '', stato: 'Attiva', concentrazione: '', unita_conc: UNITA_DEFAULT, solvente: '',
   flacone: '', operatore: '', data_prep: '', scadenza: '',
   posizione: '', note: '',
   massa_pesata: '', purezza_usata: '', densita_solvente: null,
@@ -70,7 +71,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
     setEditPrep(p)
     setForm({
       forma: p.forma || '', stato: p.stato || 'Attiva',
-      concentrazione: p.concentrazione || '', solvente: p.solvente || '',
+      concentrazione: p.concentrazione || '', unita_conc: p.unita_conc || UNITA_DEFAULT, solvente: p.solvente || '',
       flacone: p.flacone || '', operatore: p.operatore || '',
       data_prep: p.data_prep || '', scadenza: p.scadenza || '',
       posizione: p.posizione || '', note: p.note || '',
@@ -89,6 +90,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
       forma: form.forma || null,
       stato: form.stato || 'Attiva',
       concentrazione: form.concentrazione || null,
+      unita_conc: form.unita_conc || UNITA_DEFAULT,
       solvente: form.solvente || null,
       flacone: form.flacone || null,
       operatore: form.operatore || null,
@@ -201,9 +203,9 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
             </div>
             {/* Card body */}
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 px-3 py-2.5">
-              <Field label="Concentrazione" value={p.concentrazione ?? null} />
+              <Field label="Concentrazione" value={parseConcentrazione(p.concentrazione) + ' ' + (p.unita_conc ?? 'mg/L')} />
               {p.concentrazione_reale != null && (
-                <Field label="Conc. reale (mg/L)" value={p.concentrazione_reale.toFixed(2)} className="text-primary font-semibold" />
+                <Field label="Conc. reale" value={p.concentrazione_reale.toFixed(2) + ' ' + (p.unita_conc ?? 'mg/L')} className="text-primary font-semibold" />
               )}
               <Field label="Solvente" value={p.solvente} />
               <Field label="Volume (mL)" value={p.flacone} />
@@ -270,7 +272,15 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Concentrazione (mg/L)</Label><Input value={form.concentrazione} onChange={e => setForm(f => ({ ...f, concentrazione: e.target.value }))} /></div>
+              <div><Label className="text-xs">Concentrazione</Label><Input value={form.concentrazione} onChange={e => setForm(f => ({ ...f, concentrazione: e.target.value }))} /></div>
+              <div><Label className="text-xs">Unità</Label><Select value={form.unita_conc || UNITA_DEFAULT} onValueChange={v => setForm(f => ({ ...f, unita_conc: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {UNITA_CONCENTRAZIONE.map(u => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select></div>
               <div><Label className="text-xs">Volume soluzione (mL)</Label><Input value={form.flacone} onChange={e => setForm(f => ({ ...f, flacone: e.target.value }))} placeholder="es. 1.5" /></div>
               <div><Label className="text-xs">Solvente</Label><Input value={form.solvente} onChange={e => setForm(f => ({ ...f, solvente: e.target.value }))} /></div>
               <div><Label className="text-xs">Operatore</Label><Input value={form.operatore} onChange={e => setForm(f => ({ ...f, operatore: e.target.value }))} /></div>
@@ -314,7 +324,8 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
         onConfirm={(result) => {
           setForm(f => ({
             ...f,
-            concentrazione: result.concentrazione,
+            concentrazione: result.concentrazione.toString(),
+            unita_conc: result.unita_conc,
             solvente: result.solvente,
             flacone: result.volume_solvente != null
               ? result.volume_solvente.toFixed(2)

@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { compostiApi } from '@/lib/api'
+import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 
 interface CompostoFormProps {
   open: boolean
@@ -41,7 +42,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
     } else {
       setForm({
         nome: '', codice_interno: '', formula: '', classe: '', forma: '',
-        forma_commerciale: '', purezza: '', concentrazione: '', solvente: '',
+        forma_commerciale: '', purezza: '', concentrazione: '', unita_conc: UNITA_DEFAULT, solvente: '',
         fiala: '', produttore: '', lotto: '', operatore_apertura: '',
         data_apertura: '', scadenza_prodotto: '', destinazione_uso: '',
         work_standard: '', peso_molecolare: '', ubicazione: '',
@@ -114,7 +115,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
 
           <Separator />
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Forma e Concentrazione</div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div><Label className="text-xs">Forma</Label><Select value={form.forma || ''} onValueChange={v => set('forma', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -126,6 +127,14 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <div><Label className="text-xs">Fiala</Label><Input value={form.fiala || ''} onChange={e => set('fiala', e.target.value)} /></div>
             <div><Label className="text-xs">Purezza (%)</Label><Input type="number" step="0.1" value={form.purezza || ''} onChange={e => set('purezza', e.target.value)} /></div>
             <div><Label className="text-xs">Concentrazione</Label><Input type="number" step="0.01" value={form.concentrazione || ''} onChange={e => set('concentrazione', e.target.value)} /></div>
+            <div><Label className="text-xs">Unità</Label><Select value={form.unita_conc || UNITA_DEFAULT} onValueChange={v => set('unita_conc', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {UNITA_CONCENTRAZIONE.map(u => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select></div>
             <div><Label className="text-xs">Solvente</Label><Input value={form.solvente || ''} onChange={e => set('solvente', e.target.value)} /></div>
           </div>
 

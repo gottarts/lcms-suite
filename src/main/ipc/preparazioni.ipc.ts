@@ -15,6 +15,7 @@ export function registerPreparazioniIpc(): void {
       stato: data.stato ?? 'Attiva',
       flacone: data.flacone ?? null,
       concentrazione: data.concentrazione ?? null,
+      unita_conc: (data.unita_conc as string) ?? 'mg/L',
       solvente: data.solvente ?? null,
       data_prep: data.data_prep ?? null,
       scadenza: data.scadenza ?? null,
@@ -30,12 +31,12 @@ export function registerPreparazioniIpc(): void {
     }
     const result = getDb().prepare(
       `INSERT INTO preparazioni (
-         composto_id, forma, stato, flacone, concentrazione, solvente,
+         composto_id, forma, stato, flacone, concentrazione, unita_conc, solvente,
          data_prep, scadenza, operatore, posizione, note,
          massa_pesata, purezza_usata, densita_solvente, modalita_aggiunta,
          concentrazione_reale, concentrazione_target
        ) VALUES (
-         @composto_id, @forma, @stato, @flacone, @concentrazione, @solvente,
+         @composto_id, @forma, @stato, @flacone, @concentrazione, @unita_conc, @solvente,
          @data_prep, @scadenza, @operatore, @posizione, @note,
          @massa_pesata, @purezza_usata, @densita_solvente, @modalita_aggiunta,
          @concentrazione_reale, @concentrazione_target
@@ -51,6 +52,7 @@ export function registerPreparazioniIpc(): void {
       stato: data.stato ?? 'Attiva',
       flacone: data.flacone ?? null,
       concentrazione: data.concentrazione ?? null,
+      unita_conc: (data.unita_conc as string) ?? 'mg/L',
       solvente: data.solvente ?? null,
       data_prep: data.data_prep ?? null,
       scadenza: data.scadenza ?? null,
@@ -67,7 +69,7 @@ export function registerPreparazioniIpc(): void {
     getDb().prepare(
       `UPDATE preparazioni SET
          forma=@forma, stato=@stato, flacone=@flacone, concentrazione=@concentrazione,
-         solvente=@solvente, data_prep=@data_prep, scadenza=@scadenza,
+         unita_conc=@unita_conc, solvente=@solvente, data_prep=@data_prep, scadenza=@scadenza,
          operatore=@operatore, posizione=@posizione, note=@note,
          massa_pesata=@massa_pesata, purezza_usata=@purezza_usata, densita_solvente=@densita_solvente,
          modalita_aggiunta=@modalita_aggiunta, concentrazione_reale=@concentrazione_reale,

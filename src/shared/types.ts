@@ -44,6 +44,7 @@ export interface Composto {
   forma_commerciale: string | null
   purezza: number | null
   concentrazione: number | null
+  unita_conc: string
   solvente: string | null
   fiala: string | null
   produttore: string | null
@@ -93,6 +94,7 @@ export interface Preparazione {
   stato: string | null
   flacone: string | null
   concentrazione: string | null
+  unita_conc: string
   solvente: string | null
   data_prep: string | null
   scadenza: string | null
