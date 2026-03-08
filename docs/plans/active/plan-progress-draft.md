@@ -36,3 +36,46 @@ JSX label	Cambiato da "Concentrazione mg/L (per componente)" a "Concentrazione"	
 JSX Select	Aggiunto Select unità accanto a Concentrazione	✅
 Payload Save	Incluso unita_conc: form.unita_conc \|\| UNITA_DEFAULT	✅
 
+Feat C - ✅ Implementazione completata
+Cosa ho fatto
+#	Istruzione	File modificato	Stato
+1	Impostare defaultValue a "dettaglio"	CompostoPanel.tsx	✅ (era già impostato)
+2	Wrappare TabsTrigger "preparazioni" con condizione composto.forma === 'Neat'	CompostoPanel.tsx	✅
+3	Wrappare TabsContent "preparazioni" con stessa condizione	CompostoPanel.tsx	✅
+Note
+Il defaultValue del componente Tabs era già impostato a "dettaglio", quindi nessuna modifica necessaria.
+Ho usato composto.forma senza optional chaining poiché composto è garantito non-null nel contesto (c'è un if (!composto) return null prima).
+Il contenuto interno del TabsContent è rimasto invariato, solo wrappato con la condizione.
+Compilazione riuscita: 0 errori trovati.
+Non ho modificato PreparazioniTab.tsx né toccato logica di salvataggio/fetch delle preparazioni.
+
+Feat D - ✅ Implementazione completata
+Cosa ho fatto
+#	Istruzione	File modificato	Stato
+1	Estendere ricerca testuale a tutti i campi (nome, codice_interno, classe, produttore, lotto, ubicazione, solvente, forma_commerciale, destinazione_uso)	CompostiPage.tsx	✅
+2	Aggiungere filtri Stato (Tutti/Attivo/In scadenza/Scaduto/Dismesso) e Work Solution (Tutti/Sì/No) con Select nella toolbar	CompostiPage.tsx	✅
+3	Logica filtraggio combinato in AND (ricerca + stato + work + metodo)	CompostiPage.tsx	✅
+4	Contatore "Visualizzati: X / Totali: Y" nell'header	CompostiPage.tsx	✅
+5	Badge rimovibili per filtri attivi (Stato, Work)	CompostiPage.tsx	✅
+6	Verifica ordinamento colonne — già funzionante nel DataTable per colonne sortable	DataTable.tsx	✅ (già presente)
+Note
+Filtraggio client-side: Tutto implementato in CompostiPage.tsx senza modifiche a IPC o DB.
+Filtro Stato: Usa computeStato() esistente, non aggiunge colonne DB.
+Filtro Work Solution: Controlla presenza/assenza di work_standard (Sì se valorizzato, No se null/vuoto).
+Filtro Metodo: Non implementato poiché non presente nel codice attuale (il plan dice "già presente, verificare" — non trovato, lasciato invariato).
+Ricerca estesa: Ora copre 9 campi testuali invece di 5.
+Ordinamento: Il componente DataTable gestisce già l'ordinamento per colonne con sortable !== false (icone ▲/▼ incluse).
+Compilazione: 0 errori, modifiche pronte per test manuale.
+test manuale negativo. filtro work sbagliato
+✅ Fix completato
+Cosa ho fatto
+#	Istruzione	File modificato	Stato
+1	Cambiare stato filtroWork a string libera (default 'Tutti')	CompostiPage.tsx	✅ (era già string)
+2	Calcolare dinamicamente opzioniWork dai valori unici di work_standard	CompostiPage.tsx	✅
+3	Cambiare logica filtraggio a confronto esatto (c.work_standard === filtroWork)	CompostiPage.tsx	✅
+4	Aggiornare Select per usare opzioniWork mappate	CompostiPage.tsx	✅
+Note
+Il filtro Work Solution ora filtra per contenuto esatto della stringa work_standard (es. "Work_Pesticidi_A").
+Le opzioni sono generate dinamicamente dal dataset, ordinate alfabeticamente.
+Il badge attivo mostra il nome del valore selezionato (es. "Work: Work_Pesticidi_A ×").
+Compilazione riuscita: 0 errori. Il fix è pronto per test manuale.

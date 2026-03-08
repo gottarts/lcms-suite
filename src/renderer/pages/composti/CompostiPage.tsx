@@ -8,11 +8,17 @@ import { StoriaDialog } from './StoriaDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Plus, Search, FlaskConical } from 'lucide-react'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
+import { Plus, Search, FlaskConical, X } from 'lucide-react'
 
 export function CompostiPage() {
   const [composti, setComposti] = useState<any[]>([])
   const [search, setSearch] = useState('')
+  const [filtroStato, setFiltroStato] = useState('Tutti')
+  const [filtroWork, setFiltroWork] = useState('Tutti')
+  const [filtroMetodo, setFiltroMetodo] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editComposto, setEditComposto] = useState<any>(null)
   const [template, setTemplate] = useState<any>(null)
@@ -24,17 +30,59 @@ export function CompostiPage() {
   const load = () => compostiApi.list().then(setComposti)
   useEffect(() => { load() }, [])
 
+  const opzioniWork = useMemo(() => [
+    'Tutti',
+    ...Array.from(
+      new Set(
+        composti
+          .map(c => c.work_standard)
+          .filter((v): v is string => !!v && v.trim() !== '')
+      )
+    ).sort()
+  ], [composti])
+
   const filtered = useMemo(() => {
-    if (!search) return composti
-    const q = search.toLowerCase()
-    return composti.filter(c =>
+    let result = composti
+
+    // ricerca testuale
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(c =>
       c.nome?.toLowerCase().includes(q) ||
       c.codice_interno?.toLowerCase().includes(q) ||
       c.classe?.toLowerCase().includes(q) ||
       c.produttore?.toLowerCase().includes(q) ||
-      c.lotto?.toLowerCase().includes(q)
-    )
-  }, [composti, search])
+      c.lotto?.toLowerCase().includes(q) ||
+      c.ubicazione?.toLowerCase().includes(q) ||
+      c.solvente?.toLowerCase().includes(q) ||
+      c.forma_commerciale?.toLowerCase().includes(q) ||
+      c.destinazione_uso?.toLowerCase().includes(q) ||
+      c.forma?.toLowerCase().includes(q) ||
+      c.formula?.toLowerCase().includes(q) ||
+      c.fiala?.toLowerCase().includes(q) ||
+      c.operatore_apertura?.toLowerCase().includes(q) ||
+      c.stoccaggio?.toLowerCase().includes(q) ||
+      c.accreditamento_crm?.toLowerCase().includes(q)
+     )
+    }
+
+    // filtro stato
+    if (filtroStato !== 'Tutti') {
+      result = result.filter(c => computeStato(c) === filtroStato)
+    }
+
+    // filtro work solution
+    if (filtroWork !== 'Tutti') {
+      result = result.filter(c => c.work_standard === filtroWork)
+    }
+
+    // filtro metodo (se presente)
+    if (filtroMetodo) {
+      result = result.filter(c => c.metodo_id === filtroMetodo)
+    }
+
+    return result
+  }, [composti, search, filtroStato, filtroWork, filtroMetodo])
 
   const handleDelete = async () => {
     if (deleteId !== null) {
@@ -71,7 +119,9 @@ export function CompostiPage() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-heading text-lg font-semibold">Standard di Riferimento</h2>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">{filtered.length} composti</span>
+          <span className="text-sm text-muted-foreground">
+            Visualizzati: {filtered.length} / Totali: {composti.length}
+          </span>
           <Button size="sm" variant="outline" onClick={() => setMixOpen(true)}>
             <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
           </Button>
@@ -82,9 +132,47 @@ export function CompostiPage() {
       </div>
 
       <div className="mb-4">
-        <div className="relative max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca composto..." className="pl-9" />
+        <div className="flex items-center gap-4">
+          <div className="relative w-80">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, lotto, produttore, classe..." className="pl-9" />
+          </div>
+          <Select value={filtroStato} onValueChange={setFiltroStato}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Stato" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Tutti">Tutti</SelectItem>
+              <SelectItem value="Attivo">Attivo</SelectItem>
+              <SelectItem value="In scadenza">In scadenza</SelectItem>
+              <SelectItem value="Scaduto">Scaduto</SelectItem>
+              <SelectItem value="Dismesso">Dismesso</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filtroWork} onValueChange={setFiltroWork}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Work Solution" />
+            </SelectTrigger>
+            <SelectContent>
+              {opzioniWork.map(opzione => (
+                <SelectItem key={opzione} value={opzione}>
+                  {opzione}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {filtroStato !== 'Tutti' && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              Stato: {filtroStato}
+              <button onClick={() => setFiltroStato('Tutti')} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+            </Badge>
+          )}
+          {filtroWork !== 'Tutti' && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              Work: {filtroWork}
+              <button onClick={() => setFiltroWork('Tutti')} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+            </Badge>
+          )}
         </div>
       </div>
 
