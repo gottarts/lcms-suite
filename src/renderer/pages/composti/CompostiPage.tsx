@@ -13,6 +13,13 @@ import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { Plus, Search, FlaskConical, X } from 'lucide-react'
 
+const STATO_MAP: Record<string, string> = {
+  'Attivo': 'attivo',
+  'In scadenza': 'in_scadenza',
+  'Scaduto': 'scaduto',
+  'Dismesso': 'dismesso',
+}
+
 export function CompostiPage() {
   const [composti, setComposti] = useState<any[]>([])
   const [search, setSearch] = useState('')
@@ -48,27 +55,27 @@ export function CompostiPage() {
     if (search) {
       const q = search.toLowerCase()
       result = result.filter(c =>
-      c.nome?.toLowerCase().includes(q) ||
-      c.codice_interno?.toLowerCase().includes(q) ||
-      c.classe?.toLowerCase().includes(q) ||
-      c.produttore?.toLowerCase().includes(q) ||
-      c.lotto?.toLowerCase().includes(q) ||
-      c.ubicazione?.toLowerCase().includes(q) ||
-      c.solvente?.toLowerCase().includes(q) ||
-      c.forma_commerciale?.toLowerCase().includes(q) ||
-      c.destinazione_uso?.toLowerCase().includes(q) ||
-      c.forma?.toLowerCase().includes(q) ||
-      c.formula?.toLowerCase().includes(q) ||
-      c.fiala?.toLowerCase().includes(q) ||
-      c.operatore_apertura?.toLowerCase().includes(q) ||
-      c.stoccaggio?.toLowerCase().includes(q) ||
-      c.accreditamento_crm?.toLowerCase().includes(q)
-     )
+        c.nome?.toLowerCase().includes(q) ||
+        c.codice_interno?.toLowerCase().includes(q) ||
+        c.classe?.toLowerCase().includes(q) ||
+        c.produttore?.toLowerCase().includes(q) ||
+        c.lotto?.toLowerCase().includes(q) ||
+        c.ubicazione?.toLowerCase().includes(q) ||
+        c.solvente?.toLowerCase().includes(q) ||
+        c.forma_commerciale?.toLowerCase().includes(q) ||
+        c.destinazione_uso?.toLowerCase().includes(q) ||
+        c.forma?.toLowerCase().includes(q) ||
+        c.formula?.toLowerCase().includes(q) ||
+        c.fiala?.toLowerCase().includes(q) ||
+        c.operatore_apertura?.toLowerCase().includes(q) ||
+        c.stoccaggio?.toLowerCase().includes(q) ||
+        c.accreditamento_crm?.toLowerCase().includes(q)
+      )
     }
 
     // filtro stato
     if (filtroStato !== 'Tutti') {
-      result = result.filter(c => computeStato(c) === filtroStato)
+      result = result.filter(c => computeStato(c) === STATO_MAP[filtroStato])
     }
 
     // filtro work solution

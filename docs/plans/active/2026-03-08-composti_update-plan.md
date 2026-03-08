@@ -182,72 +182,289 @@ Verificare che l'ordinamento per click su header sia funzionante su tutte le col
 Valutare se fare il filtraggio lato SQL (IPC) o lato client. Con dataset ~200 composti, il filtraggio client-side è preferibile per reattività immediata. Tutta la lista dei composti viene caricata una volta, poi i filtri operano sul dataset in memoria. Aggiornare l'handler IPC `composti:list` solo se necessario per la compatibilità. Per il filtro Stato, usare la funzione `computeStato()` già esistente — non aggiungere una colonna DB. Per Work Solution, il campo DB si chiama `work_standard` — verificare i valori possibili (es. `"Sì"/"No"`, `1/0`, `true/false`) prima di costruire il filtro.
 
 ---
+## FEAT-E — Multi-fiala: piano aggiornato
+**Data:** 2026-03-08  
+**Stato:** pronto per implementazione  
 
-## FEAT-E — Selettore multi-fiala con registrazione aperture e storico
+---
 
-### Obiettivo
-Alcuni composti hanno più fiale dello stesso lotto (es. 4 fiale identiche). Attualmente non c'è modo di sapere quante fiale ci sono, quante sono state aperte e quando. Questa feature aggiunge:
+### Stato di partenza
 
-1. Un campo `numero_fiale` (intero) nel DB per indicare quante fiale totali esistono per un composto
-2. Un indicatore visivo nella tabella principale — N pallini colorati cliccabili (●●●○ = 3 aperte su 4)
-3. Un'azione "Apri fiala" che registra la data di apertura nello storico e aggiorna il contatore
-4. La visualizzazione delle aperture nel tab *Storico* del pannello laterale
+- DB: colonne `numero_fiale` e `fiala_numero` rimosse — vanno aggiunte dalla migration
+- Codice: tutto ripristinato alla versione pre-tentativo fallito
+- Migration disponibile successiva: **007**  
+  (la 006 è già occupata da FEAT-B `unita_conc`)
 
-### Sotto-task
+---
 
-#### E1 — Migrazione DB: aggiungere colonna `numero_fiale`
+### Correzioni rispetto al piano originale
+
+| Voce | Piano originale | Piano corretto |
+|------|----------------|----------------|
+| Migration | 006 | 007 |
+| Campo `fiala` | "rinominare in N° fiale" | **lasciare invariato** — è un identificativo testuale della fiala |
+| Campo `numero_fiale` | solo se `forma === Neat'` | **sempre visibile** nel form, dopo `fiala`, default 1 |
+
+---
+
+### Blocco 1 — DB e Backend
+
+#### 1A — Migration `007-numero-fiale.sql`
+
+Creare il file `src/main/migrations/007-numero-fiale.sql`:
+
 ```sql
--- migration 006
-ALTER TABLE composti ADD COLUMN numero_fiale INTEGER DEFAULT 1;
+ALTER TABLE composti ADD COLUMN numero_fiale INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE composti_storia ADD COLUMN fiala_numero INTEGER DEFAULT NULL;
 ```
-Il campo `fiale_aperte` (contatore) viene derivato contando gli eventi nel `composti_storia` di tipo `'apertura_fiala'`.
 
-#### E2 — Aggiornare il form Composto
-Nel `CompostoForm.tsx` rinominare il campo esistente `fiala` in `n° fiale` (label visibile all'utente) e aggiungere il campo `numero_fiale` (input numerico, minimo 1, default 1). Mostrare il campo solo se `forma === 'Neat'` (per i Solution non ha senso).
+Il meccanismo di migrazione in `db.ts` legge il prefisso numerico del filename (`007`) e lo confronta con `user_version` — nessuna modifica a `db.ts` necessaria, la migration parte automaticamente al prossimo avvio.
 
-#### E3 — Indicatore visivo nella tabella
-Nella `CompostiTable.tsx`, aggiungere una colonna `"Fiale"` che mostra gli N pallini. La colonna è visibile solo se il composto ha `numero_fiale > 1` (o mostrarla sempre con 1 pallino per i Neat, nasconderla per i Solution).
+---
 
-Mockup visivo:
+#### 1B — `src/shared/types.ts`
+
+**Modifica 1** — aggiungere `numero_fiale` all'interfaccia `Composto`, dopo `fiala`:
+
+```ts
+fiala: string | null
+numero_fiale: number   // ← aggiungere qui
 ```
-●●●○  ← 3 aperte (nero pieno), 1 chiusa (cerchio vuoto)
+
+**Modifica 2** — estendere `CompostoStoria`:
+
+```ts
+export interface CompostoStoria {
+  id: number
+  composto_id: number
+  tipo: 'Rivalidazione' | 'Dismissione' | 'apertura_fiala'  // ← aggiungere 'apertura_fiala'
+  data: string
+  note: string | null
+  n_registro_qc: string | null
+  batch_analitico: string | null
+  lotto_crm_valido: string | null
+  fiala_numero: number | null   // ← aggiungere
+  created_at: string
+}
 ```
-- Pallino pieno (●) = fiala aperta
-- Pallino vuoto (○) = fiala non ancora aperta
-- Click su pallino vuoto → apre dialog "Registra apertura fiala N"
 
-#### E4 — Dialog apertura fiala
-Al click su un pallino vuoto:
-- Dialog modale con: data apertura (default oggi), operatore, note
-- Salva un record in `composti_storia` con `tipo: 'apertura_fiala'`, `fiala_numero: N`, data e note
-- Aggiorna il contatore visualizzato senza ricaricare tutto
+---
 
-#### E5 — Storico aperture nel pannello
-Nel tab *Storico* di `CompostoPanel.tsx`, i record di tipo `apertura_fiala` vengono mostrati con:
-- Etichetta: `"Fiala N aperta"`
-- Data, operatore, note
+#### 1C — `src/main/ipc/composti.ipc.ts`
 
-### File coinvolti
-- `src/main/migrations/006-numero-fiale.sql` — nuova migration
-- `src/main/db.ts` — bump `PRAGMA user_version` a 6
-- `src/shared/types.ts` — aggiungere `numero_fiale` al tipo `Composto`
-- `src/main/ipc/composti.ipc.ts` — aggiornare `composti:list`, `composti:get`, `composti:update`; aggiungere handler `composti:apri-fiala`
-- `src/renderer/pages/composti/CompostiTable.tsx` — colonna fiale con pallini
-- `src/renderer/pages/composti/CompostoForm.tsx` — campo `numero_fiale`
-- `src/renderer/pages/composti/CompostoPanel.tsx` — storico con eventi apertura
-- `src/renderer/pages/composti/FialeSelector.tsx` — nuovo componente (pallini cliccabili)
-- `src/renderer/pages/composti/ApriAperturaDialog.tsx` — nuovo dialog
+**Modifica 1** — oggetto `row` in `composti:create`, dopo `fiala`:
 
-### Comportamento atteso
-- Composto con 4 fiale e 2 aperte → mostra `●●○○`
-- Click sul terzo pallino (○) → dialog → conferma → pallino diventa ● → record in storico
-- Pallini già pieni (●) non sono cliccabili (o mostrano tooltip con data apertura)
-- Il campo esistente `fiala` (identificativo testuale della fiala) resta invariato — `numero_fiale` è un campo aggiuntivo distinto, con label `"N° fiale"` nel form
-- Se `numero_fiale === 1` (default), non mostrare i pallini (o mostrare un singolo pallino senza interazione)
+```ts
+fiala: data.fiala ?? null,
+numero_fiale: (data.numero_fiale as number) ?? 1,
+```
 
+**Modifica 2** — array `cols` in `composti:create`, aggiungere `'numero_fiale'` dopo `'fiala'`:
 
-### Note per l'agente
-Questa è la feature più complessa del piano. Procedere nell'ordine E1→E2→E3→E4→E5. Creare prima la migration e verificare che il DB si aggiorni correttamente prima di toccare il renderer. Il conteggio `fiale_aperte` va fatto con una query che conta i record `composti_storia` di tipo `apertura_fiala` per quel composto — evitare di aggiungere un secondo campo numerico nel DB per non avere desync. Passare al componente `FialeSelector` sia `numero_fiale` (totale) che `fiale_aperte` (calcolato).
+```ts
+'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'numero_fiale', 'produttore', 'lotto',
+```
+
+**Modifica 3** — oggetto `row` in `composti:update`, dopo `fiala`:
+
+```ts
+fiala: data.fiala ?? null,
+numero_fiale: (data.numero_fiale as number) ?? 1,
+```
+
+**Modifica 4** — stringa SQL UPDATE in `composti:update`, aggiungere dopo `fiala=@fiala`:
+
+```ts
+fiala=@fiala, numero_fiale=@numero_fiale, produttore=@produttore,
+```
+
+**Modifica 5** — array `cols` in `composti:create-mix`, aggiungere `'numero_fiale'` dopo `'fiala'`:
+
+```ts
+'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'numero_fiale', 'produttore', 'lotto',
+```
+
+**Modifica 6** — oggetto `common` in `composti:create-mix`, dopo `fiala: null`:
+
+```ts
+fiala: null,
+numero_fiale: 1,
+```
+
+**Modifica 7** — aggiungere nuovo handler `composti:apri-fiala` in fondo, prima della chiusura di `registerCompostiIpc()`:
+
+```ts
+ipcMain.handle('composti:apri-fiala', (_, compostoId: number, data: {
+  fiala_numero: number
+  data_apertura: string
+  operatore?: string
+  note?: string
+}) => {
+  const result = getDb().prepare(
+    `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
+     VALUES (?, 'apertura_fiala', ?, ?, ?)`
+  ).run(
+    compostoId,
+    data.data_apertura,
+    data.fiala_numero,
+    data.note || null
+  )
+  return { id: result.lastInsertRowid }
+})
+```
+
+> ℹ️ `composti:get` usa `SELECT *` — restituirà automaticamente `fiala_numero` senza modifiche.
+
+---
+
+### Blocco 2 — Form
+
+#### 2A — `src/renderer/pages/composti/CompostoForm.tsx`
+
+**Modifica 1** — aggiungere `numero_fiale: 1` nello stato iniziale (blocco `else` dell'`useEffect`), dopo `fiala: ''`:
+
+```ts
+fiala: '',
+numero_fiale: 1,
+```
+
+**Modifica 2** — aggiungere `parseInt` in `handleSave` per convertire il valore:
+
+```ts
+if (data.numero_fiale) data.numero_fiale = parseInt(data.numero_fiale) || 1
+```
+
+**Modifica 3** — aggiungere il campo nel JSX, dopo il `<div>` del campo `Fiala`:
+
+```tsx
+<div>
+  <Label className="text-xs">N° Fiale</Label>
+  <Input
+    type="number"
+    min={1}
+    step={1}
+    value={form.numero_fiale ?? 1}
+    onChange={e => set('numero_fiale', e.target.value)}
+  />
+</div>
+```
+
+---
+
+### Blocco 3 — Tabella e componenti
+
+#### 3A — Nuovo file `src/renderer/pages/composti/FialeSelector.tsx`
+
+Componente che riceve:
+- `numeroFiale: number` — totale fiale
+- `fialeAperte: number` — fiale già aperte (conteggio eventi `apertura_fiala` dallo storico)
+- `onApri: (fialaNumero: number) => void` — callback al click su pallino vuoto
+
+Comportamento:
+- Renderizza N pallini: `●` per le aperte, `○` per le chiuse
+- Click su `○` → chiama `onApri(indice)`
+- Click su `●` → nessuna azione (o tooltip con data apertura se disponibile)
+- Se `numeroFiale === 1` → non renderizza nulla
+
+```tsx
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+
+interface FialeSelectorProps {
+  numeroFiale: number
+  fialeAperte: number
+  onApri: (fialaNumero: number) => void
+}
+
+export function FialeSelector({ numeroFiale, fialeAperte, onApri }: FialeSelectorProps) {
+  if (numeroFiale <= 1) return null
+
+  return (
+    <div className="flex gap-1 items-center">
+      {Array.from({ length: numeroFiale }, (_, i) => {
+        const aperta = i < fialeAperte
+        return (
+          <button
+            key={i}
+            onClick={() => !aperta && onApri(i + 1)}
+            className={`text-base leading-none ${aperta ? 'cursor-default text-foreground' : 'cursor-pointer text-muted-foreground hover:text-foreground'}`}
+            title={aperta ? `Fiala ${i + 1} aperta` : `Apri fiala ${i + 1}`}
+          >
+            {aperta ? '●' : '○'}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+---
+
+#### 3B — Nuovo file `src/renderer/pages/composti/ApriAperturaDialog.tsx`
+
+Dialog modale che appare al click su un pallino vuoto.
+
+Props:
+- `open: boolean`
+- `onOpenChange: (v: boolean) => void`
+- `compostoId: number`
+- `fialaNumero: number`
+- `onSaved: () => void`
+
+Campi:
+- `data_apertura` — date input, default oggi
+- `operatore` — text input, opzionale
+- `note` — textarea, opzionale
+
+Al salvataggio chiama `window.electronAPI.invoke('composti:apri-fiala', compostoId, { fiala_numero, data_apertura, operatore, note })`.
+
+---
+
+#### 3C — `src/renderer/pages/composti/CompostiTable.tsx`
+
+- Aggiungere colonna `"Fiale"` alla definizione `columns`
+- La colonna renderizza `<FialeSelector>` con `numeroFiale={row.numero_fiale}` e `fialeAperte` calcolato contando gli eventi `apertura_fiala` nello storico
+- La colonna è visibile solo se `row.numero_fiale > 1`
+- Al click su pallino vuoto, aprire `ApriAperturaDialog`
+
+> ⚠️ Il conteggio `fialeAperte` richiede di avere lo storico disponibile nella tabella. Valutare se aggiungerlo alla query `composti:list` come campo aggregato (`fiale_aperte_count`) oppure caricarlo on-demand all'apertura del dialog. **Soluzione consigliata:** aggiungere alla query SQL di `composti:list` il conteggio:
+> ```sql
+> COUNT(CASE WHEN cs.tipo = 'apertura_fiala' THEN 1 END) AS fiale_aperte_count
+> ```
+> con LEFT JOIN su `composti_storia cs ON cs.composto_id = c.id`.
+
+---
+
+### Blocco 4 — Pannello storico
+
+#### 4A — `src/renderer/pages/composti/CompostoPanel.tsx`
+
+Nel tab *Storico*, i record di tipo `apertura_fiala` vanno mostrati con formato diverso dagli altri:
+
+```tsx
+{evento.tipo === 'apertura_fiala' ? (
+  <div>
+    <span className="font-medium">Fiala {evento.fiala_numero} aperta</span>
+    <span className="text-muted-foreground text-xs ml-2">{evento.data}</span>
+    {evento.note && <p className="text-xs mt-1">{evento.note}</p>}
+  </div>
+) : (
+  // rendering esistente per Rivalidazione/Dismissione
+)}
+```
+
+---
+
+### Checklist implementazione
+
+- [ ] Blocco 1: migration + types + IPC → avvia app e verifica 0 errori
+- [ ] Blocco 2: form → testa creazione/modifica composto con N° Fiale
+- [ ] Blocco 3: FialeSelector + Dialog + colonna tabella → testa apertura fiala
+- [ ] Blocco 4: storico pannello → verifica che gli eventi compaiano
+
+---
+
+*Piano aggiornato il 2026-03-08 — da allegare a `docs/plans/active/`*
 
 ---
 
