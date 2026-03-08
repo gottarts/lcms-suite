@@ -7,7 +7,7 @@
 
 ## 🎯 Obiettivo della sessione
 
-Analisi dei problemi aperti sul modulo Composti, pianificazione delle correzioni e delle nuove feature, produzione dei task per l'agente Copilot in VSC.
+Analisi dei problemi aperti sul modulo Composti, pianificazione delle correzioni e delle nuove feature, produzione dei task per l'agente Copilot in VSC ed esecuzione degli stessi.
 
 ---
 
@@ -17,6 +17,19 @@ Analisi dei problemi aperti sul modulo Composti, pianificazione delle correzioni
 |------|-------------|
 | `PIANO-COMPOSTI-2026-03-07.md` | Piano completo con bug, miglioramenti e feature — con branch git per ognuno |
 | `TASKS-AGENTE.md` | 6 task atomici pronti per essere dati in pasto all'agente Copilot in VSC |
+
+---
+
+## ✅ Stato task — tutti completati e in produzione
+
+| Task | Descrizione | Stato |
+|------|-------------|-------|
+| TASK 1 | Fix doppia unità `mg/L mg/L` in `PreparazioniTab.tsx` | ✅ completato |
+| TASK 2 | Modalità pesata mostra volume derivato in mL | ✅ completato |
+| TASK 3 | Fix form Mix (Forma, Codice Interno, Miscela in tabella) + CompostoForm rimuovi Stock | ✅ completato |
+| TASK 4 | Rimuovi titolo non informativo dalla card preparazione | ✅ completato |
+| TASK 5 | Stato preparazione calcolato automaticamente alla scadenza | ✅ completato |
+| TASK 6 | Badge contatore prep + alert scadute nella tabella principale | ✅ completato — verificato su GitHub (`prep_attive_count`, `prep_scadute_count` presenti in `CompostiTable.tsx`) |
 
 ---
 
@@ -119,12 +132,3 @@ migrations applicate: 001 → 002 → 003 → 004 → 005
 ```
 
 Nessuna migration aggiunta in questa sessione. Nessuna migration necessaria per i task pianificati.
-
----
-
-## 🔀 Git
-
-- Configurato workflow con branch per ogni task
-- Branch principale: `master` (non `main` — repo locale non rinominato)
-- Aggiunto a Git: `stoccaggio` e `accreditamento_crm` già presenti nel DB dalla sessione precedente
-- Spostamento file `docs/plans/` da cartella — da committare con `git add -A` prima di iniziare i task

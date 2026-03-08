@@ -109,7 +109,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <div><Label className="text-xs">Codice Interno</Label><Input value={form.codice_interno || ''} onChange={e => set('codice_interno', e.target.value)} /></div>
             <div><Label className="text-xs">Formula</Label><Input value={form.formula || ''} onChange={e => set('formula', e.target.value)} /></div>
             <div><Label className="text-xs">Classe</Label><Input value={form.classe || ''} onChange={e => set('classe', e.target.value)} /></div>
-            <div><Label className="text-xs">Matrice</Label><Input value={form.matrice || ''} onChange={e => set('matrice', e.target.value)} /></div>
             <div><Label className="text-xs">MW</Label><Input type="number" step="0.01" value={form.peso_molecolare || ''} onChange={e => set('peso_molecolare', e.target.value)} /></div>
           </div>
 
