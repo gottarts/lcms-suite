@@ -2,7 +2,7 @@
 
 ## Problema
 
-Il comando `npm run package:mac` falliva su **macOS 12 Monterey** con il seguente errore:
+Il comando `npm run package:mac` falliva su **macOS 12 e precedenti** con il seguente errore:
 
 ```
 dyld[9992]: Symbol not found: (_mkfifoat)
@@ -24,7 +24,7 @@ Invece di fare il downgrade di `electron-builder`, sono state create **due confi
 | Script | Config | Target |
 |---|---|---|
 | `npm run package:mac` | `electron-builder.config.js` | macOS 13+ |
-| `npm run package:mac-legacy` | `electron-builder.config.mac-legacy.js` | macOS 12 Monterey e precedenti |
+| `npm run package:mac-legacy` | `electron-builder.config.mac-legacy.js` | macOS 12 e precedenti |
 
 ### 1. Nuovo file `electron-builder.config.mac-legacy.js`
 
