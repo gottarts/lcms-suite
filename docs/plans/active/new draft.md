@@ -1,14 +1,15 @@
-# prossimi feat:
-
- ## Importante1
- Qunado si va la rivalidazione bisogna inserire oltre la data di rivalidazione la nuova data di scadenza che estende la sdadenza originale (deve vedersi nello storico).
- Quando i fa rivalidazione ci deve essere anche l'aggiornamento dello stato. Se un prodotto e scaduto la rivalazione ne estende la scadenza. Nella barra dello stato ci potrebbe essere la voce attivo - rivalidato (scadenza estesa al ....). Oppure piu semplicemente cliccado su stato attivo-rivalidato si va su storico in cui ci sono gli storici delle rivalidazione e le nuove scadenze. Ad ogni modo lo stato "in scadenza" deve attivarsi quando si avvicina la scadenza della rivalidazione.
-
+# prossimi feat (cancellare quado passa al plan):
 
 
  ## importante2
  Ci vuole il campo e n fiale anche per il form aggiunta mix.
  ci vuole anche un sistema che se viene modificato il campo fiale per un composto contenuto in una mix i composti associati a quella mix abbiano il sistema di contatore filale. 
+ In tutti i form il campo filae deve essere attivare il conteggio (pallini solo se il numero e maggiore di 1) se lasciato biuaco o scritto 1 il conteggio non parte. 
+ 
+ ## importante3
+
+ bisogna aggiungere allo storico la data di apertura per singoli e mix
+
  ## altri
  nel tool di calcolo delle preparazioni sarebbe utile avere nella modalita aggiunta in volume il calcolo del peso da aggiungere:
  1 mL --> x grammi (in base a densita) in maniere identica a come nella modalita per pesata calcola il volume effettivo da aggiungere

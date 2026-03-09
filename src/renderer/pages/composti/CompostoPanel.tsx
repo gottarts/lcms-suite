@@ -22,11 +22,13 @@ interface CompostoPanelProps {
   onEdit: (composto: any) => void
   onDelete: (id: number) => void
   onNewLotto: (template: any) => void
-  onRefreshList?: () => void  // ← AGGIUNTO: chiamato dopo ogni modifica alle preparazioni
+  onRefreshList?: () => void
+  defaultTab?: string
 }
 
-export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLotto, onRefreshList }: CompostoPanelProps) {
+export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLotto, onRefreshList, defaultTab }: CompostoPanelProps) {
   const [composto, setComposto] = useState<any>(null)
+  const [ultimaRivalidazione, setUltimaRivalidazione] = useState<string | null>(null)
   const [storiaForm, setStoriaForm] = useState<{ open: boolean; tipo: string }>({ open: false, tipo: '' })
   const [storiaData, setStoriaData] = useState({
     data: new Date().toISOString().split('T')[0],
@@ -34,11 +36,23 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     n_registro_qc: '',
     batch_analitico: '',
     lotto_crm_valido: '',
+    nuova_scadenza: '',
   })
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
 
-  const load = () => {
-    if (compostoId) compostiApi.get(compostoId).then(setComposto)
+  const load = async () => {
+    if (!compostoId) return
+    const c = await compostiApi.get(compostoId)
+    setComposto(c)
+    // Calcola ultima_rivalidazione (MAX nuova_scadenza) dallo storico già caricato
+    if (c?.storia?.length) {
+      const scadenze = c.storia
+        .filter((s: any) => s.tipo === 'Rivalidazione' && s.nuova_scadenza)
+        .map((s: any) => s.nuova_scadenza as string)
+      setUltimaRivalidazione(scadenze.length > 0 ? scadenze.sort().at(-1) : null)
+    } else {
+      setUltimaRivalidazione(null)
+    }
   }
 
   useEffect(() => { load() }, [compostoId])
@@ -59,6 +73,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
       n_registro_qc: '',
       batch_analitico: '',
       lotto_crm_valido: '',
+      nuova_scadenza: '',
     })
     if (tipo === 'Rivalidazione' && composto?.id) {
       const lotti = await window.electronAPI.invoke('composti:lotti-validi', composto.id)
@@ -77,22 +92,25 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
       n_registro_qc: storiaData.n_registro_qc || undefined,
       batch_analitico: storiaData.batch_analitico || undefined,
       lotto_crm_valido: storiaData.lotto_crm_valido || undefined,
+      nuova_scadenza: storiaData.nuova_scadenza || undefined,
     })
     setStoriaForm({ open: false, tipo: '' })
     load()
   }
 
-  // ← AGGIUNTO: refresh combinato pannello + tabella principale
   const handlePrepRefresh = () => {
     load()
     onRefreshList?.()
   }
 
+  // Composto arricchito con ultima_rivalidazione per computeStato corretto nell'header
+  const compostoConRival = { ...composto, ultima_rivalidazione: ultimaRivalidazione }
+
   return (
     <SlidePanel open={!!compostoId} onClose={onClose} title={composto.nome} subtitle={composto.codice_interno || undefined} width="520px">
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <StatusBadge status={computeStato(composto)} />
+          <StatusBadge status={computeStato(compostoConRival)} />
           <div className="flex-1" />
           <Button size="sm" variant="outline" onClick={() => onNewLotto(composto)}>
             <Copy className="h-3.5 w-3.5 mr-1" /> Nuovo lotto
@@ -105,7 +123,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
           </Button>
         </div>
 
-        <Tabs defaultValue="dettaglio">
+        <Tabs defaultValue={defaultTab ?? 'dettaglio'}>
           <TabsList className="w-full">
             <TabsTrigger value="dettaglio" className="flex-1">Dettaglio</TabsTrigger>
             {composto.forma === 'Neat' && (
@@ -143,7 +161,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
 
           {composto.forma === 'Neat' && (
             <TabsContent value="preparazioni" className="mt-3">
-              {/* ← MODIFICATO: onRefresh ora chiama handlePrepRefresh invece di load */}
               <PreparazioniTab compostoId={composto.id} preparazioni={composto.preparazioni || []} onRefresh={handlePrepRefresh} />
             </TabsContent>
           )}
@@ -161,10 +178,10 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
               <div key={s.id} className="p-3 border rounded-md text-sm space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Badge
-                    variant={s.tipo === 'Rivalidazione' ? 'default' : 'destructive'}
+                    variant={s.tipo === 'Rivalidazione' ? 'default' : s.tipo === 'apertura_fiala' ? 'outline' : 'destructive'}
                     className="text-xs"
                   >
-                    {s.tipo}
+                    {s.tipo === 'apertura_fiala' ? `Fiala ${s.fiala_numero} aperta` : s.tipo}
                   </Badge>
                   <span className="text-xs text-muted-foreground">{formatDate(s.data)}</span>
                 </div>
@@ -184,6 +201,12 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                   <div className="text-xs">
                     <span className="text-muted-foreground">Lotto CRM: </span>
                     <span className="font-mono">{s.lotto_crm_valido}</span>
+                  </div>
+                )}
+                {s.nuova_scadenza && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Scadenza estesa al: </span>
+                    <span className="font-mono font-medium text-blue-700">{formatDate(s.nuova_scadenza)}</span>
                   </div>
                 )}
                 {s.note && (
@@ -221,7 +244,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                     placeholder="es. QC-2024-0123"
                   />
                 </div>
-
                 <div>
                   <Label className="text-xs">Batch analitico</Label>
                   <Input
@@ -230,7 +252,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                     placeholder="es. B2024-03-15"
                   />
                 </div>
-
                 <div>
                   <Label className="text-xs">
                     Lotto CRM valido
@@ -258,14 +279,10 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                             <span className="font-mono text-xs">
                               {l.lotto || 'N/D'}
                               {l.scadenza_prodotto && (
-                                <span className="text-muted-foreground ml-2">
-                                  scad. {l.scadenza_prodotto}
-                                </span>
+                                <span className="text-muted-foreground ml-2">scad. {l.scadenza_prodotto}</span>
                               )}
                               {l.forma_commerciale && (
-                                <span className="text-muted-foreground ml-1">
-                                  · {l.forma_commerciale}
-                                </span>
+                                <span className="text-muted-foreground ml-1">· {l.forma_commerciale}</span>
                               )}
                             </span>
                           </SelectItem>
@@ -281,6 +298,17 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                       placeholder="es. FN0872121"
                     />
                   )}
+                </div>
+                <div>
+                  <Label className="text-xs">Nuova data di scadenza</Label>
+                  <Input
+                    type="date"
+                    value={storiaData.nuova_scadenza}
+                    onChange={e => setStoriaData(f => ({ ...f, nuova_scadenza: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Se compilato, compare nello storico e determina lo stato "Rivalidato".
+                  </p>
                 </div>
               </>
             )}

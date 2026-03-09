@@ -1,0 +1,1 @@
+ALTER TABLE composti_storia ADD COLUMN nuova_scadenza TEXT DEFAULT NULL;

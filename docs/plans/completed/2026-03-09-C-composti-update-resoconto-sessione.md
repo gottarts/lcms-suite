@@ -11,7 +11,7 @@ Implementazione completa del piano `2026-03-08-composti_update-plan.md` — tutt
 
 ---
 
-## ✅ Feature completate
+## ✅ Feature completate 
 
 ### FEAT-A — Rimozione campo `matrice` dall'interfaccia composti
 

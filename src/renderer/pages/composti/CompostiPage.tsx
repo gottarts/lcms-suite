@@ -14,11 +14,15 @@ import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
 import { Plus, Search, FlaskConical, Filter } from 'lucide-react'
 
+// Tutti gli stati possibili mappati al valore interno di computeStato
 const STATO_MAP: Record<string, string> = {
-  'Attivo': 'attivo',
-  'In scadenza': 'in_scadenza',
-  'Scaduto': 'scaduto',
-  'Dismesso': 'dismesso',
+  'Attivo':                  'attivo',
+  'In scadenza':             'in_scadenza',
+  'Scaduto':                 'scaduto',
+  'Rivalidato — Attivo':     'rivalidato_attivo',
+  'Rivalidato — In scadenza':'rivalidato_in_scadenza',
+  'Rivalidato — Scaduto':    'rivalidato_scaduto',
+  'Dismesso':                'dismesso',
 }
 
 export function CompostiPage() {
@@ -28,10 +32,12 @@ export function CompostiPage() {
   const [filtroWork, setFiltroWork] = useState('Tutti')
   const [filtroMetodo, setFiltroMetodo] = useState('')
   const [filtroAttenzione, setFiltroAttenzione] = useState(false)
+  const [filtroInScadenza, setFiltroInScadenza] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editComposto, setEditComposto] = useState<any>(null)
   const [template, setTemplate] = useState<any>(null)
   const [panelId, setPanelId] = useState<number | null>(null)
+  const [panelTab, setPanelTab] = useState<string>('dettaglio')
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
@@ -86,17 +92,36 @@ export function CompostiPage() {
       result = result.filter(c => c.metodo_id === filtroMetodo)
     }
 
+    if (filtroInScadenza) {
+      result = result.filter(c => {
+        const s = computeStato(c)
+        return s === 'in_scadenza' || s === 'rivalidato_in_scadenza'
+      })
+    }
+
     if (filtroAttenzione) {
-      result = result.filter(c => computeStato(c) === 'in_scadenza' || computeStato(c) === 'scaduto')
+      result = result.filter(c => {
+        const s = computeStato(c)
+        return s === 'scaduto' || s === 'rivalidato_scaduto'
+      })
     }
 
     return result
-  }, [composti, search, filtroStato, filtroWork, filtroMetodo, filtroAttenzione])
+  }, [composti, search, filtroStato, filtroWork, filtroMetodo, filtroAttenzione, filtroInScadenza])
 
   const stats = useMemo(() => ({
-    attivi: filtered.filter(c => computeStato(c) === 'attivo').length,
-    inScadenza: filtered.filter(c => computeStato(c) === 'in_scadenza').length,
-    attenzione: filtered.filter(c => computeStato(c) === 'scaduto').length,
+    attivi: filtered.filter(c => {
+      const s = computeStato(c)
+      return s === 'attivo' || s === 'rivalidato_attivo'
+    }).length,
+    inScadenza: filtered.filter(c => {
+      const s = computeStato(c)
+      return s === 'in_scadenza' || s === 'rivalidato_in_scadenza'
+    }).length,
+    attenzione: filtered.filter(c => {
+      const s = computeStato(c)
+      return s === 'scaduto' || s === 'rivalidato_scaduto'
+    }).length,
   }), [filtered])
 
   const handleDelete = async () => {
@@ -129,6 +154,11 @@ export function CompostiPage() {
     setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Dismissione' })
   }
 
+  const handleOpenStorico = (row: any) => {
+    setPanelTab('storico')
+    setPanelId(row.id)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -156,7 +186,7 @@ export function CompostiPage() {
           <div className="flex items-center gap-2 text-muted-foreground border-l pl-3">
             <Filter className="h-3.5 w-3.5 shrink-0" />
             <Select value={filtroStato} onValueChange={setFiltroStato}>
-              <SelectTrigger className="w-36 h-8 text-sm">
+              <SelectTrigger className="w-48 h-8 text-sm">
                 <SelectValue placeholder="Stato" />
               </SelectTrigger>
               <SelectContent>
@@ -164,6 +194,9 @@ export function CompostiPage() {
                 <SelectItem value="Attivo">Attivo</SelectItem>
                 <SelectItem value="In scadenza">In scadenza</SelectItem>
                 <SelectItem value="Scaduto">Scaduto</SelectItem>
+                <SelectItem value="Rivalidato — Attivo">Rivalidato — Attivo</SelectItem>
+                <SelectItem value="Rivalidato — In scadenza">Rivalidato — In scadenza</SelectItem>
+                <SelectItem value="Rivalidato — Scaduto">Rivalidato — Scaduto</SelectItem>
                 <SelectItem value="Dismesso">Dismesso</SelectItem>
               </SelectContent>
             </Select>
@@ -199,11 +232,12 @@ export function CompostiPage() {
       <CompostiStats
         stats={stats}
         onClickInScadenza={() => {
-          if (filtroStato === 'In scadenza') {
-            setFiltroStato('Tutti')
+          if (filtroInScadenza) {
+            setFiltroInScadenza(false)
           } else {
             setFiltroAttenzione(false)
-            setFiltroStato('In scadenza')
+            setFiltroStato('Tutti')
+            setFiltroInScadenza(true)
           }
         }}
         onClickAttenzione={() => {
@@ -211,6 +245,7 @@ export function CompostiPage() {
             setFiltroAttenzione(false)
           } else {
             setFiltroStato('Tutti')
+            setFiltroInScadenza(false)
             setFiltroAttenzione(true)
           }
         }}
@@ -218,11 +253,12 @@ export function CompostiPage() {
 
       <CompostiTable
         data={filtered}
-        onRowClick={row => setPanelId(row.id)}
+        onRowClick={row => { setPanelTab('dettaglio'); setPanelId(row.id) }}
         onNewLotto={handleNewLotto}
         onRivalida={handleRivalida}
         onDismetti={handleDismetti}
         onRefresh={load}
+        onOpenStorico={handleOpenStorico}
       />
 
       <CompostoForm
@@ -234,12 +270,14 @@ export function CompostiPage() {
       />
       <MixPesticidiForm open={mixOpen} onClose={() => setMixOpen(false)} onSave={load} />
       <CompostoPanel
+        key={panelId ?? 'none'}
         compostoId={panelId}
-        onClose={() => setPanelId(null)}
+        onClose={() => { setPanelId(null); setPanelTab('dettaglio') }}
         onEdit={handleEdit}
         onDelete={id => { setPanelId(null); setDeleteId(id) }}
         onNewLotto={handleNewLotto}
         onRefreshList={load}
+        defaultTab={panelTab}
       />
       <StoriaDialog
         open={storiaTarget !== null}

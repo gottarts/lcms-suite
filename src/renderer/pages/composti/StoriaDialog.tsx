@@ -23,6 +23,7 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
   const [batchAnalitico, setBatchAnalitico] = useState('')
   const [lottoCrmValido, setLottoCrmValido] = useState('')
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
+  const [nuovaScadenza, setNuovaScadenza] = useState('')  // ← NUOVO
 
   useEffect(() => {
     if (open && compostoId) {
@@ -31,6 +32,7 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
       setNRegistroQc('')
       setBatchAnalitico('')
       setLottoCrmValido('')
+      setNuovaScadenza('')  // ← NUOVO: reset all'apertura
 
       if (tipo === 'Rivalidazione') {
         window.electronAPI.invoke('composti:lotti-validi', compostoId)
@@ -50,6 +52,7 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
       n_registro_qc: nRegistroQc || undefined,
       batch_analitico: batchAnalitico || undefined,
       lotto_crm_valido: lottoCrmValido || undefined,
+      nuova_scadenza: nuovaScadenza || undefined,  // ← NUOVO
     })
     onOpenChange(false)
     onSaved()
@@ -115,6 +118,19 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
                     placeholder="es. FN0872121"
                   />
                 )}
+              </div>
+
+              {/* ← NUOVO: campo nuova data di scadenza */}
+              <div>
+                <Label className="text-xs">Nuova data di scadenza</Label>
+                <Input
+                  type="date"
+                  value={nuovaScadenza}
+                  onChange={e => setNuovaScadenza(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Se compilato, aggiorna la scadenza del composto e compare nello storico.
+                </p>
               </div>
             </>
           )}

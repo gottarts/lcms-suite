@@ -72,6 +72,7 @@ export interface Composto {
   prep_attive_count?: number
   prep_scadute_count?: number
   fiale_aperte_count?: number
+  ultima_rivalidazione?: string | null   // ← NUOVO, data ISO dell'ultima rivalidazione
 }
 
 export type CompostoStato = 'attivo' | 'in_scadenza' | 'scaduto' | 'rivalidato' | 'dismesso'
@@ -86,6 +87,7 @@ export interface CompostoStoria {
   batch_analitico: string | null
   lotto_crm_valido: string | null
   fiala_numero: number | null
+  nuova_scadenza: string | null    // ← NUOVO campo da aggiungere
   created_at: string
 }
 

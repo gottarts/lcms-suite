@@ -12,7 +12,9 @@ export function registerCompostiIpc(): void {
     let sql = `SELECT c.*,
   COUNT(CASE WHEN p.stato = 'Attiva' THEN 1 END) AS prep_attive_count,
   COUNT(CASE WHEN p.stato = 'Attiva' AND p.scadenza < date('now') THEN 1 END) AS prep_scadute_count,
-  COUNT(CASE WHEN cs.tipo = 'apertura_fiala' THEN 1 END) AS fiale_aperte_count
+  COUNT(CASE WHEN cs.tipo = 'apertura_fiala' THEN 1 END) AS fiale_aperte_count,
+  (SELECT MAX(nuova_scadenza) FROM composti_storia
+   WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) AS ultima_rivalidazione
 FROM composti c
 LEFT JOIN preparazioni p ON p.composto_id = c.id
 LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
@@ -71,7 +73,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     const metodiIds = (data.metodi_ids as string[] | undefined) || []
     delete data.metodi_ids
 
-    // Costruisci un oggetto completo con tutti i campi della tabella, usando null per i campi mancanti
     const row = {
       nome: data.nome,
       codice_interno: data.codice_interno ?? null,
@@ -132,7 +133,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     const metodiIds = (data.metodi_ids as string[] | undefined) || []
     delete data.metodi_ids
 
-    // Costruisci un oggetto completo con tutti i campi della tabella, usando null per i campi mancanti
     const row = {
       id,
       nome: data.nome,
@@ -270,10 +270,14 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     n_registro_qc?: string
     batch_analitico?: string
     lotto_crm_valido?: string
+    nuova_scadenza?: string
   }) => {
-    const result = getDb().prepare(
-      `INSERT INTO composti_storia (composto_id, tipo, data, note, n_registro_qc, batch_analitico, lotto_crm_valido)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    const db = getDb()
+    // Inserisce solo il record storico — scadenza_prodotto rimane invariata
+    const result = db.prepare(
+      `INSERT INTO composti_storia
+         (composto_id, tipo, data, note, n_registro_qc, batch_analitico, lotto_crm_valido, nuova_scadenza)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       compostoId,
       data.tipo,
@@ -281,20 +285,19 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       data.note || null,
       data.n_registro_qc || null,
       data.batch_analitico || null,
-      data.lotto_crm_valido || null
+      data.lotto_crm_valido || null,
+      data.nuova_scadenza || null
     )
     return { id: result.lastInsertRowid }
   })
 
   ipcMain.handle('composti:lotti-validi', (_, compostoId: number) => {
     const db = getDb()
-    // Prima prendo il nome del composto corrente
     const corrente = db.prepare('SELECT nome FROM composti WHERE id = ?').get(compostoId) as any
     if (!corrente) return []
-    
+
     const oggi = new Date().toISOString().split('T')[0]
-    
-    // Cerco tutti i composti con lo stesso nome, non scaduti, non dismessi, diversi da quello corrente
+
     return db.prepare(`
       SELECT id, nome, lotto, scadenza_prodotto, produttore, forma_commerciale
       FROM composti
@@ -305,21 +308,22 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       ORDER BY scadenza_prodotto DESC
     `).all(corrente.nome, compostoId, oggi)
   })
+
   ipcMain.handle('composti:apri-fiala', (_, compostoId: number, data: {
-   fiala_numero: number
-   data_apertura: string
-   operatore?: string
-   note?: string
-   }) => {
-     const result = getDb().prepare(
-     `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
-     VALUES (?, 'apertura_fiala', ?, ?, ?)`
+    fiala_numero: number
+    data_apertura: string
+    operatore?: string
+    note?: string
+  }) => {
+    const result = getDb().prepare(
+      `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
+       VALUES (?, 'apertura_fiala', ?, ?, ?)`
     ).run(
-    compostoId,
-    data.data_apertura,
-    data.fiala_numero,
-    data.note || null
-     )
+      compostoId,
+      data.data_apertura,
+      data.fiala_numero,
+      data.note || null
+    )
     return { id: result.lastInsertRowid }
   })
 }
