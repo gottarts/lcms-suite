@@ -1,0 +1,1 @@
+ALTER TABLE composti_storia ADD COLUMN fiala_numero INTEGER DEFAULT NULL;

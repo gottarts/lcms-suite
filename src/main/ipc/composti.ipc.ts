@@ -11,9 +11,11 @@ export function registerCompostiIpc(): void {
     const db = getDb()
     let sql = `SELECT c.*,
   COUNT(CASE WHEN p.stato = 'Attiva' THEN 1 END) AS prep_attive_count,
-  COUNT(CASE WHEN p.stato = 'Attiva' AND p.scadenza < date('now') THEN 1 END) AS prep_scadute_count
+  COUNT(CASE WHEN p.stato = 'Attiva' AND p.scadenza < date('now') THEN 1 END) AS prep_scadute_count,
+  COUNT(CASE WHEN cs.tipo = 'apertura_fiala' THEN 1 END) AS fiale_aperte_count
 FROM composti c
-LEFT JOIN preparazioni p ON p.composto_id = c.id`
+LEFT JOIN preparazioni p ON p.composto_id = c.id
+LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     const params: unknown[] = []
     const conditions: string[] = []
 

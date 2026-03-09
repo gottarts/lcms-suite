@@ -71,6 +71,7 @@ export interface Composto {
   stato?: CompostoStato
   prep_attive_count?: number
   prep_scadute_count?: number
+  fiale_aperte_count?: number
 }
 
 export type CompostoStato = 'attivo' | 'in_scadenza' | 'scaduto' | 'rivalidato' | 'dismesso'
@@ -78,12 +79,13 @@ export type CompostoStato = 'attivo' | 'in_scadenza' | 'scaduto' | 'rivalidato' 
 export interface CompostoStoria {
   id: number
   composto_id: number
-  tipo: 'Rivalidazione' | 'Dismissione'
+  tipo: 'Rivalidazione' | 'Dismissione' | 'apertura_fiala'
   data: string
   note: string | null
   n_registro_qc: string | null
   batch_analitico: string | null
   lotto_crm_valido: string | null
+  fiala_numero: number | null
   created_at: string
 }
 
