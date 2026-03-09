@@ -124,7 +124,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                 </SelectContent>
               </Select></div>
             <div><Label className="text-xs">Forma Commerciale</Label><Input value={form.forma_commerciale || ''} onChange={e => set('forma_commerciale', e.target.value)} /></div>
-            <div><Label className="text-xs">Fiala</Label><Input value={form.fiala || ''} onChange={e => set('fiala', e.target.value)} /></div>
+            <div><Label className="text-xs">N° Fiale</Label><Input value={form.fiala || ''} onChange={e => set('fiala', e.target.value)} /></div>
             <div><Label className="text-xs">Purezza (%)</Label><Input type="number" step="0.1" value={form.purezza || ''} onChange={e => set('purezza', e.target.value)} /></div>
             <div><Label className="text-xs">Concentrazione</Label><Input type="number" step="0.01" value={form.concentrazione || ''} onChange={e => set('concentrazione', e.target.value)} /></div>
             <div><Label className="text-xs">Unità</Label><Select value={form.unita_conc || UNITA_DEFAULT} onValueChange={v => set('unita_conc', v)}>
@@ -160,7 +160,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <div><Label className="text-xs">Work Standard</Label><Input value={form.work_standard || ''} onChange={e => set('work_standard', e.target.value)} /></div>
             <div><Label className="text-xs">Ubicazione</Label><Input value={form.ubicazione || ''} onChange={e => set('ubicazione', e.target.value)} /></div>
 
-            {/* Stoccaggio con tendina anagrafiche */}
             <div className="col-span-2">
               <Label className="text-xs">Stoccaggio</Label>
               {vociStoccaggio.length > 0 ? (
@@ -190,7 +189,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
               )}
             </div>
 
-            {/* Accreditamento CRM Provider */}
             <div className="col-span-1">
               <Label className="text-xs">Accreditamento CRM Provider</Label>
               <div className="flex gap-2">

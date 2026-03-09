@@ -22,9 +22,10 @@ interface CompostoPanelProps {
   onEdit: (composto: any) => void
   onDelete: (id: number) => void
   onNewLotto: (template: any) => void
+  onRefreshList?: () => void  // ← AGGIUNTO: chiamato dopo ogni modifica alle preparazioni
 }
 
-export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLotto }: CompostoPanelProps) {
+export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLotto, onRefreshList }: CompostoPanelProps) {
   const [composto, setComposto] = useState<any>(null)
   const [storiaForm, setStoriaForm] = useState<{ open: boolean; tipo: string }>({ open: false, tipo: '' })
   const [storiaData, setStoriaData] = useState({
@@ -81,6 +82,12 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     load()
   }
 
+  // ← AGGIUNTO: refresh combinato pannello + tabella principale
+  const handlePrepRefresh = () => {
+    load()
+    onRefreshList?.()
+  }
+
   return (
     <SlidePanel open={!!compostoId} onClose={onClose} title={composto.nome} subtitle={composto.codice_interno || undefined} width="520px">
       <div className="space-y-3">
@@ -117,7 +124,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
             <Field label="Purezza" value={composto.purezza ? `${composto.purezza}%` : null} />
             <Field label="Concentrazione" value={composto.concentrazione ? `${parseConcentrazione(composto.concentrazione)} ${composto.unita_conc ?? 'mg/L'}` : null} />
             <Field label="Solvente" value={composto.solvente} />
-            <Field label="Fiala" value={composto.fiala} />
+            <Field label="N° Fiale" value={composto.fiala} />
             <Separator />
             <Field label="Produttore" value={composto.produttore} />
             <Field label="Lotto" value={composto.lotto} />
@@ -136,7 +143,8 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
 
           {composto.forma === 'Neat' && (
             <TabsContent value="preparazioni" className="mt-3">
-              <PreparazioniTab compostoId={composto.id} preparazioni={composto.preparazioni || []} onRefresh={load} />
+              {/* ← MODIFICATO: onRefresh ora chiama handlePrepRefresh invece di load */}
+              <PreparazioniTab compostoId={composto.id} preparazioni={composto.preparazioni || []} onRefresh={handlePrepRefresh} />
             </TabsContent>
           )}
 

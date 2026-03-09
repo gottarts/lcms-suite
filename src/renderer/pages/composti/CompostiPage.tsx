@@ -239,6 +239,7 @@ export function CompostiPage() {
         onEdit={handleEdit}
         onDelete={id => { setPanelId(null); setDeleteId(id) }}
         onNewLotto={handleNewLotto}
+        onRefreshList={load}
       />
       <StoriaDialog
         open={storiaTarget !== null}
