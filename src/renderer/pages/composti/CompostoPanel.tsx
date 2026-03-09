@@ -21,7 +21,7 @@ interface CompostoPanelProps {
   onClose: () => void
   onEdit: (composto: any) => void
   onDelete: (id: number) => void
-  onNewLotto: (template: any) => void   // ← AGGIUNGI
+  onNewLotto: (template: any) => void
 }
 
 export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLotto }: CompostoPanelProps) {
@@ -194,7 +194,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
           </DialogHeader>
           <div className="space-y-3">
 
-            {/* Data — sempre visibile */}
             <div>
               <Label className="text-xs">Data {storiaForm.tipo}</Label>
               <Input
@@ -204,7 +203,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
               />
             </div>
 
-            {/* Campi extra — solo per Rivalidazione */}
             {storiaForm.tipo === 'Rivalidazione' && (
               <>
                 <div>
@@ -267,7 +265,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                       </SelectContent>
                     </Select>
                   ) : null}
-                  {/* Input manuale: visibile sempre se non ci sono lotti, o se si sceglie inserimento manuale */}
                   {(lottiValidi.length === 0 || storiaData.lotto_crm_valido === '' && lottiValidi.length > 0) && (
                     <Input
                       className={lottiValidi.length > 0 ? 'mt-1' : ''}
@@ -280,7 +277,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
               </>
             )}
 
-            {/* Note — sempre visibile */}
             <div>
               <Label className="text-xs">Note</Label>
               <Textarea

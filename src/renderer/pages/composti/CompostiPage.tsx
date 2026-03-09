@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
-import { Plus, Search, FlaskConical, X } from 'lucide-react'
+import { CompostiStats } from './CompostiStats'
+import { Plus, Search, FlaskConical, Filter } from 'lucide-react'
 
 const STATO_MAP: Record<string, string> = {
   'Attivo': 'attivo',
@@ -26,6 +27,7 @@ export function CompostiPage() {
   const [filtroStato, setFiltroStato] = useState('Tutti')
   const [filtroWork, setFiltroWork] = useState('Tutti')
   const [filtroMetodo, setFiltroMetodo] = useState('')
+  const [filtroAttenzione, setFiltroAttenzione] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editComposto, setEditComposto] = useState<any>(null)
   const [template, setTemplate] = useState<any>(null)
@@ -51,7 +53,6 @@ export function CompostiPage() {
   const filtered = useMemo(() => {
     let result = composti
 
-    // ricerca testuale
     if (search) {
       const q = search.toLowerCase()
       result = result.filter(c =>
@@ -73,23 +74,30 @@ export function CompostiPage() {
       )
     }
 
-    // filtro stato
     if (filtroStato !== 'Tutti') {
       result = result.filter(c => computeStato(c) === STATO_MAP[filtroStato])
     }
 
-    // filtro work solution
     if (filtroWork !== 'Tutti') {
       result = result.filter(c => c.work_standard === filtroWork)
     }
 
-    // filtro metodo (se presente)
     if (filtroMetodo) {
       result = result.filter(c => c.metodo_id === filtroMetodo)
     }
 
+    if (filtroAttenzione) {
+      result = result.filter(c => computeStato(c) === 'in_scadenza' || computeStato(c) === 'scaduto')
+    }
+
     return result
-  }, [composti, search, filtroStato, filtroWork, filtroMetodo])
+  }, [composti, search, filtroStato, filtroWork, filtroMetodo, filtroAttenzione])
+
+  const stats = useMemo(() => ({
+    attivi: filtered.filter(c => computeStato(c) === 'attivo').length,
+    inScadenza: filtered.filter(c => computeStato(c) === 'in_scadenza').length,
+    attenzione: filtered.filter(c => computeStato(c) === 'scaduto').length,
+  }), [filtered])
 
   const handleDelete = async () => {
     if (deleteId !== null) {
@@ -139,35 +147,40 @@ export function CompostiPage() {
       </div>
 
       <div className="mb-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="relative w-80">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, lotto, produttore, classe..." className="pl-9" />
           </div>
-          <Select value={filtroStato} onValueChange={setFiltroStato}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Stato" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Tutti">Tutti</SelectItem>
-              <SelectItem value="Attivo">Attivo</SelectItem>
-              <SelectItem value="In scadenza">In scadenza</SelectItem>
-              <SelectItem value="Scaduto">Scaduto</SelectItem>
-              <SelectItem value="Dismesso">Dismesso</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filtroWork} onValueChange={setFiltroWork}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Work Solution" />
-            </SelectTrigger>
-            <SelectContent>
-              {opzioniWork.map(opzione => (
-                <SelectItem key={opzione} value={opzione}>
-                  {opzione}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+          <div className="flex items-center gap-2 text-muted-foreground border-l pl-3">
+            <Filter className="h-3.5 w-3.5 shrink-0" />
+            <Select value={filtroStato} onValueChange={setFiltroStato}>
+              <SelectTrigger className="w-36 h-8 text-sm">
+                <SelectValue placeholder="Stato" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Tutti">Tutti gli stati</SelectItem>
+                <SelectItem value="Attivo">Attivo</SelectItem>
+                <SelectItem value="In scadenza">In scadenza</SelectItem>
+                <SelectItem value="Scaduto">Scaduto</SelectItem>
+                <SelectItem value="Dismesso">Dismesso</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filtroWork} onValueChange={setFiltroWork}>
+              <SelectTrigger className="w-44 h-8 text-sm">
+                <SelectValue placeholder="Work solution" />
+              </SelectTrigger>
+              <SelectContent>
+                {opzioniWork.map(opzione => (
+                  <SelectItem key={opzione} value={opzione}>
+                    {opzione === 'Tutti' ? 'Tutti i work' : opzione}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {filtroStato !== 'Tutti' && (
             <Badge variant="secondary" className="flex items-center gap-1">
               Stato: {filtroStato}
@@ -182,6 +195,26 @@ export function CompostiPage() {
           )}
         </div>
       </div>
+
+      <CompostiStats
+        stats={stats}
+        onClickInScadenza={() => {
+          if (filtroStato === 'In scadenza') {
+            setFiltroStato('Tutti')
+          } else {
+            setFiltroAttenzione(false)
+            setFiltroStato('In scadenza')
+          }
+        }}
+        onClickAttenzione={() => {
+          if (filtroAttenzione) {
+            setFiltroAttenzione(false)
+          } else {
+            setFiltroStato('Tutti')
+            setFiltroAttenzione(true)
+          }
+        }}
+      />
 
       <CompostiTable
         data={filtered}

@@ -3,6 +3,23 @@
 nel tool di calcolo delle preparazioni sarebbe utile avere nella modalita aggiunta in volume il calcolo del peso da aggiungere:
 1 mL --> x grammi (in base a densita) in maniere identica a come nella modalita per pesata calcola il volume effettivo da aggiungere
 
+tutti i nuovi composti inseriti devono andare in coda. sia nuovo lotto che aggiunta mix non hanno questo comportamento
+
+quantdo si ordina una colonna non ce modo di eliminare ordinamento (magari il terzo lick potrebbe resettare orinamento colonna)
+
+ci vuole qualcosa che evidenzi che un composto e stato rivalidato qualcosa come il MIX in blu (per i composti delle MIX) nella tabella principae.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
