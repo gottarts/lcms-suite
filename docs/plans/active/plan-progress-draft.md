@@ -79,3 +79,14 @@ Il filtro Work Solution ora filtra per contenuto esatto della stringa work_stand
 Le opzioni sono generate dinamicamente dal dataset, ordinate alfabeticamente.
 Il badge attivo mostra il nome del valore selezionato (es. "Work: Work_Pesticidi_A ×").
 Compilazione riuscita: 0 errori. Il fix è pronto per test manuale.
+
+Ecco il riepilogo:
+FEAT-E — Selettore multi-fiala con storico aperture
+
+007-apertura-fiale.sql — aggiunta colonna fiala_numero a composti_storia
+types.ts — CompostoStoria esteso con fiala_numero e tipo apertura_fiala; aggiunto fiale_aperte_count a Composto
+composti.ipc.ts — query composti:list aggiornata con LEFT JOIN su composti_storia per contare fiale_aperte_count; aggiunto handler composti:apri-fiala
+FialeSelector.tsx — nuovo componente pallini con label X/N aperte
+ApriAperturaDialog.tsx — nuovo dialog per registrare apertura fiala con data, operatore e note
+CompostiTable.tsx — pallini integrati nella colonna Nome, nessuna colonna extra
+CompostiPage.tsx — aggiunto onRefresh={load} a <CompostiTable>

@@ -189,6 +189,7 @@ export function CompostiPage() {
         onNewLotto={handleNewLotto}
         onRivalida={handleRivalida}
         onDismetti={handleDismetti}
+        onRefresh={load}
       />
 
       <CompostoForm

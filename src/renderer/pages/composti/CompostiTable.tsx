@@ -3,6 +3,9 @@ import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { FialeSelector } from './FialeSelector'
+import { ApriAperturaDialog } from './ApriAperturaDialog'
+import { useState } from 'react'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator,
@@ -15,23 +18,38 @@ interface CompostiTableProps {
   onNewLotto: (row: any) => void
   onRivalida: (row: any) => void
   onDismetti: (row: any) => void
+  onRefresh: () => void
 }
 
-export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDismetti }: CompostiTableProps) {
+export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDismetti, onRefresh }: CompostiTableProps) {
+  const [apriTarget, setApriTarget] = useState<{ compostoId: number; fialaNumero: number; nome: string } | null>(null)
+
   const columns: Column<any>[] = [
     {
-      key: 'nome',
-      label: 'Nome',
-      className: 'font-medium',
-      render: (v, row) => (
+  key: 'nome',
+  label: 'Nome',
+  className: 'font-medium',
+  render: (v, row) => {
+    const numeroFiale = parseInt(row.fiala) || 1
+    return (
+      <span className="flex items-center gap-2">
         <span>
           {row.mix_id && <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-100">MIX</Badge>}
           {String(v)}
           {row.prep_attive_count > 0 && <Badge variant="outline" className="ml-2 text-xs">{row.prep_attive_count} prep.</Badge>}
           {row.prep_scadute_count > 0 && <Badge variant="destructive" className="ml-2 text-xs">⚠</Badge>}
         </span>
-      ),
-    },
+        {numeroFiale > 1 && (
+          <FialeSelector
+            numeroFiale={numeroFiale}
+            fialeAperte={row.fiale_aperte_count ?? 0}
+            onApri={(fialaNumero) => setApriTarget({ compostoId: row.id, fialaNumero, nome: row.nome })}
+           />
+           )}
+         </span>
+       )
+     },
+    },,
     { key: 'codice_interno', label: 'Codice' },
     { key: 'classe', label: 'Classe', render: (v) => v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—' },
     { key: 'forma', label: 'Forma', render: (v, row) => row.mix_id ? 'Mix' : v },
@@ -79,5 +97,17 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
     },
   ]
 
-  return <DataTable columns={columns} data={data} onRowClick={onRowClick} emptyMessage="Nessun composto trovato" />
+  return (
+    <>
+      <ApriAperturaDialog
+        open={!!apriTarget}
+        onOpenChange={(v) => { if (!v) setApriTarget(null) }}
+        compostoId={apriTarget?.compostoId ?? null}
+        compostoNome={apriTarget?.nome}
+        fialaNumero={apriTarget?.fialaNumero ?? 1}
+        onSaved={() => { setApriTarget(null); onRefresh() }}
+      />
+      <DataTable columns={columns} data={data} onRowClick={onRowClick} emptyMessage="Nessun composto trovato" />
+    </>
+  )
 }

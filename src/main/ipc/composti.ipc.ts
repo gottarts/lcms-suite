@@ -305,4 +305,21 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       ORDER BY scadenza_prodotto DESC
     `).all(corrente.nome, compostoId, oggi)
   })
+  ipcMain.handle('composti:apri-fiala', (_, compostoId: number, data: {
+   fiala_numero: number
+   data_apertura: string
+   operatore?: string
+   note?: string
+   }) => {
+     const result = getDb().prepare(
+     `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
+     VALUES (?, 'apertura_fiala', ?, ?, ?)`
+    ).run(
+    compostoId,
+    data.data_apertura,
+    data.fiala_numero,
+    data.note || null
+     )
+    return { id: result.lastInsertRowid }
+  })
 }
