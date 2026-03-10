@@ -30,6 +30,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     stoccaggio: '',
     accreditamento_crm: 'ISO 17034',
     codice_interno: '',
+    fiale: '1',
   })
   const [nomi, setNomi] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
@@ -61,6 +62,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       scadenza_prodotto: '', classe: '', destinazione_uso: '',
       stoccaggio: '', accreditamento_crm: 'ISO 17034',
       codice_interno: '',
+      fiale: '1',
     })
     setNomi([])
     if (fileRef.current) fileRef.current.value = ''
@@ -87,6 +89,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         forma: 'mix',
         concentrazione: form.concentrazione ? parseFloat(form.concentrazione) : null,
         unita_conc: form.unita_conc || UNITA_DEFAULT,
+        fiala: form.fiale ? String(parseInt(form.fiale)) : null,
         nomi,
       }
       const result = await compostiApi.createMix(data)
@@ -122,6 +125,16 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
             <div className="col-span-2">
               <Label className="text-xs">Codice Interno</Label>
               <Input value={form.codice_interno} onChange={e => set('codice_interno', e.target.value)} placeholder="es. MIX-001" />
+            </div>
+            <div>
+             <Label className="text-xs">N fiale</Label>
+             <Input
+               type="number"
+               min="1"
+               value={form.fiale}
+               onChange={e => set('fiale', e.target.value)}
+               placeholder="es. 4"
+              />
             </div>
             <div>
               <Label className="text-xs">Concentrazione</Label>

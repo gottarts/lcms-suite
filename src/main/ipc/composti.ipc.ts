@@ -210,6 +210,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     scadenza_prodotto: string | null
     classe: string | null
     destinazione_uso: string | null
+    fiala?: string | null
     nomi: string[]
   }) => {
     const db = getDb()
@@ -234,7 +235,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       concentrazione: data.concentrazione,
       unita_conc: (data.unita_conc as string) ?? 'mg/L',
       solvente: data.solvente || null,
-      fiala: null,
+      fiala: data.fiala ?? null,
       produttore: data.produttore || null,
       lotto: data.lotto || null,
       operatore_apertura: null,
