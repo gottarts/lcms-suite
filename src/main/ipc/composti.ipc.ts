@@ -43,7 +43,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     if (conditions.length) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
-    sql += ' GROUP BY c.id ORDER BY c.nome'
+    sql += ' GROUP BY c.id ORDER BY c.id ASC'
 
     return db.prepare(sql).all(...params)
   })
