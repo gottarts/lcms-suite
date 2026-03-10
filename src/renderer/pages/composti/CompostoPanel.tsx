@@ -174,6 +174,24 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                 <XCircle className="h-3.5 w-3.5 mr-1" /> Dismissione
               </Button>
             </div>
+            {composto.data_apertura && (
+             <div className="flex items-start gap-2 py-2 border-b opacity-75">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground w-20 shrink-0 pt-0.5">
+              Apertura
+              </span>
+              <div className="flex-1">
+               <div className="text-xs font-medium">
+                 {composto.mix_id
+                   ? `Apertura mix ${composto.mix}`
+                   : 'Apertura flacone'}
+               </div>
+              <div className="text-[11px] text-muted-foreground">
+               {formatDate(composto.data_apertura)}
+              {composto.operatore_apertura && ` — ${composto.operatore_apertura}`}
+             </div>
+            </div>
+           </div>
+          )}
             {composto.storia?.length ? composto.storia.map((s: any) => (
               <div key={s.id} className="p-3 border rounded-md text-sm space-y-1.5">
                 <div className="flex items-center gap-2">

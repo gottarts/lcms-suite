@@ -16,6 +16,7 @@ interface DataTableProps<T> {
   data: T[]
   onRowClick?: (row: T) => void
   emptyMessage?: string
+  rowClassName?: (row: T) => string  // ← NUOVO
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -23,18 +24,19 @@ export function DataTable<T extends Record<string, unknown>>({
   data,
   onRowClick,
   emptyMessage = 'Nessun elemento',
+  rowClassName,  // ← NUOVO
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const handleSort = (key: string) => {
     if (sortKey !== key) {
-      setSortKey(key)       // primo click su nuova colonna: ASC
+      setSortKey(key)
       setSortDir('asc')
     } else if (sortDir === 'asc') {
-      setSortDir('desc')    // secondo click: DESC
+      setSortDir('desc')
     } else {
-      setSortKey(null)      // terzo click: reset
+      setSortKey(null)
     }
   }
 
@@ -86,7 +88,7 @@ export function DataTable<T extends Record<string, unknown>>({
         {sorted.map((row, i) => (
           <TableRow
             key={i}
-            className={cn(onRowClick && 'cursor-pointer')}
+            className={cn(onRowClick && 'cursor-pointer', rowClassName?.(row))}  // ← MODIFICATO
             onClick={() => onRowClick?.(row)}
           >
             {columns.map(col => (

@@ -145,7 +145,13 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         conteggioLotto={apriTarget?.lotto ? data.filter(c => c.lotto === apriTarget.lotto).length : 0}
         onSaved={() => { setApriTarget(null); onRefresh() }}
       />
-      <DataTable columns={columns} data={data} onRowClick={onRowClick} emptyMessage="Nessun composto trovato" />
+      <DataTable
+        columns={columns}
+        data={data}
+        onRowClick={onRowClick}
+        emptyMessage="Nessun composto trovato"
+        rowClassName={(row) => computeStato(row) === 'dismesso' ? 'opacity-40 text-muted-foreground' : ''}  // ← NUOVO
+      />
     </>
   )
 }

@@ -41,6 +41,7 @@ export function CompostiPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
+  const [mostraDismessi, setMostraDismessi] = useState(false)
 
   const load = () => compostiApi.list().then(setComposti)
   useEffect(() => { load() }, [])
@@ -58,7 +59,7 @@ export function CompostiPage() {
 
   const filtered = useMemo(() => {
     let result = composti
-
+    
     if (search) {
       const q = search.toLowerCase()
       result = result.filter(c =>
@@ -106,8 +107,12 @@ export function CompostiPage() {
       })
     }
 
+    if (!mostraDismessi) {
+      result = result.filter(c => computeStato(c) !== 'dismesso')
+    }
+
     return result
-  }, [composti, search, filtroStato, filtroWork, filtroMetodo, filtroAttenzione, filtroInScadenza])
+  }, [composti, search, filtroStato, filtroWork, filtroMetodo, filtroAttenzione, filtroInScadenza, mostraDismessi])
 
   const stats = useMemo(() => ({
     attivi: filtered.filter(c => {
@@ -227,6 +232,17 @@ export function CompostiPage() {
             </Badge>
           )}
         </div>
+       <div className="flex items-center gap-2 mt-2">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+       <input
+        type="checkbox"
+        checked={mostraDismessi}
+        onChange={e => setMostraDismessi(e.target.checked)}
+        className="rounded"
+       />
+       Mostra dismessi
+       </label>
+      </div>
       </div>
 
       <CompostiStats

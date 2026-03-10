@@ -296,7 +296,21 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       data.lotto_crm_valido || null,
       data.nuova_scadenza || null
     )
-    return { id: result.lastInsertRowid }
+  // Fix BUG-2: aggiorna data_dismissione sul composto (e sul mix intero se presente)
+  if (data.tipo === 'Dismissione') {
+    const comp = db.prepare('SELECT mix_id FROM composti WHERE id = ?').get(compostoId) as { mix_id: string | null } | undefined
+    if (comp?.mix_id) {
+      db.prepare(
+        `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE mix_id = ?`
+      ).run(data.data, comp.mix_id)
+    } else {
+      db.prepare(
+        `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE id = ?`
+      ).run(data.data, compostoId)
+    }
+  }
+
+  return { id: result.lastInsertRowid }
   })
 
   ipcMain.handle('composti:lotti-validi', (_, compostoId: number) => {

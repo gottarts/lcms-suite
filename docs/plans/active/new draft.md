@@ -1,22 +1,18 @@
 # prossimi feat (cancellare quado passa al plan):
 
 
- ## importante2
- Ci vuole il campo e n fiale anche per il form aggiunta mix.
- ci vuole anche un sistema che se viene modificato il campo fiale per un composto contenuto in una mix i composti associati a quella mix abbiano il sistema di contatore filale. 
- In tutti i form il campo filae deve essere attivare il conteggio (pallini solo se il numero e maggiore di 1) se lasciato biuaco o scritto 1 il conteggio non parte. 
- 
  ## importante3
 
  bisogna aggiungere allo storico la data di apertura per singoli e mix
+ il tasto dismetti non funziona... (bisonagna ggiungerlo funzionante anche alla barra laterale)
 
  ## altri
+ inserire tra le destinazioni d'uso le possibilita con scelta a tendina (Taratura, Controllo qualita, Standard Interno) e di queste aggiungere un filtro accanto a quelli Stato e Work.
+
  nel tool di calcolo delle preparazioni sarebbe utile avere nella modalita aggiunta in volume il calcolo del peso da aggiungere:
  1 mL --> x grammi (in base a densita) in maniere identica a come nella modalita per pesata calcola il volume effettivo da aggiungere
 
-tutti i nuovi composti inseriti devono andare in coda. sia nuovo lotto che aggiunta mix non hanno questo comportamento
 
-quantdo si ordina una colonna non ce modo di eliminare ordinamento (magari il terzo lick potrebbe resettare orinamento colonna)
 
 
 
