@@ -27,7 +27,7 @@ export function FialeSelector({ numeroFiale, fialeAperte, onApri }: FialeSelecto
       )
     })}
     <span className="text-xs text-muted-foreground ml-1">
-      {fialeAperte}/{numeroFiale} aperte
+      {fialeAperte}/{numeroFiale} fiale aperte
     </span>
    </div>
    )

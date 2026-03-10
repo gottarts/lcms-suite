@@ -96,6 +96,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     })
     setStoriaForm({ open: false, tipo: '' })
     load()
+    onRefreshList?.()   // ← AGGIUNTO: aggiorna la lista principale
   }
 
   const handlePrepRefresh = () => {

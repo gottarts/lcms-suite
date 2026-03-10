@@ -90,6 +90,8 @@ export function DataTable<T extends Record<string, unknown>>({
             key={i}
             className={cn(onRowClick && 'cursor-pointer', rowClassName?.(row))}  // ← MODIFICATO
             onClick={() => onRowClick?.(row)}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#cbd5e1')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
           >
             {columns.map(col => (
               <TableCell key={col.key} className={col.className}>

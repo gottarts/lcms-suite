@@ -1,13 +1,8 @@
 # prossimi feat (cancellare quado passa al plan):
 
-
- ## importante3
-
- bisogna aggiungere allo storico la data di apertura per singoli e mix
- il tasto dismetti non funziona... (bisonagna ggiungerlo funzionante anche alla barra laterale)
-
  ## altri
- inserire tra le destinazioni d'uso le possibilita con scelta a tendina (Taratura, Controllo qualita, Standard Interno) e di queste aggiungere un filtro accanto a quelli Stato e Work.
+ inserire tra le destinazioni d'uso le possibilita con scelta a tendina (Taratura, Controllo qualita, Taratura+ControlloQualità, Standard Interno) e di queste aggiungere un filtro accanto a quelli Stato e Work.
+ OInserisci un controllo che verifichi che la data di apertura sia inferiore di quella di scadenza (dopo il salva solo un avviso)
 
  nel tool di calcolo delle preparazioni sarebbe utile avere nella modalita aggiunta in volume il calcolo del peso da aggiungere:
  1 mL --> x grammi (in base a densita) in maniere identica a come nella modalita per pesata calcola il volume effettivo da aggiungere
