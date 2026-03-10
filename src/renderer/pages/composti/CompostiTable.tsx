@@ -23,7 +23,7 @@ interface CompostiTableProps {
 }
 
 export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDismetti, onRefresh, onOpenStorico }: CompostiTableProps) {
-  const [apriTarget, setApriTarget] = useState<{ compostoId: number; fialaNumero: number; nome: string } | null>(null)
+  const [apriTarget, setApriTarget] = useState<{ compostoId: number; fialaNumero: number; nome: string; lotto: string | null } | null>(null)
 
   const columns: Column<any>[] = [
     {
@@ -60,7 +60,7 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
               <FialeSelector
                 numeroFiale={numeroFiale}
                 fialeAperte={row.fiale_aperte_count ?? 0}
-                onApri={(fialaNumero) => setApriTarget({ compostoId: row.id, fialaNumero, nome: row.nome })}
+                onApri={(fialaNumero) => setApriTarget({ compostoId: row.id, fialaNumero, nome: row.nome, lotto: row.lotto ?? null })}
               />
             )}
           </span>
@@ -141,6 +141,8 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         compostoId={apriTarget?.compostoId ?? null}
         compostoNome={apriTarget?.nome}
         fialaNumero={apriTarget?.fialaNumero ?? 1}
+        compostoLotto={apriTarget?.lotto}
+        conteggioLotto={apriTarget?.lotto ? data.filter(c => c.lotto === apriTarget.lotto).length : 0}
         onSaved={() => { setApriTarget(null); onRefresh() }}
       />
       <DataTable columns={columns} data={data} onRowClick={onRowClick} emptyMessage="Nessun composto trovato" />

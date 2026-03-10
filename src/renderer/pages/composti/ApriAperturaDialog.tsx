@@ -11,11 +11,13 @@ interface ApriAperturaDialogProps {
   compostoId: number | null
   compostoNome?: string
   fialaNumero: number
+  compostoLotto?: string | null
+  conteggioLotto?: number
   onSaved: () => void
 }
 
 export function ApriAperturaDialog({
-  open, onOpenChange, compostoId, compostoNome, fialaNumero, onSaved
+  open, onOpenChange, compostoId, compostoNome, fialaNumero, compostoLotto, conteggioLotto, onSaved
 }: ApriAperturaDialogProps) {
   const [dataApertura, setDataApertura] = useState('')
   const [operatore, setOperatore] = useState('')
@@ -66,6 +68,12 @@ export function ApriAperturaDialog({
           </div>
         </div>
         <DialogFooter>
+          {conteggioLotto && conteggioLotto > 1 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded mb-2 w-full">
+              ⚠ Questa apertura verrà registrata per tutti i {conteggioLotto} composti
+              con lotto &quot;{compostoLotto}&quot;.
+            </p>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annulla</Button>
           <Button onClick={handleSave} disabled={saving || !dataApertura}>
             {saving ? 'Salvataggio...' : 'Conferma apertura'}
