@@ -12,7 +12,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
-import { Plus, Search, FlaskConical, Filter } from 'lucide-react'
+import { Plus, Search, FlaskConical, Filter, Upload } from 'lucide-react'
+import { ImportDialog } from './ImportDialog'
 
 // Tutti gli stati possibili mappati al valore interno di computeStato
 const STATO_MAP: Record<string, string> = {
@@ -40,6 +41,7 @@ export function CompostiPage() {
   const [panelTab, setPanelTab] = useState<string>('dettaglio')
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
   const [mostraDismessi, setMostraDismessi] = useState(false)
 
@@ -175,6 +177,9 @@ export function CompostiPage() {
           <Button size="sm" variant="outline" onClick={() => setMixOpen(true)}>
             <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-1" /> Importa CSV
+          </Button>
           <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
           </Button>
@@ -285,6 +290,7 @@ export function CompostiPage() {
         onSave={() => { load(); setTemplate(null) }}
       />
       <MixPesticidiForm open={mixOpen} onClose={() => setMixOpen(false)} onSave={load} />
+      <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onSave={load} />
       <CompostoPanel
         key={panelId ?? 'none'}
         compostoId={panelId}
