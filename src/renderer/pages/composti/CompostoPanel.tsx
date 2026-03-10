@@ -16,6 +16,14 @@ import { parseConcentrazione } from '@/lib/unita'
 import { PreparazioniTab } from './PreparazioniTab'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
+// Helper: calcola stato visualizzato di una preparazione (non modifica il DB)
+function computeStatoPrep(prep: any): string {
+  if (prep.stato === 'Dismessa') return 'Dismessa'
+  if (prep.stato === 'Esaurita') return 'Esaurita'
+  if (prep.scadenza && new Date(prep.scadenza) < new Date()) return 'Scaduta'
+  return prep.stato ?? 'Attiva'
+}
+
 interface CompostoPanelProps {
   compostoId: number | null
   onClose: () => void
@@ -39,12 +47,13 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     nuova_scadenza: '',
   })
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
+  // Mod-C: stato controllato per il tab attivo
+  const [activeTab, setActiveTab] = useState<string>(defaultTab ?? 'dettaglio')
 
   const load = async () => {
     if (!compostoId) return
     const c = await compostiApi.get(compostoId)
     setComposto(c)
-    // Calcola ultima_rivalidazione (MAX nuova_scadenza) dallo storico già caricato
     if (c?.storia?.length) {
       const scadenze = c.storia
         .filter((s: any) => s.tipo === 'Rivalidazione' && s.nuova_scadenza)
@@ -57,7 +66,33 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
 
   useEffect(() => { load() }, [compostoId])
 
+  // Mod-C: resetta il tab quando cambia composto o defaultTab esterno
+  useEffect(() => {
+    setActiveTab(defaultTab ?? 'dettaglio')
+  }, [defaultTab, compostoId])
+
   if (!composto) return null
+
+  // Mod-E: timeline unificata storia + preparazioni, ordinate per data DESC (più recente in cima)
+  const storiaEvents = (composto.storia ?? []).map((s: any) => ({
+    _type: 'storia' as const,
+    _sortDate: s.data ?? '',
+    _sortId: s.id as number,
+    data: s,
+  }))
+  const prepEvents = (composto.preparazioni ?? [])
+    .filter((p: any) => p.data_prep)
+    .map((p: any) => ({
+      _type: 'prep' as const,
+      _sortDate: p.data_prep as string,
+      _sortId: 0,
+      data: p,
+    }))
+  const timelineEvents = [...storiaEvents, ...prepEvents].sort((a, b) => {
+    if (b._sortDate < a._sortDate) return -1  // DESC: più recente in cima
+    if (b._sortDate > a._sortDate) return 1
+    return b._sortId - a._sortId              // tiebreaker per eventi storia stessa data
+  })
 
   const Field = ({ label, value }: { label: string; value?: any }) => (
     <div className="flex justify-between text-sm py-0.5">
@@ -96,7 +131,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     })
     setStoriaForm({ open: false, tipo: '' })
     load()
-    onRefreshList?.()   // ← AGGIUNTO: aggiorna la lista principale
+    onRefreshList?.()
   }
 
   const handlePrepRefresh = () => {
@@ -104,7 +139,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     onRefreshList?.()
   }
 
-  // Composto arricchito con ultima_rivalidazione per computeStato corretto nell'header
   const compostoConRival = { ...composto, ultima_rivalidazione: ultimaRivalidazione }
 
   return (
@@ -124,7 +158,8 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
           </Button>
         </div>
 
-        <Tabs defaultValue={defaultTab ?? 'dettaglio'}>
+        {/* Mod-D: Tabs controlled tramite activeTab / setActiveTab */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full">
             <TabsTrigger value="dettaglio" className="flex-1">Dettaglio</TabsTrigger>
             {composto.forma === 'Neat' && (
@@ -175,64 +210,130 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                 <XCircle className="h-3.5 w-3.5 mr-1" /> Dismissione
               </Button>
             </div>
+
+            {/* Mod-F: timeline unificata storia + preparazioni, più recente in cima */}
+            {timelineEvents.length > 0 ? (
+              timelineEvents.map((evt) => {
+                if (evt._type === 'prep') {
+                  const p = evt.data
+                  const statoPrep = computeStatoPrep(p)
+                  const statoColor =
+                    statoPrep === 'Attiva'   ? 'text-green-700' :
+                    statoPrep === 'Scaduta'  ? 'text-red-600'   :
+                    statoPrep === 'Esaurita' ? 'text-amber-600' :
+                    'text-muted-foreground'
+                  return (
+                    <div key={`prep-${p.id}`} className="p-3 border rounded-md text-sm space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs border-green-600 text-green-700">
+                          Preparazione
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{formatDate(p.data_prep)}</span>
+                        <span className={`text-xs font-medium ml-auto ${statoColor}`}>{statoPrep}</span>
+                      </div>
+                      {p.concentrazione && (
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Concentrazione: </span>
+                          <span className="font-mono">{p.concentrazione} {p.unita_conc ?? 'mg/L'}</span>
+                        </div>
+                      )}
+                      {p.solvente && (
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Solvente: </span>
+                          <span>{p.solvente}</span>
+                        </div>
+                      )}
+                      {p.operatore && (
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Operatore: </span>
+                          <span>{p.operatore}</span>
+                        </div>
+                      )}
+                      {p.scadenza && (
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Scadenza prep.: </span>
+                          <span className="font-mono">{formatDate(p.scadenza)}</span>
+                        </div>
+                      )}
+                      {p.note && (
+                        <p className="text-xs text-muted-foreground">{p.note}</p>
+                      )}
+                      <button
+                        className="text-[11px] text-blue-600 hover:underline mt-1 block"
+                        onClick={() => setActiveTab('preparazioni')}
+                      >
+                        → vedi preparazioni
+                      </button>
+                    </div>
+                  )
+                }
+
+                // Evento storia: Rivalidazione, Dismissione, apertura_fiala
+                const s = evt.data
+                return (
+                  <div key={`storia-${s.id}`} className="p-3 border rounded-md text-sm space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={s.tipo === 'Rivalidazione' ? 'default' : s.tipo === 'apertura_fiala' ? 'outline' : 'destructive'}
+                        className="text-xs"
+                      >
+                        {s.tipo === 'apertura_fiala' ? `Fiala ${s.fiala_numero} aperta` : s.tipo}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{formatDate(s.data)}</span>
+                    </div>
+                    {s.n_registro_qc && (
+                      <div className="text-xs">
+                        <span className="text-muted-foreground">N° Registro QC: </span>
+                        <span className="font-mono">{s.n_registro_qc}</span>
+                      </div>
+                    )}
+                    {s.batch_analitico && (
+                      <div className="text-xs">
+                        <span className="text-muted-foreground">Batch: </span>
+                        <span className="font-mono">{s.batch_analitico}</span>
+                      </div>
+                    )}
+                    {s.lotto_crm_valido && (
+                      <div className="text-xs">
+                        <span className="text-muted-foreground">Lotto CRM: </span>
+                        <span className="font-mono">{s.lotto_crm_valido}</span>
+                      </div>
+                    )}
+                    {s.nuova_scadenza && (
+                      <div className="text-xs">
+                        <span className="text-muted-foreground">Scadenza estesa al: </span>
+                        <span className="font-mono font-medium text-blue-700">{formatDate(s.nuova_scadenza)}</span>
+                      </div>
+                    )}
+                    {s.note && (
+                      <p className="text-xs text-muted-foreground">{s.note}</p>
+                    )}
+                  </div>
+                )
+              })
+            ) : (
+              <p className="text-xs text-muted-foreground">Nessun evento registrato</p>
+            )}
+
+            {/* Apertura flacone: sempre in fondo (evento più vecchio per definizione) */}
             {composto.data_apertura && (
-             <div className="flex items-start gap-2 py-2 border-b opacity-75">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground w-20 shrink-0 pt-0.5">
-              Apertura
-              </span>
-              <div className="flex-1">
-               <div className="text-xs font-medium">
-                 {composto.mix_id
-                   ? `Apertura mix ${composto.mix}`
-                   : 'Apertura flacone'}
-               </div>
-              <div className="text-[11px] text-muted-foreground">
-               {formatDate(composto.data_apertura)}
-              {composto.operatore_apertura && ` — ${composto.operatore_apertura}`}
-             </div>
-            </div>
-           </div>
-          )}
-            {composto.storia?.length ? composto.storia.map((s: any) => (
-              <div key={s.id} className="p-3 border rounded-md text-sm space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={s.tipo === 'Rivalidazione' ? 'default' : s.tipo === 'apertura_fiala' ? 'outline' : 'destructive'}
-                    className="text-xs"
-                  >
-                    {s.tipo === 'apertura_fiala' ? `Fiala ${s.fiala_numero} aperta` : s.tipo}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{formatDate(s.data)}</span>
+              <div className="flex items-start gap-2 py-2 border-t opacity-75 mt-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground w-20 shrink-0 pt-0.5">
+                  Apertura
+                </span>
+                <div className="flex-1">
+                  <div className="text-xs font-medium">
+                    {composto.mix_id
+                      ? `Apertura mix ${composto.mix}`
+                      : 'Apertura flacone'}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {formatDate(composto.data_apertura)}
+                    {composto.operatore_apertura && ` — ${composto.operatore_apertura}`}
+                  </div>
                 </div>
-                {s.n_registro_qc && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">N° Registro QC: </span>
-                    <span className="font-mono">{s.n_registro_qc}</span>
-                  </div>
-                )}
-                {s.batch_analitico && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Batch: </span>
-                    <span className="font-mono">{s.batch_analitico}</span>
-                  </div>
-                )}
-                {s.lotto_crm_valido && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Lotto CRM: </span>
-                    <span className="font-mono">{s.lotto_crm_valido}</span>
-                  </div>
-                )}
-                {s.nuova_scadenza && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Scadenza estesa al: </span>
-                    <span className="font-mono font-medium text-blue-700">{formatDate(s.nuova_scadenza)}</span>
-                  </div>
-                )}
-                {s.note && (
-                  <p className="text-xs text-muted-foreground">{s.note}</p>
-                )}
               </div>
-            )) : <p className="text-xs text-muted-foreground">Nessun evento registrato</p>}
+            )}
           </TabsContent>
         </Tabs>
       </div>
