@@ -28,11 +28,13 @@ export function DataTable<T extends Record<string, unknown>>({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortKey(key)
+    if (sortKey !== key) {
+      setSortKey(key)       // primo click su nuova colonna: ASC
       setSortDir('asc')
+    } else if (sortDir === 'asc') {
+      setSortDir('desc')    // secondo click: DESC
+    } else {
+      setSortKey(null)      // terzo click: reset
     }
   }
 
