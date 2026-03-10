@@ -184,6 +184,13 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
 
     db.transaction(() => {
       updateComposto.run(row)
+
+      // G-2: sincronizzazione fiale per lotto
+      if (row.fiala !== undefined && row.fiala !== null && row.lotto) {
+        db.prepare('UPDATE composti SET fiala = ? WHERE lotto = ? AND id != ?')
+          .run(row.fiala, row.lotto, id)
+      }
+
       deleteLinks.run(id)
       for (const mid of metodiIds) {
         insertLink.run(id, mid)
