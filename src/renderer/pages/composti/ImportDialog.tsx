@@ -167,7 +167,7 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
       // Se non trovato, prova contains solo per alias lunghi (evita falsi positivi)
       if (matched === '_skip') {
         for (const [dbKey, synonyms] of Object.entries(aliases)) {
-          if (synonyms.some(s => normalize(s).length > 5 && (hn.includes(normalize(s)) || normalize(s).includes(hn)))) {
+          if (synonyms.some(s => normalize(s).length >= 5 && (hn.includes(normalize(s)) || normalize(s).includes(hn)))) {
             matched = dbKey
             break
           }
