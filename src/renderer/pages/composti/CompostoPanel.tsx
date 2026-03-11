@@ -47,7 +47,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     nuova_scadenza: '',
   })
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
-  // Mod-C: stato controllato per il tab attivo
   const [activeTab, setActiveTab] = useState<string>(defaultTab ?? 'dettaglio')
 
   const load = async () => {
@@ -66,14 +65,12 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
 
   useEffect(() => { load() }, [compostoId])
 
-  // Mod-C: resetta il tab quando cambia composto o defaultTab esterno
   useEffect(() => {
     setActiveTab(defaultTab ?? 'dettaglio')
   }, [defaultTab, compostoId])
 
   if (!composto) return null
 
-  // Mod-E: timeline unificata storia + preparazioni, ordinate per data DESC (più recente in cima)
   const storiaEvents = (composto.storia ?? []).map((s: any) => ({
     _type: 'storia' as const,
     _sortDate: s.data ?? '',
@@ -89,9 +86,9 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
       data: p,
     }))
   const timelineEvents = [...storiaEvents, ...prepEvents].sort((a, b) => {
-    if (b._sortDate < a._sortDate) return -1  // DESC: più recente in cima
+    if (b._sortDate < a._sortDate) return -1
     if (b._sortDate > a._sortDate) return 1
-    return b._sortId - a._sortId              // tiebreaker per eventi storia stessa data
+    return b._sortId - a._sortId
   })
 
   const Field = ({ label, value }: { label: string; value?: any }) => (
@@ -158,7 +155,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
           </Button>
         </div>
 
-        {/* Mod-D: Tabs controlled tramite activeTab / setActiveTab */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full">
             <TabsTrigger value="dettaglio" className="flex-1">Dettaglio</TabsTrigger>
@@ -197,7 +193,13 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
 
           {composto.forma === 'Neat' && (
             <TabsContent value="preparazioni" className="mt-3">
-              <PreparazioniTab compostoId={composto.id} preparazioni={composto.preparazioni || []} onRefresh={handlePrepRefresh} />
+              {/* FIX: era onRefresh={refresh} (funzione inesistente) → corretto in handlePrepRefresh */}
+              <PreparazioniTab
+                compostoId={composto.id}
+                preparazioni={composto.preparazioni}
+                onRefresh={handlePrepRefresh}
+                composto={composto}
+              />
             </TabsContent>
           )}
 
@@ -211,7 +213,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
               </Button>
             </div>
 
-            {/* Mod-F: timeline unificata storia + preparazioni, più recente in cima */}
             {timelineEvents.length > 0 ? (
               timelineEvents.map((evt) => {
                 if (evt._type === 'prep') {
@@ -270,7 +271,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                   )
                 }
 
-                // Evento storia: Rivalidazione, Dismissione, apertura_fiala
                 const s = evt.data
                 return (
                   <div key={`storia-${s.id}`} className="p-3 border rounded-md text-sm space-y-1.5">
@@ -317,7 +317,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
               <p className="text-xs text-muted-foreground">Nessun evento registrato</p>
             )}
 
-            {/* Apertura flacone: sempre in fondo (evento più vecchio per definizione) */}
             {composto.data_apertura && (
               <div className="flex items-start gap-2 py-2 border-t opacity-75 mt-1">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground w-20 shrink-0 pt-0.5">

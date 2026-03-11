@@ -15,6 +15,7 @@ import { CompostiStats } from './CompostiStats'
 import { Plus, Search, FlaskConical, Filter, Upload, Download } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
 import { ExportDialog } from './ExportDialog'
+import { EtichetteDialog } from './EtichetteDialog'
 
 // Tutti gli stati possibili mappati al valore interno di computeStato
 const STATO_MAP: Record<string, string> = {
@@ -55,6 +56,8 @@ export function CompostiPage() {
   const [mixOpen, setMixOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  // ET-2: stato per il dialog etichette
+  const [etichetteOpen, setEtichetteOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
   const [mostraDismessi, setMostraDismessi] = useState(false)
   const [mostraDaAprire, setMostraDaAprire] = useState(true)
@@ -222,6 +225,10 @@ export function CompostiPage() {
           <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
             <Download className="h-4 w-4 mr-1" /> Esporta
           </Button>
+          {/* ET-2: pulsante Etichette */}
+          <Button size="sm" variant="outline" onClick={() => setEtichetteOpen(true)}>
+            🏷️ Etichette
+          </Button>
           <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
           </Button>
@@ -364,6 +371,12 @@ export function CompostiPage() {
       <ExportDialog
         open={exportOpen}
         onClose={() => setExportOpen(false)}
+        filteredIds={filtered.map((c: any) => c.id)}
+      />
+      {/* ET-2: dialog etichette */}
+      <EtichetteDialog
+        open={etichetteOpen}
+        onClose={() => setEtichetteOpen(false)}
         filteredIds={filtered.map((c: any) => c.id)}
       />
       <CompostoPanel

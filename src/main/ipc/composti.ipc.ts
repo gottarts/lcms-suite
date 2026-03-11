@@ -398,4 +398,18 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       return { ...c, storia, preparazioni }
     })
   })
+
+  // ET-3: restituisce i campi necessari per le etichette vial, solo per gli ids passati
+  // Il campo `fiala` determina quante copie dell'etichetta vengono generate (min 1)
+  ipcMain.handle('composti:etichette-data', (_, ids: number[]) => {
+    const db = getDb()
+    if (!ids || ids.length === 0) return []
+    return ids
+      .map(id => db.prepare(
+        `SELECT id, nome, lotto, concentrazione, unita_conc, solvente,
+                data_apertura, scadenza_prodotto, operatore_apertura, fiala
+         FROM composti WHERE id = ?`
+      ).get(id))
+      .filter(Boolean)
+  })
 }

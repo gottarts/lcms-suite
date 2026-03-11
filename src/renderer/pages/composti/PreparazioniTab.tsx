@@ -13,11 +13,15 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import { parseConcentrazione, UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 import { PrepCalcTool } from './PrepCalcTool'
+// ET-4: import della funzione di generazione etichetta preparazione
+import { generaEtichettaPreparazione } from './EtichetteDialog'
 
 interface PreparazioniTabProps {
   compostoId: number
   preparazioni: any[]
   onRefresh: () => void
+  // ET-4: dati del composto padre (nome, lotto) necessari per l'etichetta
+  composto: any
 }
 
 const EMPTY_FORM = {
@@ -51,7 +55,7 @@ function computeStatoPrep(p: any): string {
   return p.stato ?? 'Attiva'
 }
 
-export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: PreparazioniTabProps) {
+export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto }: PreparazioniTabProps) {
   const [formOpen, setFormOpen] = useState(false)
   const [calcOpen, setCalcOpen] = useState(false)
   const [editPrep, setEditPrep] = useState<any>(null)
@@ -186,6 +190,16 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh }: Prepara
                 </Badge>
               </div>
               <div className="flex gap-1">
+                {/* ET-4: pulsante etichetta preparazione */}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  title="Stampa etichetta"
+                  onClick={() => generaEtichettaPreparazione(composto, p)}
+                >
+                  🏷️
+                </Button>
                 {!isDismessa && (
                   <>
                     <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEdit(p)}>
