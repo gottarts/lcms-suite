@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,8 +40,9 @@ export function PrepCalcTool({
   const [solventeCustom, setSolventeCustom] = useState('')
   const [densita, setDensita] = useState('')
   const [modalita, setModalita] = useState<'volume' | 'pesata'>('volume')
-  const [massaSolvente, setMassaSolvente] = useState('')
   const [unitaConc, setUnitaConc] = useState<string>(UNITA_DEFAULT)
+  const [volumeEffettivo, setVolumeEffettivo] = useState('')   // mL reali (modalità volume)
+  const [massaEffettiva, setMassaEffettiva] = useState('')     // g reali (modalità pesata)
 
   // Calcoli in tempo reale
   const calculations = useMemo(() => {
@@ -49,7 +50,6 @@ export function PrepCalcTool({
     const massaPesataNum = parseFloat(massaPesata) || 0
     const purezzaNum = parseFloat(purezza) || 0
     const densitaNum = parseFloat(densita) || 0
-    const massaSolventeNum = parseFloat(massaSolvente) || 0
 
     // Massa reale: tenendo conto della purezza
     const massaReale = (massaPesataNum * purezzaNum) / 100
@@ -66,45 +66,104 @@ export function PrepCalcTool({
         isValid = isFinite(concReale)
       }
     } else {
-      // Per pesata: volumeSolvente = massaSolvente / densita
-      if (densitaNum > 0 && massaSolventeNum > 0 && massaReale > 0) {
-        volumeSolvente = massaSolventeNum / densitaNum
+      // Per pesata: volume teorico = (massaReale / concTarget) * 1000, poi massa = volume * densità
+      if (concTargetNum > 0 && massaReale > 0 && densitaNum > 0) {
+        volumeSolvente = (massaReale / concTargetNum) * 1000
         concReale = (massaReale / volumeSolvente) * 1000
         isValid = isFinite(concReale)
       }
     }
+
+    // Peso teorico da aggiungere:
+    // - modalità volume: peso = volume * densità (se densità disponibile)
+    // - modalità pesata: peso = volume * densità (è il valore principale da mostrare)
+    let pesoTeoricoSolvente: number | null = null
+    if (densitaNum > 0 && volumeSolvente > 0) {
+      pesoTeoricoSolvente = volumeSolvente * densitaNum
+    }
+
+    // Alias per compatibilità modalità volume (stesso calcolo)
+    const pesoEquivalente = pesoTeoricoSolvente
+
+    // Calcolo concentrazione reale da valori effettivi
+    const volumeEffettivoNum = parseFloat(volumeEffettivo) || 0
+    const massaEffettivaNum = parseFloat(massaEffettiva) || 0
+
+    let concRealeEffettiva: number | null = null
+    let volumeRealeUsato: number = volumeSolvente // default = teorico
+
+    if (modalita === 'volume' && volumeEffettivoNum > 0 && massaReale > 0) {
+      volumeRealeUsato = volumeEffettivoNum
+      concRealeEffettiva = (massaReale / volumeEffettivoNum) * 1000
+    } else if (modalita === 'pesata' && massaEffettivaNum > 0 && densitaNum > 0 && massaReale > 0) {
+      volumeRealeUsato = massaEffettivaNum / densitaNum
+      concRealeEffettiva = (massaReale / volumeRealeUsato) * 1000
+    }
+
+    // Il valore finale da passare a onConfirm
+    const concFinale = concRealeEffettiva ?? concReale
+    const volumeFinale = volumeRealeUsato
 
     return {
       massaReale,
       volumeSolvente,
       concReale,
       isValid,
+      pesoEquivalente,
+      pesoTeoricoSolvente,
+      concRealeEffettiva,
+      concFinale,
+      volumeFinale,
     }
-  }, [concTarget, massaPesata, purezza, densita, modalita, massaSolvente])
+
+  }, [concTarget, massaPesata, purezza, densita, modalita, volumeEffettivo, massaEffettiva])
 
   const solventeDisplay = solventeCustom || solvente
-  const densitaDisplay = parseFloat(densita) || null
+
+  // Reset campi ad ogni apertura del dialog
+  useEffect(() => {
+    if (open) {
+      setConcTarget('')
+      setMassaPesata('')
+      setPurezza(purezzeDefault?.toString() ?? '')
+      setSolvente('')
+      setSolventeCustom('')
+      setDensita('')
+      setModalita('volume')
+      setUnitaConc(UNITA_DEFAULT)
+      setVolumeEffettivo('')
+      setMassaEffettiva('')
+    }
+  }, [open])
 
   const handleConfirm = () => {
     if (!calculations.isValid || !solventeDisplay) return
 
     const concTargetNum = parseFloat(concTarget) || 0
+    const haValoreEffettivo = calculations.concRealeEffettiva !== null
+
+    // Descrizione del valore usato per la nota
+    const descValore = modalita === 'volume'
+      ? (haValoreEffettivo
+          ? `aggiunto effettivo: ${volumeEffettivo} mL (teorico: ${calculations.volumeSolvente.toFixed(2)} mL)`
+          : `aggiunto ${calculations.volumeSolvente.toFixed(2)} mL`)
+      : (haValoreEffettivo
+          ? `pesato effettivo: ${massaEffettiva} g (teorico: ${calculations.pesoTeoricoSolvente?.toFixed(2) ?? '—'} g)`
+          : `pesato ${calculations.pesoTeoricoSolvente?.toFixed(2) ?? '—'} g (d=${densita})`)
 
     onConfirm({
-      concentrazione: calculations.concReale,
+      concentrazione: calculations.concFinale,
       unita_conc: unitaConc,
       solvente: solventeDisplay,
       note: `[Calc] Pesata: ${massaPesata} mg, purezza: ${purezza}%, ` +
-        (modalita === 'volume'
-          ? `aggiunto ${calculations.volumeSolvente.toFixed(2)} mL ${solventeDisplay}`
-          : `pesato ${massaSolvente} g ${solventeDisplay} (d=${densita})`) +
-        ` → Conc. reale: ${calculations.concReale.toFixed(1)} ${unitaConc}`,
-      volume_solvente: calculations.volumeSolvente,
+        `${descValore} ${solventeDisplay}` +
+        ` → Conc. reale: ${calculations.concFinale.toFixed(1)} ${unitaConc}`,
+      volume_solvente: calculations.volumeFinale,
       massa_pesata: parseFloat(massaPesata) || 0,
       purezza_usata: parseFloat(purezza) || 0,
-      densita_solvente: densitaDisplay,
+      densita_solvente: parseFloat(densita) || null,
       modalita_aggiunta: modalita,
-      concentrazione_reale: calculations.concReale,
+      concentrazione_reale: calculations.concFinale,
       concentrazione_target: concTargetNum,
     })
   }
@@ -249,38 +308,17 @@ export function PrepCalcTool({
               </div>
             </div>
 
-            {/* Input pesata (solo se modalita='pesata') */}
-            {modalita === 'pesata' && (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs">Massa solvente (g)</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={massaSolvente}
-                    onChange={e => setMassaSolvente(e.target.value)}
-                    placeholder="es. 10.5"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Densità (g/cm³)</Label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    value={densita}
-                    onChange={e => setDensita(e.target.value)}
-                    placeholder="es. 0.786"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Mostra densita se volume */}
-            {modalita === 'volume' && solvente && (
-              <div className="text-xs bg-muted p-2 rounded">
-                Densità: <span className="font-mono font-semibold">{densita || '—'} g/cm³</span>
-              </div>
-            )}
+            {/* Campo densità — SEMPRE VISIBILE */}
+            <div>
+              <Label className="text-xs">Densità solvente (g/cm³)</Label>
+              <Input
+                type="number"
+                step="0.001"
+                value={densita}
+                onChange={e => setDensita(e.target.value)}
+                placeholder="es. 0.786 — auto da solvente"
+              />
+            </div>
           </div>
 
           {/* Sezione 3 — Risultati */}
@@ -291,24 +329,35 @@ export function PrepCalcTool({
               {calculations.isValid ? (
                 <>
                   <div className="text-xs bg-white/50 dark:bg-black/20 rounded p-2">
-                    <div>{modalita === 'volume' ? 'Aggiungere' : 'Pesare'}:</div>
+                    <div className="text-xs text-muted-foreground mb-1">
+                      {modalita === 'volume' ? 'Volume teorico da aggiungere:' : 'Massa teorica da pesare:'}
+                    </div>
                     <div className="font-mono text-sm font-bold mt-1 flex items-center gap-3">
-                      <span>{modalita === 'volume' ? calculations.volumeSolvente.toFixed(2) : massaSolvente} {modalita === 'volume' ? 'mL' : 'g'}</span>
-                      {modalita === 'pesata' && calculations.volumeSolvente > 0 && (
-                        <span className="text-muted-foreground font-normal">→ {calculations.volumeSolvente.toFixed(2)} mL</span>
+                      {modalita === 'volume' ? (
+                        <>
+                          <span>{calculations.volumeSolvente.toFixed(2)} mL</span>
+                          {calculations.pesoEquivalente !== null && (
+                            <span className="text-muted-foreground font-normal">
+                              ≈ {calculations.pesoEquivalente.toFixed(2)} g
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            {calculations.pesoTeoricoSolvente !== null
+                              ? calculations.pesoTeoricoSolvente.toFixed(2)
+                              : '—'} g
+                          </span>
+                          {calculations.volumeSolvente > 0 && (
+                            <span className="text-muted-foreground font-normal">
+                              ≈ {calculations.volumeSolvente.toFixed(2)} mL
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">di {solventeDisplay}</div>
-                  </div>
-
-                  <div className="text-center bg-primary/10 rounded p-3 border border-primary/30">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                      Concentrazione reale
-                    </div>
-                    <div className="text-2xl font-bold text-primary font-mono">
-                      {calculations.concReale.toFixed(1)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{unitaConc}</div>
                   </div>
                 </>
               ) : (
@@ -318,6 +367,64 @@ export function PrepCalcTool({
               )}
             </div>
           </div>
+
+          {/* Sezione 4 — Valori effettivi (opzionale) */}
+          {calculations.isValid && (
+            <div className="border rounded-md p-3 space-y-3 border-dashed border-muted-foreground/40">
+              <div className="text-xs font-semibold text-foreground">
+                Valori effettivi <span className="font-normal text-muted-foreground">(opzionale)</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Inserisci quanto hai realmente {modalita === 'volume' ? 'aggiunto' : 'pesato'}.
+                Se vuoto, viene usato il valore teorico.
+              </div>
+
+              {modalita === 'volume' && (
+                <div>
+                  <Label className="text-xs">Volume effettivo aggiunto (mL)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={volumeEffettivo}
+                    onChange={e => setVolumeEffettivo(e.target.value)}
+                    placeholder={`teorico: ${calculations.volumeSolvente.toFixed(2)} mL`}
+                  />
+                </div>
+              )}
+
+              {modalita === 'pesata' && (
+                <div>
+                  <Label className="text-xs">Massa effettiva pesata (g)</Label>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    value={massaEffettiva}
+                    onChange={e => setMassaEffettiva(e.target.value)}
+                    placeholder={calculations.pesoTeoricoSolvente !== null
+                      ? `teorico: ${calculations.pesoTeoricoSolvente.toFixed(2)} g`
+                      : 'inserisci densità per il valore teorico'}
+                  />
+                </div>
+              )}
+
+              {/* Concentrazione reale — aggiornata in tempo reale */}
+              <div className="text-center bg-primary/10 rounded p-3 border border-primary/30">
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                  Concentrazione reale
+                </div>
+                <div className="text-2xl font-bold text-primary font-mono">
+                  {calculations.concFinale.toFixed(1)}
+                </div>
+                <div className="text-xs text-muted-foreground">{unitaConc}</div>
+                {calculations.concRealeEffettiva !== null && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    (da valore effettivo inserito)
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
 
         <DialogFooter>
