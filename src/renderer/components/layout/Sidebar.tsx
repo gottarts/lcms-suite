@@ -2,11 +2,11 @@ import { NavLink } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 
 const navItems = [
-  { to: '/composti', label: 'Composti', icon: '\uD83E\uDDEA' },
-  { to: '/metodi', label: 'Metodi', icon: '\uD83D\uDCCB' },
-  { to: '/strumenti', label: 'Strumenti', icon: '\uD83D\uDD2C' },
-  { to: '/consumabili', label: 'Consumabili', icon: '\uD83D\uDCE6' },
-  { to: '/anagrafiche', label: 'Anagrafiche', icon: '\uD83D\uDCD6' },
+  { to: '/composti', label: 'Reference Standards', icon: '🧪' },
+  { to: '/metodi', label: 'Metodi', icon: '📋' },
+  { to: '/strumenti', label: 'Strumenti', icon: '🔬' },
+  { to: '/consumabili', label: 'Consumabili', icon: '📦' },
+  { to: '/anagrafiche', label: 'Anagrafiche', icon: '📖' },
 ]
 
 export function Sidebar() {

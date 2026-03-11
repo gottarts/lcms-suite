@@ -12,7 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
-import { Plus, Search, FlaskConical, Filter, Upload } from 'lucide-react'
+import { Plus, Search, FlaskConical, Filter, Upload, Download } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
 
 // Tutti gli stati possibili mappati al valore interno di computeStato
@@ -51,6 +51,8 @@ export function CompostiPage() {
   const [panelId, setPanelId] = useState<number | null>(null)
   const [panelTab, setPanelTab] = useState<string>('dettaglio')
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  // FEAT-2: info mix per dialog eliminazione
+  const [deleteMixInfo, setDeleteMixInfo] = useState<{ count: number; lotto: string | null } | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
@@ -152,10 +154,16 @@ export function CompostiPage() {
     }).length,
   }), [filtered])
 
+  // FEAT-2: elimina composto — se appartiene a un mix, elimina tutto il lotto
   const handleDelete = async () => {
     if (deleteId !== null) {
-      await compostiApi.delete(deleteId)
+      if (deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1) {
+        await window.electronAPI.invoke('composti:delete-by-lotto', deleteMixInfo.lotto)
+      } else {
+        await compostiApi.delete(deleteId)
+      }
       setDeleteId(null)
+      setDeleteMixInfo(null)
       setPanelId(null)
       load()
     }
@@ -193,19 +201,29 @@ export function CompostiPage() {
     setPanelId(row.id)
   }
 
+  // FEAT-2: recupera info mix prima di aprire il dialog di conferma eliminazione
+  const handleRequestDelete = async (id: number) => {
+    setPanelId(null)
+    const info = await window.electronAPI.invoke('composti:count-by-lotto', id)
+    setDeleteMixInfo(info)
+    setDeleteId(id)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-heading text-lg font-semibold">Standard di Riferimento</h2>
+        {/* FEAT-3: rinominato in Reference Standards */}
+        <h2 className="font-heading text-lg font-semibold">Reference Standards</h2>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
             Visualizzati: {filtered.length} / Totali: {composti.length}
           </span>
-          <Button size="sm" variant="outline" onClick={() => setMixOpen(true)}>
-            <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
-          </Button>
+          {/* FEAT-1: Importa CSV spostato prima di Aggiungi Mix */}
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-4 w-4 mr-1" /> Importa CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setMixOpen(true)}>
+            <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
           </Button>
           <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
@@ -353,7 +371,7 @@ export function CompostiPage() {
         compostoId={panelId}
         onClose={() => { setPanelId(null); setPanelTab('dettaglio') }}
         onEdit={handleEdit}
-        onDelete={id => { setPanelId(null); setDeleteId(id) }}
+        onDelete={handleRequestDelete}
         onNewLotto={handleNewLotto}
         onRefreshList={load}
         defaultTab={panelTab}
@@ -366,14 +384,19 @@ export function CompostiPage() {
         tipo={storiaTarget?.tipo ?? ''}
         onSaved={() => { load(); setStoriaTarget(null) }}
       />
+      {/* FEAT-2: messaggio dinamico se composto appartiene a un mix */}
       <ConfirmDialog
         open={deleteId !== null}
         title="Elimina composto"
-        message="Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?"
+        message={
+          deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1
+            ? `Questo composto fa parte di un mix (lotto: ${deleteMixInfo.lotto}). Verranno eliminati ${deleteMixInfo.count} composti con tutti i dati correlati. Continuare?`
+            : 'Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?'
+        }
         confirmLabel="Elimina"
         variant="danger"
         onConfirm={handleDelete}
-        onCancel={() => setDeleteId(null)}
+        onCancel={() => { setDeleteId(null); setDeleteMixInfo(null) }}
       />
     </div>
   )

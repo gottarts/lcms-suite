@@ -205,6 +205,24 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     return { ok: true }
   })
 
+  // FEAT-2: restituisce quanti composti condividono lo stesso lotto del composto id
+  // Se il composto non ha mix_id o lotto, ritorna { count: 1, lotto: null }
+  ipcMain.handle('composti:count-by-lotto', (_, id: number) => {
+    const db = getDb()
+    const row = db.prepare('SELECT lotto, mix_id FROM composti WHERE id = ?').get(id) as any
+    if (!row || !row.lotto || !row.mix_id) return { count: 1, lotto: null }
+    const result = db.prepare(
+      'SELECT COUNT(*) as count FROM composti WHERE lotto = ?'
+    ).get(row.lotto) as any
+    return { count: result.count, lotto: row.lotto }
+  })
+
+  // FEAT-2: elimina tutti i composti (e dati correlati via CASCADE) con lo stesso lotto
+  ipcMain.handle('composti:delete-by-lotto', (_, lotto: string) => {
+    getDb().prepare('DELETE FROM composti WHERE lotto = ?').run(lotto)
+    return { ok: true }
+  })
+
   ipcMain.handle('composti:create-mix', (_, data: {
     forma_commerciale: string
     forma: string
@@ -359,5 +377,25 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       ).run(compostoId, data.data_apertura, data.fiala_numero, data.note || null)
       return { id: result.lastInsertRowid }
     }
+  })
+
+  // FEAT-4: restituisce dati completi (composto + storia + preparazioni) per export
+  // scope 'all' = tutti i composti, scope 'filtered' = solo gli ids passati
+  ipcMain.handle('composti:export-data', (_, scope: 'all' | 'filtered', ids?: number[]) => {
+    const db = getDb()
+
+    const composti: any[] = scope === 'filtered' && ids && ids.length > 0
+      ? ids.map(id => db.prepare('SELECT * FROM composti WHERE id = ?').get(id)).filter(Boolean) as any[]
+      : db.prepare('SELECT * FROM composti ORDER BY nome ASC').all() as any[]
+
+    return composti.map(c => {
+      const storia = db.prepare(
+        'SELECT * FROM composti_storia WHERE composto_id = ? ORDER BY data ASC'
+      ).all(c.id)
+      const preparazioni = db.prepare(
+        'SELECT * FROM preparazioni WHERE composto_id = ? ORDER BY data_prep DESC'
+      ).all(c.id)
+      return { ...c, storia, preparazioni }
+    })
   })
 }
