@@ -36,7 +36,7 @@ function exportCSV(data: any[]) {
     'Produttore', 'Lotto', 'Concentrazione', 'Unità', 'Solvente',
     'Purezza', 'N fiale', 'Data apertura', 'Scadenza prodotto',
     'Data dismissione', 'Destinazione uso', 'Work standard',
-    'Stoccaggio', 'Accreditamento CRM', 'Ubicazione', 'ARPA', 'Mix',
+    'Stoccaggio', 'Accreditamento CRM', 'Ubicazione', 'Mix',
   ]
 
   const rows = data.map(c => [
@@ -60,7 +60,6 @@ function exportCSV(data: any[]) {
     c.stoccaggio ?? '',
     c.accreditamento_crm ?? '',
     c.ubicazione ?? '',
-    c.arpa ?? '',
     c.mix ?? '',
   ])
 
@@ -107,7 +106,6 @@ function exportPDF(data: any[]) {
   doc.text(`Generato il: ${oggi}`, 105, 80, { align: 'center' })
   doc.text(`Composti inclusi: ${data.length}`, 105, 88, { align: 'center' })
 
-  // Conteggi per stato
   const nAttivi = data.filter(c => computeStatoLabel(c) === 'Attivo').length
   const nScaduti = data.filter(c => computeStatoLabel(c) === 'Scaduto').length
   const nDismessi = data.filter(c => computeStatoLabel(c) === 'Dismesso').length
@@ -189,7 +187,7 @@ function exportPDF(data: any[]) {
     doc.setDrawColor(220, 220, 220)
     doc.line(14, 29, 196, 29)
 
-    // Dati anagrafici
+    // Dati anagrafici — ARPA rimosso, sostituito con Matrice
     autoTable(doc, {
       startY: 32,
       head: [['Campo', 'Valore', 'Campo', 'Valore']],
@@ -201,7 +199,7 @@ function exportPDF(data: any[]) {
         ['Data apertura', c.data_apertura ?? '—', 'Data dismissione', c.data_dismissione ?? '—'],
         ['Destinazione uso', c.destinazione_uso ?? '—', 'Work standard', c.work_standard ?? '—'],
         ['Stoccaggio', c.stoccaggio ?? '—', 'Accreditamento CRM', c.accreditamento_crm ?? '—'],
-        ['Ubicazione', c.ubicazione ?? '—', 'ARPA', c.arpa ?? '—'],
+        ['Ubicazione', c.ubicazione ?? '—', 'Matrice', c.matrice ?? '—'],
         ['Mix', c.mix ? `${c.mix} (${c.mix_id ?? ''})` : '—', 'Peso molecolare', c.peso_molecolare ?? '—'],
       ],
       styles: { fontSize: 7.5, cellPadding: 2 },
@@ -218,7 +216,6 @@ function exportPDF(data: any[]) {
 
     // Storico eventi
     if (c.storia && c.storia.length > 0) {
-      // Controlla se c'è spazio sufficiente, altrimenti nuova pagina
       if (cursorY > 230) { doc.addPage(); cursorY = 16 }
 
       doc.setFontSize(10)
