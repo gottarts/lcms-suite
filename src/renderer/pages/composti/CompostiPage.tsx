@@ -14,6 +14,7 @@ import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
 import { Plus, Search, FlaskConical, Filter, Upload, Download } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
+import { ExportDialog } from './ExportDialog'
 
 // Tutti gli stati possibili mappati al valore interno di computeStato
 const STATO_MAP: Record<string, string> = {
@@ -43,7 +44,6 @@ export function CompostiPage() {
   const [filtroMetodo, setFiltroMetodo] = useState('')
   const [filtroAttenzione, setFiltroAttenzione] = useState(false)
   const [filtroInScadenza, setFiltroInScadenza] = useState(false)
-  // FEAT-J: stato filtro destinazione uso
   const [filtroDestinazione, setFiltroDestinazione] = useState('Tutti')
   const [formOpen, setFormOpen] = useState(false)
   const [editComposto, setEditComposto] = useState<any>(null)
@@ -51,10 +51,10 @@ export function CompostiPage() {
   const [panelId, setPanelId] = useState<number | null>(null)
   const [panelTab, setPanelTab] = useState<string>('dettaglio')
   const [deleteId, setDeleteId] = useState<number | null>(null)
-  // FEAT-2: info mix per dialog eliminazione
   const [deleteMixInfo, setDeleteMixInfo] = useState<{ count: number; lotto: string | null } | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
   const [mostraDismessi, setMostraDismessi] = useState(false)
   const [mostraDaAprire, setMostraDaAprire] = useState(true)
@@ -131,7 +131,6 @@ export function CompostiPage() {
       result = result.filter(c => computeStato(c) !== 'da_aprire')
     }
 
-    // FEAT-J: filtro destinazione uso
     if (filtroDestinazione !== 'Tutti') {
       result = result.filter(c => c.destinazione_uso === filtroDestinazione)
     }
@@ -154,7 +153,6 @@ export function CompostiPage() {
     }).length,
   }), [filtered])
 
-  // FEAT-2: elimina composto — se appartiene a un mix, elimina tutto il lotto
   const handleDelete = async () => {
     if (deleteId !== null) {
       if (deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1) {
@@ -195,13 +193,11 @@ export function CompostiPage() {
     setPanelId(row.id)
   }
 
-  // FEAT-I: apre il pannello direttamente sulla tab Preparazioni
   const handleOpenPreparazioni = (row: any) => {
     setPanelTab('preparazioni')
     setPanelId(row.id)
   }
 
-  // FEAT-2: recupera info mix prima di aprire il dialog di conferma eliminazione
   const handleRequestDelete = async (id: number) => {
     setPanelId(null)
     const info = await window.electronAPI.invoke('composti:count-by-lotto', id)
@@ -212,18 +208,19 @@ export function CompostiPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        {/* FEAT-3: rinominato in Reference Standards */}
         <h2 className="font-heading text-lg font-semibold">Reference Standards</h2>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
             Visualizzati: {filtered.length} / Totali: {composti.length}
           </span>
-          {/* FEAT-1: Importa CSV spostato prima di Aggiungi Mix */}
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-4 w-4 mr-1" /> Importa CSV
           </Button>
           <Button size="sm" variant="outline" onClick={() => setMixOpen(true)}>
             <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
+            <Download className="h-4 w-4 mr-1" /> Esporta
           </Button>
           <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
@@ -268,7 +265,6 @@ export function CompostiPage() {
                 ))}
               </SelectContent>
             </Select>
-            {/* FEAT-J: filtro destinazione uso */}
             <Select value={filtroDestinazione} onValueChange={setFiltroDestinazione}>
               <SelectTrigger className="w-52 h-8 text-sm">
                 <SelectValue placeholder="Destinazione uso" />
@@ -294,7 +290,6 @@ export function CompostiPage() {
               <button onClick={() => setFiltroWork('Tutti')} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
             </Badge>
           )}
-          {/* FEAT-J: badge rimovibile filtro destinazione */}
           {filtroDestinazione !== 'Tutti' && (
             <Badge variant="secondary" className="flex items-center gap-1">
               Dest.: {filtroDestinazione}
@@ -366,6 +361,11 @@ export function CompostiPage() {
       />
       <MixPesticidiForm open={mixOpen} onClose={() => setMixOpen(false)} onSave={load} />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onSave={load} />
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        filteredIds={filtered.map((c: any) => c.id)}
+      />
       <CompostoPanel
         key={panelId ?? 'none'}
         compostoId={panelId}
@@ -384,7 +384,6 @@ export function CompostiPage() {
         tipo={storiaTarget?.tipo ?? ''}
         onSaved={() => { load(); setStoriaTarget(null) }}
       />
-      {/* FEAT-2: messaggio dinamico se composto appartiene a un mix */}
       <ConfirmDialog
         open={deleteId !== null}
         title="Elimina composto"
