@@ -16,6 +16,20 @@ interface ExportDialogProps {
 type Formato = 'csv' | 'pdf'
 type Scope = 'filtered' | 'all'
 
+// ── Helper pulizia testo (rimuove spazi multipli e caratteri anomali) ────────
+
+function cleanText(s: any): string {
+  if (!s) return ''
+  return String(s)
+    .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '')
+    .replace(/\s*→\s*/g, '\n')               // → usato dal tool Calc come separatore riga
+    .replace(/(\[Calc\][^\n]*),\s*/g, '$1,\n')  // a capo dopo ogni , nei blocchi [Calc]
+    .replace(/[^\x20-\x7E\xA0-\xFF\n]/g, ' ')  // preserva newline reali
+    .replace(/[ \t]+/g, ' ')                     // collassa spazi ma non newline
+    .replace(/\n\s*/g, '\n')                     // pulisce spazi dopo newline
+    .trim()
+}
+
 // ── Helper stato label (solo per export, non modifica il DB) ─────────────────
 
 function computeStatoLabel(c: any): string {
@@ -187,21 +201,23 @@ function exportPDF(data: any[]) {
     doc.setDrawColor(220, 220, 220)
     doc.line(14, 29, 196, 29)
 
-    // Dati anagrafici — ARPA rimosso, sostituito con Matrice
+    // Dati anagrafici — ARPA rimosso, riga Mix visibile solo se è un mix
+    const anagrafica = [
+      ['Codice interno', c.codice_interno ?? '—', 'Classe', c.classe ?? '—'],
+      ['Forma', c.forma ?? '—', 'Forma commerciale', c.forma_commerciale ?? '—'],
+      ['Concentrazione', c.concentrazione ? `${c.concentrazione} ${c.unita_conc ?? ''}` : '—', 'Solvente', c.solvente ?? '—'],
+      ['Purezza', c.purezza ?? '—', 'N fiale', c.fiala ?? '—'],
+      ['Data apertura', c.data_apertura ?? '—', 'Data dismissione', c.data_dismissione ?? '—'],
+      ['Destinazione uso', c.destinazione_uso ?? '—', 'Work standard', c.work_standard ?? '—'],
+      ['Stoccaggio', c.stoccaggio ?? '—', 'Accreditamento CRM', c.accreditamento_crm ?? '—'],
+      ['Ubicazione', c.ubicazione ?? '—', 'Matrice', c.matrice ?? '—'],
+      ['Peso molecolare', c.peso_molecolare ?? '—', 'Lotto', c.lotto ?? '—'],
+      ...(c.mix_id ? [['Mix', `${c.mix ?? ''} (${c.mix_id})`, 'Mix ID', c.mix_id]] : []),
+    ]
     autoTable(doc, {
       startY: 32,
       head: [['Campo', 'Valore', 'Campo', 'Valore']],
-      body: [
-        ['Codice interno', c.codice_interno ?? '—', 'Classe', c.classe ?? '—'],
-        ['Forma', c.forma ?? '—', 'Forma commerciale', c.forma_commerciale ?? '—'],
-        ['Concentrazione', c.concentrazione ? `${c.concentrazione} ${c.unita_conc ?? ''}` : '—', 'Solvente', c.solvente ?? '—'],
-        ['Purezza', c.purezza ?? '—', 'N fiale', c.fiala ?? '—'],
-        ['Data apertura', c.data_apertura ?? '—', 'Data dismissione', c.data_dismissione ?? '—'],
-        ['Destinazione uso', c.destinazione_uso ?? '—', 'Work standard', c.work_standard ?? '—'],
-        ['Stoccaggio', c.stoccaggio ?? '—', 'Accreditamento CRM', c.accreditamento_crm ?? '—'],
-        ['Ubicazione', c.ubicazione ?? '—', 'Matrice', c.matrice ?? '—'],
-        ['Mix', c.mix ? `${c.mix} (${c.mix_id ?? ''})` : '—', 'Peso molecolare', c.peso_molecolare ?? '—'],
-      ],
+      body: anagrafica,
       styles: { fontSize: 7.5, cellPadding: 2 },
       headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 7 },
       columnStyles: {
@@ -214,7 +230,7 @@ function exportPDF(data: any[]) {
 
     let cursorY: number = (doc as any).lastAutoTable.finalY + 7
 
-    // Storico eventi
+    // Storico eventi — include anche apertura_fiala
     if (c.storia && c.storia.length > 0) {
       if (cursorY > 230) { doc.addPage(); cursorY = 16 }
 
@@ -228,12 +244,12 @@ function exportPDF(data: any[]) {
         head: [['Data', 'Tipo', 'N° fiala', 'Nuova scadenza', 'Note']],
         body: c.storia.map((s: any) => [
           s.data ?? '',
-          s.tipo ?? '',
+          s.tipo === 'apertura_fiala' ? 'Apertura fiala' : (s.tipo ?? ''),
           s.fiala_numero ?? '',
           s.nuova_scadenza ?? '',
-          s.note ?? '',
+          cleanText(s.note),
         ]),
-        styles: { fontSize: 7.5, cellPadding: 2 },
+        styles: { fontSize: 7.5, cellPadding: 2, overflow: 'linebreak' },
         headStyles: { fillColor: [80, 80, 80], textColor: 255, fontSize: 7 },
         alternateRowStyles: { fillColor: [250, 250, 250] },
         columnStyles: {
@@ -241,13 +257,14 @@ function exportPDF(data: any[]) {
           1: { cellWidth: 30 },
           2: { cellWidth: 18 },
           3: { cellWidth: 28 },
+          4: { cellWidth: 'auto' },
         },
       })
 
       cursorY = (doc as any).lastAutoTable.finalY + 7
     }
 
-    // Preparazioni
+    // Preparazioni — fix note troncate con overflow linebreak
     if (c.preparazioni && c.preparazioni.length > 0) {
       if (cursorY > 230) { doc.addPage(); cursorY = 16 }
 
@@ -266,18 +283,13 @@ function exportPDF(data: any[]) {
           p.scadenza ?? '',
           p.stato ?? '',
           p.operatore ?? '',
-          p.note ?? '',
+          cleanText(p.note),
         ]),
-        styles: { fontSize: 7.5, cellPadding: 2 },
-        headStyles: { fillColor: [100, 100, 100], textColor: 255, fontSize: 7 },
+        styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak', minCellHeight: 8 },
+        headStyles: { fillColor: [100, 100, 100], textColor: 255, fontSize: 6.5 },
         alternateRowStyles: { fillColor: [250, 250, 250] },
-        columnStyles: {
-          0: { cellWidth: 22 },
-          1: { cellWidth: 32 },
-          2: { cellWidth: 22 },
-          3: { cellWidth: 22 },
-          4: { cellWidth: 20 },
-        },
+        tableWidth: 'auto',
+        margin: { left: 14, right: 14 },
       })
     }
 
