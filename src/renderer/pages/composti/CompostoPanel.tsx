@@ -258,12 +258,14 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                       {p.note && (
                         <p className="text-xs text-muted-foreground">{p.note}</p>
                       )}
-                      <button
-                        className="text-[11px] text-blue-600 hover:underline mt-1 block"
-                        onClick={() => setActiveTab('preparazioni')}
-                      >
-                        → vedi preparazioni
-                      </button>
+                      {composto.forma === 'Neat' && (
+                        <button
+                          className="text-[11px] text-blue-600 hover:underline mt-1 block"
+                          onClick={() => setActiveTab('preparazioni')}
+                        >
+                          → vedi preparazioni
+                        </button>
+                      )}
                     </div>
                   )
                 }

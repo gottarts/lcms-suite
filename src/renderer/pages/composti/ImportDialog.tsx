@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 
-// Colonne del database a cui mappare i dati CSV
 const DB_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: 'nome', label: 'Nome', required: true },
   { key: 'codice_interno', label: 'Codice Interno' },
@@ -28,8 +27,58 @@ const DB_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: 'ubicazione', label: 'Ubicazione' },
   { key: 'stoccaggio', label: 'Stoccaggio' },
   { key: 'peso_molecolare', label: 'Peso Molecolare (MW)' },
+  { key: 'matrice', label: 'Matrice' },
+  { key: 'pos', label: 'POS' },
+  { key: 'note', label: 'Note' },
   { key: '_skip', label: '— Ignora colonna —' },
 ]
+
+const MESI_IT: Record<string, string> = {
+  gen: '01', feb: '02', mar: '03', apr: '04', mag: '05', giu: '06',
+  lug: '07', ago: '08', set: '09', ott: '10', nov: '11', dic: '12',
+}
+
+function parseDate(val: unknown): string {
+  if (val == null || val === '') return ''
+  if (val instanceof Date) {
+    const y = val.getFullYear()
+    const m = String(val.getMonth() + 1).padStart(2, '0')
+    const d = String(val.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  if (typeof val === 'number') {
+    try {
+      const date = XLSX.SSF.parse_date_code(val)
+      if (date) return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`
+    } catch { /* ignore */ }
+    return String(val)
+  }
+  const s = String(val).trim()
+  if (!s) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const slashMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  if (slashMatch) {
+    const [, d, m, y] = slashMatch
+    const year = y.length === 2 ? (parseInt(y) > 50 ? '19' + y : '20' + y) : y
+    return `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  const itMatch = s.match(/^(\d{1,2})-([a-zA-Z]{3})-(\d{2,4})$/)
+  if (itMatch) {
+    const [, d, mon, y] = itMatch
+    const mNum = MESI_IT[mon.toLowerCase()]
+    if (mNum) {
+      const year = y.length === 2 ? (parseInt(y) > 50 ? '19' + y : '20' + y) : y
+      return `${year}-${mNum}-${d.padStart(2, '0')}`
+    }
+  }
+  return s
+}
+
+function cellToString(val: unknown): string {
+  if (val == null) return ''
+  if (val instanceof Date) return parseDate(val)
+  return String(val).replace(/\r?\n/g, ' ').trim()
+}
 
 interface ImportDialogProps {
   open: boolean
@@ -39,12 +88,19 @@ interface ImportDialogProps {
 
 export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [step, setStep] = useState<'upload' | 'mapping' | 'preview' | 'importing' | 'done' | 'error'>('upload')
+  const [step, setStep] = useState<'upload' | 'sheet' | 'mapping' | 'preview' | 'importing' | 'done' | 'error'>('upload')
   const [csvHeaders, setCsvHeaders] = useState<string[]>([])
   const [csvRows, setCsvRows] = useState<string[][]>([])
-  const [mapping, setMapping] = useState<Record<string, string>>({}) // csvHeader → dbField
+  const [mapping, setMapping] = useState<Record<string, string>>({})
   const [errorMsg, setErrorMsg] = useState('')
   const [importCount, setImportCount] = useState(0)
+  const [sheetNames, setSheetNames] = useState<string[]>([])
+  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null)
+
+  const DATE_FIELDS = new Set([
+    'data_apertura', 'data_preparazione', 'scadenza_prodotto',
+    'data_scadenza_soluzione', 'data_dismissione',
+  ])
 
   function reset() {
     setStep('upload')
@@ -53,6 +109,8 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     setMapping({})
     setErrorMsg('')
     setImportCount(0)
+    setSheetNames([])
+    setWorkbook(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -61,45 +119,99 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     onClose()
   }
 
-  // Tenta di indovinare automaticamente la mappatura in base al nome della colonna CSV
   function autoMap(headers: string[]): Record<string, string> {
     const auto: Record<string, string> = {}
-    const normalize = (s: string) => s.toLowerCase().replace(/[\s_\-\.]/g, '')
+    const normalize = (s: string) => s.toLowerCase().replace(/[\s_\-\.\/]/g, '')
     const aliases: Record<string, string[]> = {
-      nome:              ['nome', 'name', 'composto', 'standard', 'analita'],
-      codice_interno:    ['codice', 'codiceinterno', 'codiceintern', 'id'],
-      classe:            ['classe', 'class', 'categoria'],
-      forma:             ['forma', 'form', 'tipo', 'type'],
-      forma_commerciale: ['formacommerciale', 'formacommer', 'commercial'],
-      formula:           ['formula'],
-      purezza:           ['purezza', 'purity', 'pur'],
-      concentrazione:    ['concentrazione', 'conc', 'concentration'],
-      unita_conc:        ['unitaconc', 'unita', 'unit', 'um'],
-      solvente:          ['solvente', 'solvent'],
-      fiala:             ['fiala', 'fiale', 'vial'],
-      produttore:        ['produttore', 'azienda', 'fornitore', 'producer', 'supplier', 'vendor'],
-      lotto:             ['lotto', 'lot', 'batch'],
-      operatore_apertura:['operatore', 'operator'],
-      data_apertura:     ['dataapertura', 'apertura', 'opening'],
-      scadenza_prodotto: ['scadenza', 'scad', 'expiry', 'expiration'],
-      destinazione_uso:  ['destinazione', 'destinazioneuso', 'use'],
-      work_standard:     ['workstandard', 'work'],
-      ubicazione:        ['ubicazione', 'location', 'posizione'],
-      stoccaggio:        ['stoccaggio', 'storage'],
-      peso_molecolare:   ['pesomolecolare', 'pm', 'mw', 'molweight'],
+      nome:               ['nome', 'name', 'composto', 'analita'],
+      codice_interno:     ['codiceinterno', 'codiceintern', 'codice'],
+      classe:             ['classe', 'class', 'categoria'],
+      forma:              ['forma', 'statofisico', 'statofisicodiorigine'],
+      forma_commerciale:  ['formacommerciale', 'formacommer'],
+      formula:            ['formula'],
+      purezza:            ['purezza', 'purity'],
+      concentrazione:     ['concentrazione', 'conc', 'concentration'],
+      unita_conc:         ['unitaconc', 'unita', 'unit'],
+      solvente:           ['solvente', 'solvent'],
+      fiala:              ['fiala', 'fiale', 'vial'],
+      produttore:         ['produttore', 'azienda', 'fornitore', 'producer', 'supplier'],
+      lotto:              ['lotto', 'lot', 'batch'],
+      operatore_apertura: ['operatoriapertura', 'operatoreApertura', 'operatore', 'operator'],
+      data_apertura:      ['dataapertura', 'dataap'],
+      scadenza_prodotto:  ['scadenzaneat', 'scadenzaprodotto', 'datascadenza', 'scadenza', 'scad'],
+      destinazione_uso:   ['destinazioneuso', 'destinazione'],
+      work_standard:      ['workdestinazione', 'workstandard', 'work'],
+      ubicazione:         ['ubicazione', 'location', 'posizione'],
+      stoccaggio:         ['stoccaggio', 'storage'],
+      peso_molecolare:    ['pesomolecolare', 'mw', 'pm'],
+      matrice:            ['matrice', 'matrix'],
+      pos:                ['pos'],
+      note:               ['note', 'notes', 'annotazioni'],
     }
+
+    const seen: Record<string, number> = {}
     for (const h of headers) {
-      const hn = normalize(h)
+      const hClean = h.replace(/_\d+$/, '')
+      const hn = normalize(hClean)
+      seen[hn] = (seen[hn] ?? 0) + 1
+
       let matched = '_skip'
+
+      // Prima prova match esatto
       for (const [dbKey, synonyms] of Object.entries(aliases)) {
-        if (synonyms.some(s => hn.includes(s) || s.includes(hn))) {
+        if (synonyms.some(s => normalize(s) === hn)) {
           matched = dbKey
           break
         }
       }
+      // Se non trovato, prova contains solo per alias lunghi (evita falsi positivi)
+      if (matched === '_skip') {
+        for (const [dbKey, synonyms] of Object.entries(aliases)) {
+          if (synonyms.some(s => normalize(s).length > 5 && (hn.includes(normalize(s)) || normalize(s).includes(hn)))) {
+            matched = dbKey
+            break
+          }
+        }
+      }
+
       auto[h] = matched
     }
     return auto
+  }
+
+  function processSheet(ws: XLSX.WorkSheet) {
+    const rows = XLSX.utils.sheet_to_json(ws, {
+      header: 1,
+      raw: true,
+      cellDates: true,
+      defval: null,
+    }) as unknown[][]
+
+    if (rows.length < 2) {
+      setErrorMsg("Il foglio sembra vuoto o ha solo l'intestazione.")
+      setStep('error')
+      return
+    }
+
+    const headers = (rows[0] as unknown[]).map(h =>
+      String(h ?? '').replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim()
+    )
+
+    const dataRows: string[][] = rows
+      .slice(1)
+      .filter(r => r.some(c => c != null && c !== ''))
+      .map(r =>
+        headers.map((_, i) => {
+          const val = r[i]
+          if (val instanceof Date) return parseDate(val)
+          return cellToString(val)
+        })
+      )
+
+    setCsvHeaders(headers)
+    setCsvRows(dataRows)
+    setMapping(autoMap(headers))
+    setStep('mapping')
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -111,22 +223,14 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
       try {
         const data = evt.target?.result
         const wb = XLSX.read(data, { type: 'binary', cellDates: true })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' })
 
-        if (rows.length < 2) {
-          setErrorMsg('Il file sembra vuoto o ha solo l\'intestazione.')
-          setStep('error')
-          return
+        if (wb.SheetNames.length > 1) {
+          setWorkbook(wb)
+          setSheetNames(wb.SheetNames)
+          setStep('sheet')
+        } else {
+          processSheet(wb.Sheets[wb.SheetNames[0]])
         }
-
-        const headers = (rows[0] as string[]).map(h => String(h ?? '').trim())
-        const dataRows = rows.slice(1).filter(r => r.some(c => c !== '' && c != null)) as string[][]
-
-        setCsvHeaders(headers)
-        setCsvRows(dataRows)
-        setMapping(autoMap(headers))
-        setStep('mapping')
       } catch (err) {
         setErrorMsg('Impossibile leggere il file. Assicurati che sia un CSV o Excel valido.')
         setStep('error')
@@ -135,8 +239,12 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     reader.readAsBinaryString(file)
   }
 
+  function handleSheetSelect(name: string) {
+    if (!workbook) return
+    processSheet(workbook.Sheets[name])
+  }
+
   async function handleImport() {
-    // Controlla che "nome" sia mappato
     const nomeCol = Object.entries(mapping).find(([, v]) => v === 'nome')?.[0]
     if (!nomeCol) {
       setErrorMsg('Devi mappare almeno la colonna "Nome" prima di importare.')
@@ -149,17 +257,18 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     let errori = 0
 
     for (const row of csvRows) {
-      // Costruisce l'oggetto composto dalla riga CSV
       const composto: Record<string, unknown> = {}
       csvHeaders.forEach((h, i) => {
         const dbField = mapping[h]
         if (dbField && dbField !== '_skip') {
-          const val = String(row[i] ?? '').trim()
-          if (val !== '') composto[dbField] = val
+          const raw = row[i] ?? ''
+          const val = DATE_FIELDS.has(dbField) ? parseDate(raw) : String(raw).trim()
+          // Prima occorrenza non vuota vince per campi duplicati
+          if (val !== '' && !composto[dbField]) composto[dbField] = val
         }
       })
 
-      if (!composto.nome) continue // salta righe senza nome
+      if (!composto.nome) continue
 
       try {
         await window.electronAPI.invoke('composti:create', composto)
@@ -177,8 +286,10 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     onSave()
   }
 
-  // Anteprima: prime 5 righe con le colonne mappate (non _skip)
-  const mappedCols = csvHeaders.filter(h => mapping[h] && mapping[h] !== '_skip')
+  // Usa indice esplicito per gestire colonne con nomi duplicati
+  const mappedCols = csvHeaders
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => mapping[h] && mapping[h] !== '_skip')
   const previewRows = csvRows.slice(0, 5)
 
   return (
@@ -205,6 +316,30 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
           </div>
         )}
 
+        {/* STEP: SELEZIONE FOGLIO */}
+        {step === 'sheet' && (
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Il file contiene <strong>{sheetNames.length} fogli</strong>. Quale vuoi importare?
+            </p>
+            <div className="flex flex-col gap-2">
+              {sheetNames.map(name => (
+                <Button
+                  key={name}
+                  variant="outline"
+                  className="justify-start text-left"
+                  onClick={() => handleSheetSelect(name)}
+                >
+                  📄 {name}
+                </Button>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" onClick={handleClose}>Annulla</Button>
+            </div>
+          </div>
+        )}
+
         {/* STEP: MAPPATURA COLONNE */}
         {step === 'mapping' && (
           <div className="space-y-4 py-2">
@@ -213,8 +348,8 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
               Controlla la mappatura automatica e correggila se necessario.
             </p>
             <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-              {csvHeaders.map(h => (
-                <div key={h} className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1.5">
+              {csvHeaders.map((h, i) => (
+                <div key={`${h}-${i}`} className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1.5">
                   <span className="text-xs font-mono flex-1 truncate" title={h}>{h}</span>
                   <Select
                     value={mapping[h] ?? '_skip'}
@@ -254,24 +389,21 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
               <table className="text-xs w-full">
                 <thead className="bg-muted">
                   <tr>
-                    {mappedCols.map(h => (
-                      <th key={h} className="px-2 py-1 text-left font-medium whitespace-nowrap">
+                    {mappedCols.map(({ h, i }) => (
+                      <th key={`${h}-${i}`} className="px-2 py-1 text-left font-medium whitespace-nowrap">
                         {DB_FIELDS.find(f => f.key === mapping[h])?.label ?? mapping[h]}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {previewRows.map((row, i) => (
-                    <tr key={i} className="border-t">
-                      {mappedCols.map(h => {
-                        const idx = csvHeaders.indexOf(h)
-                        return (
-                          <td key={h} className="px-2 py-1 truncate max-w-[160px]" title={String(row[idx] ?? '')}>
-                            {String(row[idx] ?? '')}
-                          </td>
-                        )
-                      })}
+                  {previewRows.map((row, ri) => (
+                    <tr key={ri} className="border-t">
+                      {mappedCols.map(({ h, i }) => (
+                        <td key={`${h}-${i}`} className="px-2 py-1 truncate max-w-[160px]" title={String(row[i] ?? '')}>
+                          {String(row[i] ?? '')}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
