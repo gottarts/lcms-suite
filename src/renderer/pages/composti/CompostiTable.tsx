@@ -20,9 +20,11 @@ interface CompostiTableProps {
   onDismetti: (row: any) => void
   onRefresh: () => void
   onOpenStorico?: (row: any) => void
+  // FEAT-I: callback per aprire il pannello sulla tab Preparazioni
+  onOpenPreparazioni?: (row: any) => void
 }
 
-export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDismetti, onRefresh, onOpenStorico }: CompostiTableProps) {
+export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDismetti, onRefresh, onOpenStorico, onOpenPreparazioni }: CompostiTableProps) {
   const [apriTarget, setApriTarget] = useState<{ compostoId: number; fialaNumero: number; nome: string; lotto: string | null } | null>(null)
 
   const columns: Column<any>[] = [
@@ -49,8 +51,19 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
                 </Badge>
               )}
               {String(v)}
-              {row.prep_attive_count > 0 && (
-                <Badge variant="outline" className="ml-2 text-xs">{row.prep_attive_count} prep.</Badge>
+              {/* FEAT-I: pulsante PREP cliccabile per tutti i Neat, mostra conteggio anche se 0.
+                  Sostituisce il vecchio badge statico {row.prep_attive_count} prep. */}
+              {row.forma === 'Neat' && (
+                <Badge
+                  variant="outline"
+                  className="ml-2 text-xs cursor-pointer hover:bg-accent"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenPreparazioni?.(row)
+                  }}
+                >
+                  prep {row.prep_attive_count ?? 0}
+                </Badge>
               )}
               {row.prep_scadute_count > 0 && (
                 <Badge variant="destructive" className="ml-2 text-xs">⚠</Badge>
@@ -150,7 +163,7 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         data={data}
         onRowClick={onRowClick}
         emptyMessage="Nessun composto trovato"
-        rowClassName={(row) => computeStato(row) === 'dismesso' ? 'opacity-40 text-muted-foreground' : ''}  // ← NUOVO
+        rowClassName={(row) => computeStato(row) === 'dismesso' ? 'opacity-40 text-muted-foreground' : ''}
       />
     </>
   )

@@ -9,6 +9,14 @@ import { compostiApi } from '@/lib/api'
 import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 import { Upload } from 'lucide-react'
 
+// FEAT-J: stessa lista usata in CompostoForm e CompostiPage
+const DESTINAZIONI_USO = [
+  'Taratura',
+  'Controllo qualità',
+  'Taratura+Controllo qualità',
+  'Standard Interno',
+]
+
 interface MixPesticidiFormProps {
   open: boolean
   onClose: () => void
@@ -127,13 +135,13 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
               <Input value={form.codice_interno} onChange={e => set('codice_interno', e.target.value)} placeholder="es. MIX-001" />
             </div>
             <div>
-             <Label className="text-xs">N fiale</Label>
-             <Input
-               type="number"
-               min="1"
-               value={form.fiale}
-               onChange={e => set('fiale', e.target.value)}
-               placeholder="es. 4"
+              <Label className="text-xs">N fiale</Label>
+              <Input
+                type="number"
+                min="1"
+                value={form.fiale}
+                onChange={e => set('fiale', e.target.value)}
+                placeholder="es. 4"
               />
             </div>
             <div>
@@ -187,15 +195,16 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
                 </SelectContent>
               </Select>
             </div>
+            {/* FEAT-J: opzioni allineate a CompostoForm */}
             <div>
               <Label className="text-xs">Destinazione Uso</Label>
               <Select value={form.destinazione_uso || '_none'} onValueChange={v => set('destinazione_uso', v === '_none' ? '' : v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="_none">--</SelectItem>
-                  <SelectItem value="Taratura">Taratura</SelectItem>
-                  <SelectItem value="QC">QC</SelectItem>
-                  <SelectItem value="Taratura e QC">Taratura e QC</SelectItem>
+                  <SelectItem value="_none">— Nessuna —</SelectItem>
+                  {DESTINAZIONI_USO.map(d => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

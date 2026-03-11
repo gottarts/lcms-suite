@@ -9,6 +9,7 @@ export type CompostoStato =
   | 'rivalidato_in_scadenza'
   | 'rivalidato_scaduto'
   | 'dismesso'
+  | 'da_aprire'
 
 const statusConfig: Record<CompostoStato, { label: string; className: string }> = {
   attivo:                  { label: 'Attivo',                   className: 'bg-green-100 text-green-800 border-green-200' },
@@ -18,6 +19,7 @@ const statusConfig: Record<CompostoStato, { label: string; className: string }> 
   rivalidato_in_scadenza:  { label: 'Rivalidato — In scadenza', className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
   rivalidato_scaduto:      { label: 'Rivalidato — Scaduto',     className: 'bg-red-100 text-red-800 border-red-200' },
   dismesso:                { label: 'Dismesso',                  className: 'bg-gray-100 text-gray-600 border-gray-200' },
+  da_aprire:               { label: 'Da aprire',                className: 'bg-blue-50 text-blue-700 border-blue-200' },
 }
 
 interface StatusBadgeProps {
@@ -36,10 +38,14 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
 
 export function computeStato(composto: {
   data_dismissione?: string | null
+  data_apertura?: string | null
   scadenza_prodotto?: string | null
-  ultima_rivalidazione?: string | null  // MAX(nuova_scadenza) dall'IPC
+  ultima_rivalidazione?: string | null
 }): CompostoStato {
   if (composto.data_dismissione) return 'dismesso'
+
+  // Fiala non ancora aperta → Da aprire
+  if (!composto.data_apertura) return 'da_aprire'
 
   const now = new Date()
   now.setHours(0, 0, 0, 0)
@@ -58,8 +64,7 @@ export function computeStato(composto: {
   }
 
   // Scadenza originale SUPERATA — cerco estensione da rivalidazione
-  // ultima_rivalidazione = MAX(nuova_scadenza) tra tutte le rivalidazioni con nuova_scadenza
-  if (!composto.ultima_rivalidazione) return 'scaduto'  // nessuna estensione → scaduto normale
+  if (!composto.ultima_rivalidazione) return 'scaduto'
 
   const scadenzaEstesa = new Date(composto.ultima_rivalidazione)
   scadenzaEstesa.setHours(0, 0, 0, 0)

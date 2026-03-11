@@ -9,6 +9,14 @@ import { Separator } from '@/components/ui/separator'
 import { compostiApi } from '@/lib/api'
 import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 
+// FEAT-J: valori fissi per destinazione uso (stessa lista usata in CompostiPage per il filtro)
+const DESTINAZIONI_USO = [
+  'Taratura',
+  'Controllo qualità',
+  'Taratura+Controllo qualità',
+  'Standard Interno',
+]
+
 interface CompostoFormProps {
   open: boolean
   onClose: () => void
@@ -22,6 +30,8 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
   const [form, setForm] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
   const [vociStoccaggio, setVociStoccaggio] = useState<string[]>([])
+  // FEAT-K: stato per l'avviso date anomale
+  const [warningDate, setWarningDate] = useState(false)
 
   useEffect(() => {
     if (composto) {
@@ -49,6 +59,8 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         stoccaggio: '', accreditamento_crm: 'ISO 17034',
       })
     }
+    // Reset avviso date ad ogni apertura del form
+    setWarningDate(false)
   }, [composto, template, open])
 
   useEffect(() => {
@@ -71,6 +83,8 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
 
   const handleSave = async () => {
     if (!form.nome?.trim()) return
+    // FEAT-K: reset avviso ad ogni tentativo di salvataggio
+    setWarningDate(false)
     setSaving(true)
     try {
       const data = { ...form }
@@ -86,6 +100,18 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         await compostiApi.create(data)
       }
       onSave()
+
+      // FEAT-K: controllo date dopo il salvataggio — solo se entrambe le date sono presenti
+      if (form.data_apertura && form.scadenza_prodotto) {
+        const apertura = new Date(form.data_apertura)
+        const scadenza = new Date(form.scadenza_prodotto)
+        if (apertura >= scadenza) {
+          // Il dato è già salvato — mostriamo solo un avviso, non blocchiamo
+          setWarningDate(true)
+          return // non chiudiamo il dialog, l'utente vedrà l'avviso e chiuderà manualmente
+        }
+      }
+
       onClose()
     } catch (error) {
       console.error('Errore nel salvare il composto:', error)
@@ -156,7 +182,22 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
           <Separator />
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Uso e Ubicazione</div>
           <div className="grid grid-cols-3 gap-3">
-            <div><Label className="text-xs">Destinazione d'Uso</Label><Input value={form.destinazione_uso || ''} onChange={e => set('destinazione_uso', e.target.value)} /></div>
+            {/* FEAT-J: destinazione uso come select a valori fissi */}
+            <div>
+              <Label className="text-xs">Destinazione d'Uso</Label>
+              <Select
+                value={form.destinazione_uso || '_none'}
+                onValueChange={v => set('destinazione_uso', v === '_none' ? '' : v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">— Nessuna —</SelectItem>
+                  {DESTINAZIONI_USO.map(d => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div><Label className="text-xs">Work Standard</Label><Input value={form.work_standard || ''} onChange={e => set('work_standard', e.target.value)} /></div>
             <div><Label className="text-xs">Ubicazione</Label><Input value={form.ubicazione || ''} onChange={e => set('ubicazione', e.target.value)} /></div>
 
@@ -226,6 +267,20 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
               </div>
             )}
           </div>
+
+          {/* FEAT-K: avviso date anomale — compare solo dopo il salvataggio se data_apertura >= scadenza */}
+          {warningDate && (
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+              <span className="text-base leading-none mt-0.5">⚠️</span>
+              <div className="flex-1">
+                <p className="font-medium">Attenzione: date anomale</p>
+                <p className="text-xs mt-0.5">La data di apertura è uguale o successiva alla data di scadenza. Il record è stato salvato correttamente — verifica le date.</p>
+                <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={onClose}>
+                  Chiudi
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
