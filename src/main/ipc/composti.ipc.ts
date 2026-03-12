@@ -27,10 +27,13 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       params.push(filters.metodo_id)
     }
 
-    if (filters?.search) {
-      conditions.push('(c.nome LIKE ? OR c.codice_interno LIKE ?)')
-      params.push(`%${filters.search}%`, `%${filters.search}%`)
-    }
+    // TASK-0: ricerca testuale rimossa lato server — gestita interamente nel renderer (CompostiPage useMemo)
+    // Lasciata commentata per eventuale uso futuro lato server
+    // if (filters?.search) {
+    //   conditions.push('(c.nome LIKE ? OR c.codice_interno LIKE ?)')
+    //   params.push(`%${filters.search}%`, `%${filters.search}%`)
+    // }
+
     if (filters?.classe) {
       conditions.push('c.classe = ?')
       params.push(filters.classe)
