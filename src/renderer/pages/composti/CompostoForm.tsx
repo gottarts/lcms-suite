@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { X } from 'lucide-react'
 import { compostiApi } from '@/lib/api'
 import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 
@@ -33,6 +34,13 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
   // FEAT-K: stato per l'avviso date anomale
   const [warningDate, setWarningDate] = useState(false)
 
+  // FEAT-metodi-campo
+  const [metodi, setMetodi] = useState<any[]>([])
+  const [metodiInput, setMetodiInput] = useState('')
+  const [metodiSuggerimenti, setMetodiSuggerimenti] = useState<any[]>([])
+  const [metodiDropdownOpen, setMetodiDropdownOpen] = useState(false)
+  const [metodiToast, setMetodiToast] = useState('')
+
   useEffect(() => {
     if (composto) {
       setForm({ ...composto })
@@ -57,10 +65,12 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         data_apertura: '', scadenza_prodotto: '', destinazione_uso: '',
         work_standard: '', peso_molecolare: '', ubicazione: '',
         stoccaggio: '', accreditamento_crm: 'ISO 17034',
+        metodi_ids: [],
       })
     }
-    // Reset avviso date ad ogni apertura del form
     setWarningDate(false)
+    setMetodiInput('')
+    setMetodiToast('')
   }, [composto, template, open])
 
   useEffect(() => {
@@ -77,13 +87,69 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
     } catch (err) {
       console.error('Error in useEffect:', err)
     }
+
+    // Carica la lista metodi disponibili
+    window.electronAPI.invoke('metodi:list').then((result: unknown) => {
+      setMetodi(result as any[])
+    }).catch(err => console.error('Error loading metodi:', err))
   }, [])
 
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
 
+  // --- Gestione campo Metodi ---
+
+  const handleMetodiInput = (val: string) => {
+    setMetodiInput(val)
+    if (val.trim().length === 0) {
+      setMetodiSuggerimenti([])
+      setMetodiDropdownOpen(false)
+      return
+    }
+    const currentIds = (form.metodi_ids || []) as string[]
+    const filtered = metodi.filter(m =>
+      m.nome.toLowerCase().includes(val.toLowerCase()) &&
+      !currentIds.includes(m.id)
+    )
+    setMetodiSuggerimenti(filtered)
+    setMetodiDropdownOpen(true)
+  }
+
+  const handleMetodoSelect = (metodo: any) => {
+    const currentIds = (form.metodi_ids || []) as string[]
+    if (!currentIds.includes(metodo.id)) {
+      setForm(f => ({ ...f, metodi_ids: [...currentIds, metodo.id] }))
+    }
+    setMetodiInput('')
+    setMetodiSuggerimenti([])
+    setMetodiDropdownOpen(false)
+  }
+
+  const handleMetodoCreateOrAdd = async () => {
+    const nome = metodiInput.trim()
+    if (!nome) return
+    try {
+      const esistente = metodi.find(m => m.nome.toLowerCase() === nome.toLowerCase())
+      const metodo = await window.electronAPI.invoke('metodi:get-or-create', nome) as any
+      handleMetodoSelect(metodo)
+      setMetodi(prev => prev.find(m => m.id === metodo.id) ? prev : [...prev, metodo])
+      if (!esistente) {
+        setMetodiToast(`Metodo "${nome}" creato`)
+        setTimeout(() => setMetodiToast(''), 2500)
+      }
+    } catch (err) {
+      console.error('Errore creazione metodo:', err)
+    }
+  }
+
+  const handleMetodoRemove = (metodoId: string) => {
+    const currentIds = (form.metodi_ids || []) as string[]
+    setForm(f => ({ ...f, metodi_ids: currentIds.filter(id => id !== metodoId) }))
+  }
+
+  // --- Fine gestione Metodi ---
+
   const handleSave = async () => {
     if (!form.nome?.trim()) return
-    // FEAT-K: reset avviso ad ogni tentativo di salvataggio
     setWarningDate(false)
     setSaving(true)
     try {
@@ -92,7 +158,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
       if (data.concentrazione) data.concentrazione = parseFloat(data.concentrazione) || null
       if (data.peso_molecolare) data.peso_molecolare = parseFloat(data.peso_molecolare) || null
       for (const k of Object.keys(data)) {
-        if (k !== 'nome' && k !== 'arpa' && data[k] === '') data[k] = null
+        if (k !== 'nome' && k !== 'arpa' && k !== 'metodi_ids' && data[k] === '') data[k] = null
       }
       if (isEdit) {
         await compostiApi.update(composto.id, data)
@@ -101,14 +167,13 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
       }
       onSave()
 
-      // FEAT-K: controllo date dopo il salvataggio — solo se entrambe le date sono presenti
+      // FEAT-K: controllo date dopo il salvataggio
       if (form.data_apertura && form.scadenza_prodotto) {
         const apertura = new Date(form.data_apertura)
         const scadenza = new Date(form.scadenza_prodotto)
         if (apertura >= scadenza) {
-          // Il dato è già salvato — mostriamo solo un avviso, non blocchiamo
           setWarningDate(true)
-          return // non chiudiamo il dialog, l'utente vedrà l'avviso e chiuderà manualmente
+          return
         }
       }
 
@@ -130,6 +195,93 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         </DialogHeader>
 
         <div className="space-y-4">
+
+          {/* FEAT-metodi-campo: campo Metodi in CIMA al form */}
+          <div className="mb-2">
+            <Label className="text-xs">Metodi Analitici</Label>
+
+            {/* Toast conferma creazione metodo */}
+            {metodiToast && (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 mt-1 mb-1">
+                ✓ {metodiToast}
+              </div>
+            )}
+
+            {/* Chip dei metodi selezionati */}
+            {((form.metodi_ids || []) as string[]).length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2 mt-1">
+                {((form.metodi_ids || []) as string[]).map((mid: string) => {
+                  const m = metodi.find(m => m.id === mid)
+                  return (
+                    <span key={mid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs border border-blue-200">
+                      {m ? m.nome : mid}
+                      <button
+                        type="button"
+                        onClick={() => handleMetodoRemove(mid)}
+                        className="hover:text-blue-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Input con dropdown suggerimenti */}
+            <div className="relative">
+              <Input
+                value={metodiInput}
+                onChange={e => handleMetodiInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (metodiSuggerimenti.length === 1) {
+                      handleMetodoSelect(metodiSuggerimenti[0])
+                    } else {
+                      handleMetodoCreateOrAdd()
+                    }
+                  }
+                  if (e.key === 'Escape') {
+                    setMetodiDropdownOpen(false)
+                    setMetodiInput('')
+                  }
+                }}
+                placeholder="Cerca o crea metodo (es. pos_098)..."
+                className="text-sm"
+              />
+
+              {/* Dropdown suggerimenti */}
+              {metodiDropdownOpen && (metodiSuggerimenti.length > 0 || metodiInput.trim().length > 0) && (
+                <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-40 overflow-y-auto">
+                  {metodiSuggerimenti.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent"
+                      onClick={() => handleMetodoSelect(m)}
+                    >
+                      {m.nome}
+                    </button>
+                  ))}
+                  {metodiInput.trim() && !metodi.find(m => m.nome.toLowerCase() === metodiInput.toLowerCase()) && (
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent text-blue-600 border-t"
+                      onClick={handleMetodoCreateOrAdd}
+                    >
+                      + Crea metodo "{metodiInput.trim()}"
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Digita per cercare tra i metodi esistenti o premi Invio / clicca "+ Crea" per aggiungerne uno nuovo.
+            </p>
+          </div>
+
+          <Separator />
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Identificazione</div>
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2"><Label className="text-xs">Nome *</Label><Input value={form.nome || ''} onChange={e => set('nome', e.target.value)} /></div>
@@ -182,7 +334,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
           <Separator />
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Uso e Ubicazione</div>
           <div className="grid grid-cols-3 gap-3">
-            {/* FEAT-J: destinazione uso come select a valori fissi */}
             <div>
               <Label className="text-xs">Destinazione d'Uso</Label>
               <Select
@@ -268,7 +419,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             )}
           </div>
 
-          {/* FEAT-K: avviso date anomale — compare solo dopo il salvataggio se data_apertura >= scadenza */}
+          {/* FEAT-K: avviso date anomale */}
           {warningDate && (
             <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">⚠️</span>

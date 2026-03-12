@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { X, Upload } from 'lucide-react'
 import { compostiApi } from '@/lib/api'
 import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
-import { Upload } from 'lucide-react'
 
 // FEAT-J: stessa lista usata in CompostoForm e CompostiPage
 const DESTINAZIONI_USO = [
@@ -45,6 +45,14 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
   const [vociStoccaggio, setVociStoccaggio] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // FEAT-metodi-campo
+  const [metodi, setMetodi] = useState<any[]>([])
+  const [metodiIds, setMetodiIds] = useState<string[]>([])
+  const [metodiInput, setMetodiInput] = useState('')
+  const [metodiSuggerimenti, setMetodiSuggerimenti] = useState<any[]>([])
+  const [metodiDropdownOpen, setMetodiDropdownOpen] = useState(false)
+  const [metodiToast, setMetodiToast] = useState('')
+
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
 
   useEffect(() => {
@@ -61,6 +69,11 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     } catch (err) {
       console.error('Error in useEffect:', err)
     }
+
+    // Carica la lista metodi disponibili
+    window.electronAPI.invoke('metodi:list').then((result: unknown) => {
+      setMetodi(result as any[])
+    }).catch(err => console.error('Error loading metodi:', err))
   }, [])
 
   const reset = () => {
@@ -73,8 +86,60 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       fiale: '1',
     })
     setNomi([])
+    setMetodiIds([])
+    setMetodiInput('')
+    setMetodiToast('')
     if (fileRef.current) fileRef.current.value = ''
   }
+
+  // --- Gestione campo Metodi ---
+
+  const handleMetodiInput = (val: string) => {
+    setMetodiInput(val)
+    if (val.trim().length === 0) {
+      setMetodiSuggerimenti([])
+      setMetodiDropdownOpen(false)
+      return
+    }
+    const filtered = metodi.filter(m =>
+      m.nome.toLowerCase().includes(val.toLowerCase()) &&
+      !metodiIds.includes(m.id)
+    )
+    setMetodiSuggerimenti(filtered)
+    setMetodiDropdownOpen(true)
+  }
+
+  const handleMetodoSelect = (metodo: any) => {
+    if (!metodiIds.includes(metodo.id)) {
+      setMetodiIds(prev => [...prev, metodo.id])
+    }
+    setMetodiInput('')
+    setMetodiSuggerimenti([])
+    setMetodiDropdownOpen(false)
+  }
+
+  const handleMetodoCreateOrAdd = async () => {
+    const nome = metodiInput.trim()
+    if (!nome) return
+    try {
+      const esistente = metodi.find(m => m.nome.toLowerCase() === nome.toLowerCase())
+      const metodo = await window.electronAPI.invoke('metodi:get-or-create', nome) as any
+      handleMetodoSelect(metodo)
+      setMetodi(prev => prev.find(m => m.id === metodo.id) ? prev : [...prev, metodo])
+      if (!esistente) {
+        setMetodiToast(`Metodo "${nome}" creato`)
+        setTimeout(() => setMetodiToast(''), 2500)
+      }
+    } catch (err) {
+      console.error('Errore creazione metodo:', err)
+    }
+  }
+
+  const handleMetodoRemove = (metodoId: string) => {
+    setMetodiIds(prev => prev.filter(id => id !== metodoId))
+  }
+
+  // --- Fine gestione Metodi ---
 
   const handleFileLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -98,6 +163,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         concentrazione: form.concentrazione ? parseFloat(form.concentrazione) : null,
         unita_conc: form.unita_conc || UNITA_DEFAULT,
         fiala: form.fiale ? String(parseInt(form.fiale)) : null,
+        metodi_ids: metodiIds,
         nomi,
       }
       const result = await compostiApi.createMix(data)
@@ -124,6 +190,84 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         </p>
 
         <div className="space-y-4">
+
+          {/* FEAT-metodi-campo: campo Metodi in cima */}
+          <div>
+            <Label className="text-xs">Metodi Analitici</Label>
+
+            {metodiToast && (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 mt-1 mb-1">
+                ✓ {metodiToast}
+              </div>
+            )}
+
+            {metodiIds.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2 mt-1">
+                {metodiIds.map((mid: string) => {
+                  const m = metodi.find(m => m.id === mid)
+                  return (
+                    <span key={mid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs border border-blue-200">
+                      {m ? m.nome : mid}
+                      <button type="button" onClick={() => handleMetodoRemove(mid)} className="hover:text-blue-600">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="relative">
+              <Input
+                value={metodiInput}
+                onChange={e => handleMetodiInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (metodiSuggerimenti.length === 1) {
+                      handleMetodoSelect(metodiSuggerimenti[0])
+                    } else {
+                      handleMetodoCreateOrAdd()
+                    }
+                  }
+                  if (e.key === 'Escape') {
+                    setMetodiDropdownOpen(false)
+                    setMetodiInput('')
+                  }
+                }}
+                placeholder="Cerca o crea metodo (es. pos_098)..."
+                className="text-sm"
+              />
+              {metodiDropdownOpen && (metodiSuggerimenti.length > 0 || metodiInput.trim().length > 0) && (
+                <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-40 overflow-y-auto">
+                  {metodiSuggerimenti.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent"
+                      onClick={() => handleMetodoSelect(m)}
+                    >
+                      {m.nome}
+                    </button>
+                  ))}
+                  {metodiInput.trim() && !metodi.find(m => m.nome.toLowerCase() === metodiInput.toLowerCase()) && (
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent text-blue-600 border-t"
+                      onClick={handleMetodoCreateOrAdd}
+                    >
+                      + Crea metodo "{metodiInput.trim()}"
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Associa il mix a uno o più metodi. I metodi verranno applicati a tutti i componenti.
+            </p>
+          </div>
+
+          <Separator />
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Metadati comuni</div>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -195,7 +339,6 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
                 </SelectContent>
               </Select>
             </div>
-            {/* FEAT-J: opzioni allineate a CompostoForm */}
             <div>
               <Label className="text-xs">Destinazione Uso</Label>
               <Select value={form.destinazione_uso || '_none'} onValueChange={v => set('destinazione_uso', v === '_none' ? '' : v)}>

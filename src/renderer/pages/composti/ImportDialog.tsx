@@ -30,6 +30,8 @@ const DB_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: 'matrice', label: 'Matrice' },
   { key: 'pos', label: 'POS' },
   { key: 'note', label: 'Note' },
+  // FEAT-metodi-import: colonna metodi analitici
+  { key: 'metodi_nomi', label: 'Metodi Analitici (separati da ;)' },
   { key: '_skip', label: '— Ignora colonna —' },
 ]
 
@@ -147,6 +149,8 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
       matrice:            ['matrice', 'matrix'],
       pos:                ['pos'],
       note:               ['note', 'notes', 'annotazioni'],
+      // FEAT-metodi-import: alias per la colonna metodi
+      metodi_nomi:        ['metodi', 'metodo', 'metodianalitici', 'methods', 'method'],
     }
 
     const seen: Record<string, number> = {}
@@ -256,19 +260,65 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     let count = 0
     let errori = 0
 
+    // FEAT-metodi-import: carica tutti i metodi esistenti una volta sola
+    let metodiEsistenti: any[] = []
+    try {
+      metodiEsistenti = await window.electronAPI.invoke('metodi:list') as any[]
+    } catch {
+      metodiEsistenti = []
+    }
+
     for (const row of csvRows) {
       const composto: Record<string, unknown> = {}
+      let metodiNomiRaw = ''
+
       csvHeaders.forEach((h, i) => {
         const dbField = mapping[h]
-        if (dbField && dbField !== '_skip') {
-          const raw = row[i] ?? ''
-          const val = DATE_FIELDS.has(dbField) ? parseDate(raw) : String(raw).trim()
-          // Prima occorrenza non vuota vince per campi duplicati
-          if (val !== '' && !composto[dbField]) composto[dbField] = val
+        if (!dbField || dbField === '_skip') return
+
+        // FEAT-metodi-import: intercetta la colonna metodi prima di metterla nel payload
+        if (dbField === 'metodi_nomi') {
+          metodiNomiRaw = String(row[i] ?? '').trim()
+          return
         }
+
+        const raw = row[i] ?? ''
+        const val = DATE_FIELDS.has(dbField) ? parseDate(raw) : String(raw).trim()
+        if (val !== '' && !composto[dbField]) composto[dbField] = val
       })
 
       if (!composto.nome) continue
+
+      // FEAT-metodi-import: risolve i nomi metodi in ID, crea quelli mancanti
+      if (metodiNomiRaw) {
+        const nomiMetodi = metodiNomiRaw
+          .split(';')
+          .map(n => n.trim())
+          .filter(Boolean)
+
+        const ids: string[] = []
+        for (const nome of nomiMetodi) {
+          // Cerca tra quelli già esistenti (case-insensitive)
+          let metodo = metodiEsistenti.find(
+            (m: any) => m.nome.toLowerCase() === nome.toLowerCase()
+          )
+          if (!metodo) {
+            // Non esiste: lo crea e aggiorna la lista locale
+            try {
+              metodo = await window.electronAPI.invoke('metodi:get-or-create', nome) as any
+              metodiEsistenti.push(metodo)
+            } catch {
+              // Se fallisce la creazione, salta questo metodo
+              continue
+            }
+          }
+          if (metodo?.id) ids.push(metodo.id)
+        }
+
+        if (ids.length > 0) {
+          composto.metodi_ids = ids
+        }
+      }
 
       try {
         await window.electronAPI.invoke('composti:create', composto)
@@ -306,6 +356,14 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
               Seleziona un file <strong>.csv</strong> o <strong>.xlsx</strong> esportato da Excel.
               La prima riga deve contenere le intestazioni delle colonne.
             </p>
+            <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
+              <p className="font-medium mb-1">💡 Colonna Metodi Analitici</p>
+              <p>Per associare i metodi, aggiungi una colonna chiamata <strong>metodi</strong> con i nomi separati da punto e virgola.</p>
+              <p className="mt-1 font-mono bg-white border border-blue-100 rounded px-2 py-1 inline-block">
+                es: <code>pos_098; pos_099; pos_100</code>
+              </p>
+              <p className="mt-1">I metodi non ancora presenti nel database verranno creati automaticamente.</p>
+            </div>
             <input
               ref={fileInputRef}
               type="file"

@@ -206,7 +206,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
   })
 
   // FEAT-2: restituisce quanti composti condividono lo stesso lotto del composto id
-  // Se il composto non ha mix_id o lotto, ritorna { count: 1, lotto: null }
   ipcMain.handle('composti:count-by-lotto', (_, id: number) => {
     const db = getDb()
     const row = db.prepare('SELECT lotto, mix_id FROM composti WHERE id = ?').get(id) as any
@@ -217,12 +216,13 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     return { count: result.count, lotto: row.lotto }
   })
 
-  // FEAT-2: elimina tutti i composti (e dati correlati via CASCADE) con lo stesso lotto
+  // FEAT-2: elimina tutti i composti con lo stesso lotto
   ipcMain.handle('composti:delete-by-lotto', (_, lotto: string) => {
     getDb().prepare('DELETE FROM composti WHERE lotto = ?').run(lotto)
     return { ok: true }
   })
 
+  // FEAT-metodi-campo: create-mix ora accetta metodi_ids e li salva per ogni composto creato
   ipcMain.handle('composti:create-mix', (_, data: {
     forma_commerciale: string
     forma: string
@@ -236,10 +236,13 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     classe: string | null
     destinazione_uso: string | null
     fiala?: string | null
+    metodi_ids?: string[]
     nomi: string[]
   }) => {
     const db = getDb()
     const mix_id = 'mix_' + Date.now().toString(36)
+    const metodiIds = data.metodi_ids || []
+
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
       'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
@@ -248,6 +251,9 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     const placeholders = cols.map(c => `@${c}`).join(', ')
     const insert = db.prepare(
       `INSERT INTO composti (${cols.join(', ')}) VALUES (${placeholders})`
+    )
+    const insertLink = db.prepare(
+      'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
 
     const common = {
@@ -281,7 +287,12 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
 
     const count = db.transaction(() => {
       for (const nome of data.nomi) {
-        insert.run({ ...common, nome })
+        const result = insert.run({ ...common, nome })
+        const newId = result.lastInsertRowid
+        // FEAT-metodi-campo: salva i link metodi per ogni composto del mix
+        for (const mid of metodiIds) {
+          insertLink.run(newId, mid)
+        }
       }
       return data.nomi.length
     })()
@@ -299,7 +310,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     nuova_scadenza?: string
   }) => {
     const db = getDb()
-    // Inserisce solo il record storico — scadenza_prodotto rimane invariata
     const result = db.prepare(
       `INSERT INTO composti_storia
          (composto_id, tipo, data, note, n_registro_qc, batch_analitico, lotto_crm_valido, nuova_scadenza)
@@ -314,21 +324,22 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       data.lotto_crm_valido || null,
       data.nuova_scadenza || null
     )
-  // Fix BUG-2: aggiorna data_dismissione sul composto (e sul mix intero se presente)
-  if (data.tipo === 'Dismissione') {
-    const comp = db.prepare('SELECT mix_id FROM composti WHERE id = ?').get(compostoId) as { mix_id: string | null } | undefined
-    if (comp?.mix_id) {
-      db.prepare(
-        `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE mix_id = ?`
-      ).run(data.data, comp.mix_id)
-    } else {
-      db.prepare(
-        `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE id = ?`
-      ).run(data.data, compostoId)
-    }
-  }
 
-  return { id: result.lastInsertRowid }
+    // Fix BUG-2: aggiorna data_dismissione sul composto (e sul mix intero se presente)
+    if (data.tipo === 'Dismissione') {
+      const comp = db.prepare('SELECT mix_id FROM composti WHERE id = ?').get(compostoId) as { mix_id: string | null } | undefined
+      if (comp?.mix_id) {
+        db.prepare(
+          `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE mix_id = ?`
+        ).run(data.data, comp.mix_id)
+      } else {
+        db.prepare(
+          `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE id = ?`
+        ).run(data.data, compostoId)
+      }
+    }
+
+    return { id: result.lastInsertRowid }
   })
 
   ipcMain.handle('composti:lotti-validi', (_, compostoId: number) => {
@@ -349,67 +360,23 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     `).all(corrente.nome, compostoId, oggi)
   })
 
-  ipcMain.handle('composti:apri-fiala', (_, compostoId: number, data: {
-    fiala_numero: number
-    data_apertura: string
-    operatore?: string
-    note?: string
-  }) => {
-    const db = getDb()
-    const comp = db.prepare('SELECT lotto FROM composti WHERE id = ?').get(compostoId) as any
-
-    if (comp?.lotto) {
-      const siblings = db.prepare('SELECT id FROM composti WHERE lotto = ?').all(comp.lotto) as any[]
-      const stmt = db.prepare(
-        `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
-         VALUES (?, 'apertura_fiala', ?, ?, ?)`
-      )
-      db.transaction(() => {
-        for (const s of siblings) {
-          stmt.run(s.id, data.data_apertura, data.fiala_numero, data.note || null)
-        }
-      })()
-      return { count: siblings.length }
-    } else {
-      const result = db.prepare(
-        `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
-         VALUES (?, 'apertura_fiala', ?, ?, ?)`
-      ).run(compostoId, data.data_apertura, data.fiala_numero, data.note || null)
-      return { id: result.lastInsertRowid }
-    }
-  })
-
-  // FEAT-4: restituisce dati completi (composto + storia + preparazioni) per export
-  // scope 'all' = tutti i composti, scope 'filtered' = solo gli ids passati
   ipcMain.handle('composti:export-data', (_, scope: 'all' | 'filtered', ids?: number[]) => {
     const db = getDb()
 
-    const composti: any[] = scope === 'filtered' && ids && ids.length > 0
-      ? ids.map(id => db.prepare('SELECT * FROM composti WHERE id = ?').get(id)).filter(Boolean) as any[]
-      : db.prepare('SELECT * FROM composti ORDER BY nome ASC').all() as any[]
+    const composti = scope === 'filtered' && ids && ids.length > 0
+      ? ids.map(id => db.prepare('SELECT * FROM composti WHERE id = ?').get(id)).filter(Boolean)
+      : db.prepare('SELECT * FROM composti ORDER BY nome ASC').all()
 
-    return composti.map(c => {
+    const result = (composti as any[]).map(c => {
       const storia = db.prepare(
         'SELECT * FROM composti_storia WHERE composto_id = ? ORDER BY data ASC'
       ).all(c.id)
       const preparazioni = db.prepare(
-        'SELECT * FROM preparazioni WHERE composto_id = ? ORDER BY data_prep DESC'
+        'SELECT * FROM preparazioni WHERE composto_id = ? ORDER BY data_prep ASC'
       ).all(c.id)
       return { ...c, storia, preparazioni }
     })
-  })
 
-  // ET-3: restituisce i campi necessari per le etichette vial, solo per gli ids passati
-  // Il campo `fiala` determina quante copie dell'etichetta vengono generate (min 1)
-  ipcMain.handle('composti:etichette-data', (_, ids: number[]) => {
-    const db = getDb()
-    if (!ids || ids.length === 0) return []
-    return ids
-      .map(id => db.prepare(
-        `SELECT id, nome, lotto, concentrazione, unita_conc, solvente,
-                data_apertura, scadenza_prodotto, operatore_apertura, fiala
-         FROM composti WHERE id = ?`
-      ).get(id))
-      .filter(Boolean)
+    return result
   })
 }

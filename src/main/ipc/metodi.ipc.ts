@@ -84,4 +84,20 @@ export function registerMetodiIpc(): void {
     getDb().prepare('DELETE FROM metodi WHERE id = ?').run(id)
     return { ok: true }
   })
+
+  // FEAT-metodi-campo: crea il metodo se non esiste già (ricerca per nome, case-insensitive)
+  // Usato dal form composto quando l'utente digita un nuovo nome metodo
+  ipcMain.handle('metodi:get-or-create', (_, nome: string) => {
+    const db = getDb()
+    const existing = db.prepare(
+      `SELECT * FROM metodi WHERE LOWER(nome) = LOWER(?)`
+    ).get(nome) as any
+    if (existing) return existing
+
+    const id = 'met_' + Date.now().toString(36)
+    db.prepare(
+      `INSERT INTO metodi (id, nome) VALUES (?, ?)`
+    ).run(id, nome)
+    return db.prepare('SELECT * FROM metodi WHERE id = ?').get(id)
+  })
 }
