@@ -121,6 +121,14 @@ export function CompostiPage() {
   const [composti, setComposti] = useState<any[]>([])
   const [metodi, setMetodi] = useState<any[]>([])
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value)
+    if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => setDebouncedSearch(value), 500)
+  }
 
   // --- Filtri multi-select ---
   const [filtroStati, setFiltroStati] = useState<string[]>([])
@@ -158,6 +166,15 @@ export function CompostiPage() {
     loadMetodi()
   }, [])
 
+  // Mappa id -> nome metodo pre-calcolata per ricerca veloce
+  const metodiNomeMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const m of metodi) {
+      map[m.id] = m.nome?.toLowerCase() ?? ''
+    }
+    return map
+  }, [metodi])
+
   // Opzioni Work dinamiche dai dati
   const opzioniWork = useMemo(() =>
     Array.from(
@@ -173,8 +190,8 @@ export function CompostiPage() {
     let result = composti
 
     // --- Ricerca testuale: tutti i campi stringa + nome metodo ---
-    if (search) {
-      const q = search.toLowerCase()
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase()
       result = result.filter(c =>
         c.nome?.toLowerCase().includes(q) ||
         c.codice_interno?.toLowerCase().includes(q) ||
@@ -192,11 +209,8 @@ export function CompostiPage() {
         c.stoccaggio?.toLowerCase().includes(q) ||
         c.accreditamento_crm?.toLowerCase().includes(q) ||
         c.work_standard?.toLowerCase().includes(q) ||
-        // ricerca per nome metodo associato
-        metodi.some(m =>
-          c.metodi_ids?.includes(m.id) &&
-          m.nome?.toLowerCase().includes(q)
-        )
+        // ricerca per nome metodo associato (usa mappa pre-calcolata)
+        c.metodi_ids?.some((id: string) => metodiNomeMap[id]?.includes(q))
       )
     }
 
@@ -249,7 +263,7 @@ export function CompostiPage() {
     }
 
     return result
-  }, [composti, metodi, search, filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi, filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire])
+  }, [composti, metodiNomeMap, debouncedSearch, filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi, filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire])
 
   const stats = useMemo(() => ({
     attivi: filtered.filter(c => {
@@ -358,7 +372,7 @@ export function CompostiPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => handleSearchChange(e.target.value)}
               placeholder="Cerca nome, lotto, metodo, accreditamento..."
               className="pl-9"
             />
