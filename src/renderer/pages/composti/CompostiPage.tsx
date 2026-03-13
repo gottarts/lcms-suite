@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { compostiApi } from '@/lib/api'
 import { CompostiTable } from './CompostiTable'
 import { CompostoForm } from './CompostoForm'
@@ -118,10 +119,14 @@ function MultiSelectDropdown({
 }
 
 export function CompostiPage() {
+  const location = useLocation()
   const [composti, setComposti] = useState<any[]>([])
   const [metodi, setMetodi] = useState<any[]>([])
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  // FIX-badge: se arriviamo da MetodoDrawer con state.searchFilter, pre-popola la ricerca
+  const initialSearch = (location.state as any)?.searchFilter ?? ''
+  const [search, setSearch] = useState(initialSearch)
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleSearchChange = (value: string) => {
@@ -159,13 +164,13 @@ export function CompostiPage() {
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
 
   const load = () => compostiApi.list().then(rows =>
-  setComposti(rows.map((c: any) => ({
-    ...c,
-    metodi_ids: c.metodi_ids_raw
-      ? c.metodi_ids_raw.split(',')
-      : [],
-  })))
-)
+    setComposti(rows.map((c: any) => ({
+      ...c,
+      metodi_ids: c.metodi_ids_raw
+        ? c.metodi_ids_raw.split(',')
+        : [],
+    })))
+  )
   const loadMetodi = () => window.electronAPI.invoke('metodi:list').then(setMetodi)
 
   useEffect(() => {

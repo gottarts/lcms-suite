@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { SlidePanel } from '@/components/shared/SlidePanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { metodiApi, compostiApi } from '@/lib/api'
 
 interface MetodoDrawerProps {
@@ -16,13 +17,23 @@ interface MetodoDrawerProps {
 export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDrawerProps) {
   const [metodo, setMetodo] = useState<any>(null)
   const [composti, setComposti] = useState<any[]>([])
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (metodoId) {
       metodiApi.get(metodoId).then(m => {
         setMetodo(m)
         if (m?.composti_ids?.length) {
-          compostiApi.list({ metodo_id: metodoId }).then(setComposti)
+          compostiApi.list({ metodo_id: metodoId }).then(rows => {
+            // FIX-badge: deduplicazione per id — evita badge multipli per stesso composto
+            const seen = new Set<number>()
+            const unique = rows.filter((c: any) => {
+              if (seen.has(c.id)) return false
+              seen.add(c.id)
+              return true
+            })
+            setComposti(unique)
+          })
         } else {
           setComposti([])
         }
@@ -40,6 +51,12 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
         <span className="text-right">{value}</span>
       </div>
     )
+  }
+
+  // FIX-badge: naviga a /composti con il nome del composto come filtro di ricerca
+  const handleBadgeClick = (composto: any) => {
+    onClose()
+    navigate('/composti', { state: { searchFilter: composto.nome } })
   }
 
   return (
@@ -96,7 +113,16 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
             </div>
             <div className="flex flex-wrap gap-1">
               {composti.map((c: any) => (
-                <Badge key={c.id} variant="outline" className="text-xs">{c.nome}</Badge>
+                <Badge
+                  key={c.id}
+                  variant="outline"
+                  className="text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors flex items-center gap-1"
+                  onClick={() => handleBadgeClick(c)}
+                  title="Vai ai composti filtrati per questo nome"
+                >
+                  {c.nome}
+                  <ExternalLink className="h-3 w-3 opacity-50" />
+                </Badge>
               ))}
             </div>
           </>

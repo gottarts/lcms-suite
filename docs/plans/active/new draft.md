@@ -5,7 +5,7 @@
 
  ## altri
   
-  Ogni composto inserito compare nei metodi. ad esempio metodo pos14 ha 3 volte acrylamide. Ciascun composto (con lo stesso nome) deve comparire singolarmente nel metodo. Anche i nomi metodi devono essere mergiati se uguali. ad esempio se cambio nome a un metodo (e lo faccio uguale ad un altro i composti devono mergiare.)
+
   Esporta non ha metodi. deve everlo
 
 
