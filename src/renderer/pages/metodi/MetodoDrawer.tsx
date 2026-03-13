@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SlidePanel } from '@/components/shared/SlidePanel'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
         setMetodo(m)
         if (m?.composti_ids?.length) {
           compostiApi.list({ metodo_id: metodoId }).then(rows => {
-            // FIX-badge: deduplicazione per id — evita badge multipli per stesso composto
+            // deduplicazione per id (sicurezza)
             const seen = new Set<number>()
             const unique = rows.filter((c: any) => {
               if (seen.has(c.id)) return false
@@ -41,6 +41,16 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
     }
   }, [metodoId])
 
+  // Raggruppa per nome: array di [nome, count] ordinato alfabeticamente
+  const compostiPerNome = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of composti) {
+      const nome = c.nome ?? '—'
+      map.set(nome, (map.get(nome) ?? 0) + 1)
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [composti])
+
   if (!metodo) return null
 
   const Field = ({ label, value }: { label: string; value?: string | null }) => {
@@ -53,10 +63,10 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
     )
   }
 
-  // FIX-badge: naviga a /composti con il nome del composto come filtro di ricerca
-  const handleBadgeClick = (composto: any) => {
+  // Naviga a /composti filtrando per nome sostanza
+  const handleBadgeClick = (nome: string) => {
     onClose()
-    navigate('/composti', { state: { searchFilter: composto.nome } })
+    navigate('/composti', { state: { searchFilter: nome } })
   }
 
   return (
@@ -105,22 +115,27 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
           </>
         )}
 
-        {composti.length > 0 && (
+        {compostiPerNome.length > 0 && (
           <>
             <Separator />
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Composti associati ({composti.length})
+              Composti associati ({compostiPerNome.length} sostanze, {composti.length} lotti)
             </div>
             <div className="flex flex-wrap gap-1">
-              {composti.map((c: any) => (
+              {compostiPerNome.map(([nome, count]) => (
                 <Badge
-                  key={c.id}
+                  key={nome}
                   variant="outline"
                   className="text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors flex items-center gap-1"
-                  onClick={() => handleBadgeClick(c)}
+                  onClick={() => handleBadgeClick(nome)}
                   title="Vai ai composti filtrati per questo nome"
                 >
-                  {c.nome}
+                  {nome}
+                  {count > 1 && (
+                    <span className="ml-1 bg-muted text-muted-foreground rounded-full px-1.5 py-0 text-[10px] font-medium">
+                      {count}
+                    </span>
+                  )}
                   <ExternalLink className="h-3 w-3 opacity-50" />
                 </Badge>
               ))}
