@@ -13,8 +13,9 @@ export function registerCompostiIpc(): void {
   COUNT(CASE WHEN p.stato = 'Attiva' THEN 1 END) AS prep_attive_count,
   COUNT(CASE WHEN p.stato = 'Attiva' AND p.scadenza < date('now') THEN 1 END) AS prep_scadute_count,
   COUNT(CASE WHEN cs.tipo = 'apertura_fiala' THEN 1 END) AS fiale_aperte_count,
-  (SELECT MAX(nuova_scadenza) FROM composti_storia
-   WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) AS ultima_rivalidazione
+   (SELECT MAX(nuova_scadenza) FROM composti_storia
+   WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) AS ultima_rivalidazione,
+  (SELECT GROUP_CONCAT(metodo_id) FROM composti_metodi WHERE composto_id = c.id) AS metodi_ids_raw
 FROM composti c
 LEFT JOIN preparazioni p ON p.composto_id = c.id
 LEFT JOIN composti_storia cs ON cs.composto_id = c.id`

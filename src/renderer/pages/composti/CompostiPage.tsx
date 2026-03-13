@@ -158,7 +158,14 @@ export function CompostiPage() {
   const [etichetteOpen, setEtichetteOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
 
-  const load = () => compostiApi.list().then(setComposti)
+  const load = () => compostiApi.list().then(rows =>
+  setComposti(rows.map((c: any) => ({
+    ...c,
+    metodi_ids: c.metodi_ids_raw
+      ? c.metodi_ids_raw.split(',')
+      : [],
+  })))
+)
   const loadMetodi = () => window.electronAPI.invoke('metodi:list').then(setMetodi)
 
   useEffect(() => {
