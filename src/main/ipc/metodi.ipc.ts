@@ -57,6 +57,25 @@ export function registerMetodiIpc(): void {
     const metodoData = { ...data }
     delete metodoData.composti_ids
 
+    // FIX-merge: se il nuovo nome collide con un metodo esistente (diverso da questo),
+    // non salvare — restituisce un segnale al frontend per chiedere conferma
+    const nuovoNome = (data.nome as string)?.trim()
+    if (nuovoNome) {
+      const conflict = db.prepare(
+        `SELECT id, nome FROM metodi WHERE LOWER(nome) = LOWER(?) AND id != ?`
+      ).get(nuovoNome, id) as any
+      if (conflict) {
+        return {
+          needsMerge: true,
+          conflictId: conflict.id,
+          conflictNome: conflict.nome,
+          sourceId: id,
+          data: metodoData,
+          compostiIds,
+        }
+      }
+    }
+
     const updateMetodo = db.prepare(
       `UPDATE metodi SET nome=@nome, strumento_id=@strumento_id, matrice=@matrice,
        colonna=@colonna, fase_a=@fase_a, fase_b=@fase_b, gradiente=@gradiente,
@@ -78,6 +97,57 @@ export function registerMetodiIpc(): void {
     })()
 
     return db.prepare('SELECT * FROM metodi WHERE id = ?').get(id)
+  })
+
+  // FIX-merge: unisce i composti del metodo sorgente nel metodo destinazione,
+  // poi aggiorna i campi del metodo destinazione con i dati del sorgente ed elimina il sorgente.
+  // sourceId = metodo da eliminare, destId = metodo che sopravvive
+  ipcMain.handle('metodi:merge', (_, sourceId: string, destId: string, data: Record<string, unknown>, compostiIds: number[]) => {
+    const db = getDb()
+
+    const updateMetodo = db.prepare(
+      `UPDATE metodi SET nome=@nome, strumento_id=@strumento_id, matrice=@matrice,
+       colonna=@colonna, fase_a=@fase_a, fase_b=@fase_b, gradiente=@gradiente,
+       flusso=@flusso, ionizzazione=@ionizzazione, polarita=@polarita,
+       acquisizione=@acquisizione, srm=@srm, lims_id=@lims_id, oqlab_id=@oqlab_id,
+       note=@note, updated_at=datetime('now') WHERE id=@id`
+    )
+    const getDestLinks = db.prepare('SELECT composto_id FROM composti_metodi WHERE metodo_id = ?')
+    const deleteSrcLinks = db.prepare('DELETE FROM composti_metodi WHERE metodo_id = ?')
+    const deleteDestLinks = db.prepare('DELETE FROM composti_metodi WHERE metodo_id = ?')
+    const insertLink = db.prepare('INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)')
+    const deleteSource = db.prepare('DELETE FROM metodi WHERE id = ?')
+
+    db.transaction(() => {
+      // Raccoglie tutti i composti già collegati al metodo destinazione
+      const existingDestIds = new Set(
+        (getDestLinks.all(destId) as any[]).map(r => r.composto_id)
+      )
+      // Raccoglie i composti del sorgente (quelli che stanno per essere spostati)
+      const srcLinks = getDestLinks.all(sourceId) as any[]
+
+      // Aggiorna i campi del metodo destinazione con i dati del form
+      updateMetodo.run({ ...data, id: destId })
+
+      // Rimuove tutti i link del destinazione e del sorgente
+      deleteDestLinks.run(destId)
+      deleteSrcLinks.run(sourceId)
+
+      // Unione: tutti i composti di entrambi + quelli selezionati nel form
+      const allIds = new Set<number>([
+        ...existingDestIds,
+        ...srcLinks.map(r => r.composto_id),
+        ...compostiIds,
+      ])
+      for (const cid of allIds) {
+        insertLink.run(cid, destId)
+      }
+
+      // Elimina il metodo sorgente
+      deleteSource.run(sourceId)
+    })()
+
+    return db.prepare('SELECT * FROM metodi WHERE id = ?').get(destId)
   })
 
   ipcMain.handle('metodi:delete', (_, id: string) => {

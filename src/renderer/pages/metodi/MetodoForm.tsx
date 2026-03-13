@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,9 +17,20 @@ interface MetodoFormProps {
   onSave: () => void
 }
 
+// FIX-merge: stato del dialogo di conferma merge
+interface MergeState {
+  conflictId: string
+  conflictNome: string
+  sourceId: string
+  data: Record<string, unknown>
+  compostiIds: number[]
+}
+
 export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoFormProps) {
   const isEdit = !!metodo
   const [form, setForm] = useState<Record<string, any>>({})
+  // FIX-merge: se il backend segnala un conflitto, salviamo qui i dati per il dialogo
+  const [mergeState, setMergeState] = useState<MergeState | null>(null)
 
   useEffect(() => {
     if (metodo) {
@@ -44,7 +56,18 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
       if (k !== 'id' && k !== 'nome' && data[k] === '') data[k] = null
     }
     if (isEdit) {
-      await metodiApi.update(metodo!.id, data)
+      // FIX-merge: update può restituire { needsMerge: true, ... } invece del metodo aggiornato
+      const result = await metodiApi.update(metodo!.id, data) as any
+      if (result?.needsMerge) {
+        setMergeState({
+          conflictId: result.conflictId,
+          conflictNome: result.conflictNome,
+          sourceId: result.sourceId,
+          data: result.data,
+          compostiIds: result.compostiIds,
+        })
+        return // non chiudere il form, aspettiamo conferma
+      }
     } else {
       await metodiApi.create(data)
     }
@@ -52,78 +75,120 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
     onClose()
   }
 
+  // FIX-merge: l'utente ha confermato — esegue il merge
+  const handleMergeConfirm = async () => {
+    if (!mergeState) return
+    await (window as any).electronAPI.invoke(
+      'metodi:merge',
+      mergeState.sourceId,
+      mergeState.conflictId,
+      mergeState.data,
+      mergeState.compostiIds,
+    )
+    setMergeState(null)
+    onSave()
+    onClose()
+  }
+
+  const handleMergeCancel = () => {
+    setMergeState(null)
+    // Il form rimane aperto così l'utente può scegliere un nome diverso
+  }
+
   return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="font-heading">{isEdit ? 'Modifica metodo' : 'Nuovo metodo'}</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={v => !v && onClose()}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-heading">{isEdit ? 'Modifica metodo' : 'Nuovo metodo'}</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Identificazione</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <Label className="text-xs">Nome *</Label>
-              <Input value={form.nome || ''} onChange={e => set('nome', e.target.value)} />
+          <div className="space-y-4">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Identificazione</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label className="text-xs">Nome *</Label>
+                <Input value={form.nome || ''} onChange={e => set('nome', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Strumento</Label>
+                <Select value={form.strumento_id || ''} onValueChange={v => set('strumento_id', v)}>
+                  <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                  <SelectContent>
+                    {strumenti.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.codice}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Matrice</Label>
+                <Input value={form.matrice || ''} onChange={e => set('matrice', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">LIMS ID</Label>
+                <Input value={form.lims_id || ''} onChange={e => set('lims_id', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">OQLab ID</Label>
+                <Input value={form.oqlab_id || ''} onChange={e => set('oqlab_id', e.target.value)} />
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">Strumento</Label>
-              <Select value={form.strumento_id || ''} onValueChange={v => set('strumento_id', v)}>
-                <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                <SelectContent>
-                  {strumenti.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.codice}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            <Separator />
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cromatografia LC</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs">Colonna</Label><Input value={form.colonna || ''} onChange={e => set('colonna', e.target.value)} /></div>
+              <div><Label className="text-xs">Fase A</Label><Input value={form.fase_a || ''} onChange={e => set('fase_a', e.target.value)} /></div>
+              <div><Label className="text-xs">Fase B</Label><Input value={form.fase_b || ''} onChange={e => set('fase_b', e.target.value)} /></div>
+              <div><Label className="text-xs">Gradiente</Label><Input value={form.gradiente || ''} onChange={e => set('gradiente', e.target.value)} /></div>
+              <div><Label className="text-xs">Flusso</Label><Input value={form.flusso || ''} onChange={e => set('flusso', e.target.value)} /></div>
             </div>
-            <div>
-              <Label className="text-xs">Matrice</Label>
-              <Input value={form.matrice || ''} onChange={e => set('matrice', e.target.value)} />
+
+            <Separator />
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">MS</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs">Ionizzazione</Label><Input value={form.ionizzazione || ''} onChange={e => set('ionizzazione', e.target.value)} /></div>
+              <div><Label className="text-xs">Polarità</Label><Input value={form.polarita || ''} onChange={e => set('polarita', e.target.value)} /></div>
+              <div><Label className="text-xs">Acquisizione</Label><Input value={form.acquisizione || ''} onChange={e => set('acquisizione', e.target.value)} /></div>
+              <div><Label className="text-xs">SRM</Label><Input value={form.srm || ''} onChange={e => set('srm', e.target.value)} /></div>
             </div>
+
+            <Separator />
             <div>
-              <Label className="text-xs">LIMS ID</Label>
-              <Input value={form.lims_id || ''} onChange={e => set('lims_id', e.target.value)} />
-            </div>
-            <div>
-              <Label className="text-xs">OQLab ID</Label>
-              <Input value={form.oqlab_id || ''} onChange={e => set('oqlab_id', e.target.value)} />
+              <Label className="text-xs">Note</Label>
+              <Textarea value={form.note || ''} onChange={e => set('note', e.target.value)} rows={3} />
             </div>
           </div>
 
-          <Separator />
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cromatografia LC</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label className="text-xs">Colonna</Label><Input value={form.colonna || ''} onChange={e => set('colonna', e.target.value)} /></div>
-            <div><Label className="text-xs">Fase A</Label><Input value={form.fase_a || ''} onChange={e => set('fase_a', e.target.value)} /></div>
-            <div><Label className="text-xs">Fase B</Label><Input value={form.fase_b || ''} onChange={e => set('fase_b', e.target.value)} /></div>
-            <div><Label className="text-xs">Gradiente</Label><Input value={form.gradiente || ''} onChange={e => set('gradiente', e.target.value)} /></div>
-            <div><Label className="text-xs">Flusso</Label><Input value={form.flusso || ''} onChange={e => set('flusso', e.target.value)} /></div>
-          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={onClose}>Annulla</Button>
+            <Button onClick={handleSave} disabled={!form.nome?.trim()}>
+              {isEdit ? 'Salva' : 'Crea'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          <Separator />
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">MS</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label className="text-xs">Ionizzazione</Label><Input value={form.ionizzazione || ''} onChange={e => set('ionizzazione', e.target.value)} /></div>
-            <div><Label className="text-xs">Polarità</Label><Input value={form.polarita || ''} onChange={e => set('polarita', e.target.value)} /></div>
-            <div><Label className="text-xs">Acquisizione</Label><Input value={form.acquisizione || ''} onChange={e => set('acquisizione', e.target.value)} /></div>
-            <div><Label className="text-xs">SRM</Label><Input value={form.srm || ''} onChange={e => set('srm', e.target.value)} /></div>
-          </div>
-
-          <Separator />
-          <div>
-            <Label className="text-xs">Note</Label>
-            <Textarea value={form.note || ''} onChange={e => set('note', e.target.value)} rows={3} />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Annulla</Button>
-          <Button onClick={handleSave} disabled={!form.nome?.trim()}>
-            {isEdit ? 'Salva' : 'Crea'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {/* FIX-merge: dialogo di conferma quando il nuovo nome collide con un metodo esistente */}
+      <AlertDialog open={!!mergeState} onOpenChange={v => !v && handleMergeCancel()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Metodo già esistente</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esiste già un metodo chiamato <strong>"{mergeState?.conflictNome}"</strong>.
+              <br /><br />
+              Vuoi unire i due metodi? I composti associati a entrambi verranno collegati
+              al metodo <strong>"{mergeState?.conflictNome}"</strong> e il metodo corrente
+              verrà eliminato.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleMergeCancel}>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleMergeConfirm}>Unisci metodi</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
