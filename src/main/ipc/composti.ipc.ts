@@ -182,32 +182,31 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
 
+    // Legge il vecchio lotto PRIMA dell'update, serve per LOTTO-SYNC
+    const vecchioLotto = row.mix_id
+      ? (db.prepare('SELECT lotto FROM composti WHERE id = ?').get(id) as any)?.lotto ?? null
+      : null
+
     db.transaction(() => {
-      // 1. Aggiorna il composto corrente
       updateComposto.run(row)
 
-      // G-2: sincronizzazione fiale per lotto (composti senza mix_id)
       if (row.fiala !== undefined && row.fiala !== null && row.lotto && !row.mix_id) {
         db.prepare('UPDATE composti SET fiala = ? WHERE lotto = ? AND id != ?')
           .run(row.fiala, row.lotto, id)
       }
 
-      // MIX-SYNC: se il composto appartiene a un mix, propaga tutti i campi comuni
-      // a tutti gli altri composti dello stesso mix_id (escluso nome che è unico per composto)
       if (row.mix_id) {
+        // MIX-SYNC: propaga solo i campi comuni a tutti i composti del mix.
+        // I campi per-riga (lotto, scadenza_prodotto, data_apertura, produttore,
+        // forma_commerciale) NON vengono toccati — ogni composto ha il suo valore.
         db.prepare(`
           UPDATE composti SET
             codice_interno      = ?,
-            forma_commerciale   = ?,
             concentrazione      = ?,
             unita_conc          = ?,
             solvente            = ?,
             fiala               = ?,
-            produttore          = ?,
-            lotto               = ?,
             operatore_apertura  = ?,
-            data_apertura       = ?,
-            scadenza_prodotto   = ?,
             classe              = ?,
             destinazione_uso    = ?,
             work_standard       = ?,
@@ -219,30 +218,21 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
             updated_at          = datetime('now')
           WHERE mix_id = ? AND id != ?
         `).run(
-          row.codice_interno,
-          row.forma_commerciale,
-          row.concentrazione,
-          row.unita_conc,
-          row.solvente,
-          row.fiala,
-          row.produttore,
-          row.lotto,
-          row.operatore_apertura,
-          row.data_apertura,
-          row.scadenza_prodotto,
-          row.classe,
-          row.destinazione_uso,
-          row.work_standard,
-          row.ubicazione,
-          row.stoccaggio,
-          row.accreditamento_crm,
-          row.volume_ml,
-          row.arpa,
-          row.mix_id,
-          id
+          row.codice_interno, row.concentrazione, row.unita_conc,
+          row.solvente, row.fiala, row.operatore_apertura,
+          row.classe, row.destinazione_uso,
+          row.work_standard, row.ubicazione, row.stoccaggio, row.accreditamento_crm,
+          row.volume_ml, row.arpa, row.mix_id, id
         )
 
-        // Sincronizza anche i metodi: applica gli stessi metodi_ids a tutti i composti del mix
+        // LOTTO-SYNC: se il lotto è cambiato, aggiorna tutti i composti del mix
+        // che avevano il vecchio lotto con il nuovo valore.
+        if (row.lotto !== vecchioLotto && row.lotto) {
+          db.prepare(
+            'UPDATE composti SET lotto = ?, updated_at = datetime(\'now\') WHERE mix_id = ? AND lotto = ? AND id != ?'
+          ).run(row.lotto, row.mix_id, vecchioLotto, id)
+        }
+
         const altriIds = db.prepare(
           'SELECT id FROM composti WHERE mix_id = ? AND id != ?'
         ).all(row.mix_id, id) as { id: number }[]
@@ -259,7 +249,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
         }
       }
 
-      // Aggiorna i metodi del composto corrente
       deleteLinks.run(id)
       for (const mid of metodiIds) {
         insertLink.run(id, mid)
@@ -289,7 +278,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     return { ok: true }
   })
 
-  // MIX-SYNC: restituisce il numero di composti appartenenti allo stesso mix_id
   ipcMain.handle('composti:count-by-mix', (_, mix_id: string) => {
     const result = getDb().prepare(
       'SELECT COUNT(*) as count FROM composti WHERE mix_id = ?'
@@ -316,7 +304,16 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     codice_interno?: string | null
     operatore_apertura?: string | null
     metodi_ids?: string[]
-    nomi: string[]
+    // Supporta sia il vecchio formato (nomi: string[]) che il nuovo (componenti: Array<{...}>)
+    nomi?: string[]
+    componenti?: Array<{
+      nome: string
+      forma_commerciale?: string | null
+      lotto?: string | null
+      scadenza_prodotto?: string | null
+      data_apertura?: string | null
+      produttore?: string | null
+    }>
   }) => {
     const db = getDb()
     const mix_id = 'mix_' + Date.now().toString(36)
@@ -335,6 +332,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
 
+    // Campi comuni a tutti i composti del mix (fallback se non specificati per riga)
     const common = {
       codice_interno: data.codice_interno || null,
       formula: null,
@@ -365,15 +363,38 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       volume_ml: data.volume_ml ?? null,
     }
 
+    // Normalizza input: accetta sia componenti (nuovo, per-riga) che nomi (vecchio, .txt)
+    const componenti: Array<{
+      nome: string
+      forma_commerciale?: string | null
+      lotto?: string | null
+      scadenza_prodotto?: string | null
+      data_apertura?: string | null
+      produttore?: string | null
+    }> = data.componenti
+      ? data.componenti
+      : (data.nomi || []).map(nome => ({ nome }))
+
     const count = db.transaction(() => {
-      for (const nome of data.nomi) {
-        const result = insert.run({ ...common, nome })
+      for (const comp of componenti) {
+        const row = {
+          ...common,
+          nome: comp.nome,
+          // I valori per-riga sovrascrivono i comuni se presenti
+          forma_commerciale: comp.forma_commerciale ?? common.forma_commerciale,
+          mix:               comp.forma_commerciale ?? common.forma_commerciale,
+          lotto:             comp.lotto             ?? common.lotto,
+          scadenza_prodotto: comp.scadenza_prodotto ?? common.scadenza_prodotto,
+          data_apertura:     comp.data_apertura     ?? common.data_apertura,
+          produttore:        comp.produttore        ?? common.produttore,
+        }
+        const result = insert.run(row)
         const newId = result.lastInsertRowid
         for (const mid of metodiIds) {
           insertLink.run(newId, mid)
         }
       }
-      return data.nomi.length
+      return componenti.length
     })()
 
     return { mix_id, count }
@@ -394,14 +415,9 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
          (composto_id, tipo, data, note, n_registro_qc, batch_analitico, lotto_crm_valido, nuova_scadenza)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      compostoId,
-      data.tipo,
-      data.data,
-      data.note || null,
-      data.n_registro_qc || null,
-      data.batch_analitico || null,
-      data.lotto_crm_valido || null,
-      data.nuova_scadenza || null
+      compostoId, data.tipo, data.data, data.note || null,
+      data.n_registro_qc || null, data.batch_analitico || null,
+      data.lotto_crm_valido || null, data.nuova_scadenza || null
     )
 
     if (data.tipo === 'Dismissione') {
