@@ -64,6 +64,7 @@ export interface Composto {
   mix_id: string | null
   stoccaggio: string | null
   accreditamento_crm: string | null
+  volume_ml: number | null  // NEW: volume soluzione in mL (solo per Solution)
   created_at: string
   updated_at: string
   // Joined/computed fields

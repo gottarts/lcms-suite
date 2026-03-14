@@ -39,6 +39,9 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     accreditamento_crm: 'ISO 17034',
     codice_interno: '',
     fiale: '1',
+    ubicazione: '',        // NEW
+    work_standard: '',     // NEW
+    volume_ml: '',         // NEW
   })
   const [nomi, setNomi] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
@@ -84,6 +87,9 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       stoccaggio: '', accreditamento_crm: 'ISO 17034',
       codice_interno: '',
       fiale: '1',
+      ubicazione: '',    // NEW
+      work_standard: '', // NEW
+      volume_ml: '',     // NEW
     })
     setNomi([])
     setMetodiIds([])
@@ -163,6 +169,9 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         concentrazione: form.concentrazione ? parseFloat(form.concentrazione) : null,
         unita_conc: form.unita_conc || UNITA_DEFAULT,
         fiala: form.fiale ? String(parseInt(form.fiale)) : null,
+        ubicazione: form.ubicazione || null,        // NEW
+        work_standard: form.work_standard || null,  // NEW
+        volume_ml: form.volume_ml ? parseFloat(form.volume_ml) : null,  // NEW
         metodi_ids: metodiIds,
         nomi,
       }
@@ -289,6 +298,16 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
               />
             </div>
             <div>
+              <Label className="text-xs">Volume mL</Label>
+              <Input
+                type="number"
+                step="any"
+                value={form.volume_ml}
+                onChange={e => set('volume_ml', e.target.value)}
+                placeholder="es. 1.2"
+              />
+            </div>
+            <div>
               <Label className="text-xs">Concentrazione</Label>
               <Input type="number" step="any" value={form.concentrazione} onChange={e => set('concentrazione', e.target.value)} placeholder="es. 100" />
             </div>
@@ -350,6 +369,15 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            {/* NEW: Ubicazione e Work Standard */}
+            <div>
+              <Label className="text-xs">Ubicazione</Label>
+              <Input value={form.ubicazione} onChange={e => set('ubicazione', e.target.value)} placeholder="es. Frigo A" />
+            </div>
+            <div>
+              <Label className="text-xs">Work Standard</Label>
+              <Input value={form.work_standard} onChange={e => set('work_standard', e.target.value)} placeholder="es. Work_Pesticidi_A" />
             </div>
           </div>
 

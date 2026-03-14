@@ -22,15 +22,15 @@ function cleanText(s: any): string {
   if (!s) return ''
   return String(s)
     .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '')
-    .replace(/\s*→\s*/g, '\n')               // → usato dal tool Calc come separatore riga
-    .replace(/(\[Calc\][^\n]*),\s*/g, '$1,\n')  // a capo dopo ogni , nei blocchi [Calc]
-    .replace(/[^\x20-\x7E\xA0-\xFF\n]/g, ' ')  // preserva newline reali
-    .replace(/[ \t]+/g, ' ')                     // collassa spazi ma non newline
-    .replace(/\n\s*/g, '\n')                     // pulisce spazi dopo newline
+    .replace(/\s*→\s*/g, '\n')
+    .replace(/(\[Calc\][^\n]*),\s*/g, '$1,\n')
+    .replace(/[^\x20-\x7E\xA0-\xFF\n]/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*/g, '\n')
     .trim()
 }
 
-// ── Helper stato label (solo per export, non modifica il DB) ─────────────────
+// ── Helper stato label ───────────────────────────────────────────────────────
 
 function computeStatoLabel(c: any): string {
   if (c.data_dismissione) return 'Dismesso'
@@ -42,6 +42,13 @@ function computeStatoLabel(c: any): string {
   return 'Attivo'
 }
 
+// ── Helper metodi come stringa ───────────────────────────────────────────────
+
+function metodiToString(c: any): string {
+  if (!c.metodi || !Array.isArray(c.metodi) || c.metodi.length === 0) return ''
+  return c.metodi.map((m: any) => m.nome ?? m).join('; ')
+}
+
 // ── Generazione CSV ──────────────────────────────────────────────────────────
 
 function exportCSV(data: any[]) {
@@ -50,7 +57,7 @@ function exportCSV(data: any[]) {
     'Produttore', 'Lotto', 'Concentrazione', 'Unità', 'Solvente',
     'Purezza', 'N fiale', 'Data apertura', 'Scadenza prodotto',
     'Data dismissione', 'Destinazione uso', 'Work standard',
-    'Stoccaggio', 'Accreditamento CRM', 'Ubicazione', 'Mix',
+    'Stoccaggio', 'Accreditamento CRM', 'Ubicazione', 'Mix', 'Metodi',
   ]
 
   const rows = data.map(c => [
@@ -75,6 +82,7 @@ function exportCSV(data: any[]) {
     c.accreditamento_crm ?? '',
     c.ubicazione ?? '',
     c.mix ?? '',
+    metodiToString(c),
   ])
 
   const csvContent = [headers, ...rows]
@@ -83,7 +91,6 @@ function exportCSV(data: any[]) {
     )
     .join('\r\n')
 
-  // BOM UTF-8 per apertura corretta in Excel italiano
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -201,7 +208,8 @@ function exportPDF(data: any[]) {
     doc.setDrawColor(220, 220, 220)
     doc.line(14, 29, 196, 29)
 
-    // Dati anagrafici — ARPA rimosso, riga Mix visibile solo se è un mix
+    // Dati anagrafici — riga Metodi aggiunta, riga Mix visibile solo se è un mix
+    const metodiStr = metodiToString(c) || '—'
     const anagrafica = [
       ['Codice interno', c.codice_interno ?? '—', 'Classe', c.classe ?? '—'],
       ['Forma', c.forma ?? '—', 'Forma commerciale', c.forma_commerciale ?? '—'],
@@ -212,13 +220,14 @@ function exportPDF(data: any[]) {
       ['Stoccaggio', c.stoccaggio ?? '—', 'Accreditamento CRM', c.accreditamento_crm ?? '—'],
       ['Ubicazione', c.ubicazione ?? '—', 'Matrice', c.matrice ?? '—'],
       ['Peso molecolare', c.peso_molecolare ?? '—', 'Lotto', c.lotto ?? '—'],
+      ['Metodi analitici', { content: metodiStr, colSpan: 3, styles: { fontStyle: 'normal' } }],
       ...(c.mix_id ? [['Mix', `${c.mix ?? ''} (${c.mix_id})`, 'Mix ID', c.mix_id]] : []),
     ]
     autoTable(doc, {
       startY: 32,
       head: [['Campo', 'Valore', 'Campo', 'Valore']],
       body: anagrafica,
-      styles: { fontSize: 7.5, cellPadding: 2 },
+      styles: { fontSize: 7.5, cellPadding: 2, overflow: 'linebreak' },
       headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 7 },
       columnStyles: {
         0: { fontStyle: 'bold', cellWidth: 38, fillColor: [248, 248, 248] },
@@ -230,7 +239,7 @@ function exportPDF(data: any[]) {
 
     let cursorY: number = (doc as any).lastAutoTable.finalY + 7
 
-    // Storico eventi — include anche apertura_fiala
+    // Storico eventi
     if (c.storia && c.storia.length > 0) {
       if (cursorY > 230) { doc.addPage(); cursorY = 16 }
 
@@ -264,7 +273,7 @@ function exportPDF(data: any[]) {
       cursorY = (doc as any).lastAutoTable.finalY + 7
     }
 
-    // Preparazioni — fix note troncate con overflow linebreak
+    // Preparazioni
     if (c.preparazioni && c.preparazioni.length > 0) {
       if (cursorY > 230) { doc.addPage(); cursorY = 16 }
 
@@ -293,7 +302,7 @@ function exportPDF(data: any[]) {
       })
     }
 
-    // Numero pagina in fondo a ogni scheda
+    // Numero pagina
     const pageCount = (doc as any).internal.getNumberOfPages()
     doc.setFontSize(7)
     doc.setTextColor(180, 180, 180)

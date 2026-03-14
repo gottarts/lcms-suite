@@ -28,13 +28,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       params.push(filters.metodo_id)
     }
 
-    // TASK-0: ricerca testuale rimossa lato server — gestita interamente nel renderer (CompostiPage useMemo)
-    // Lasciata commentata per eventuale uso futuro lato server
-    // if (filters?.search) {
-    //   conditions.push('(c.nome LIKE ? OR c.codice_interno LIKE ?)')
-    //   params.push(`%${filters.search}%`, `%${filters.search}%`)
-    // }
-
     if (filters?.classe) {
       conditions.push('c.classe = ?')
       params.push(filters.classe)
@@ -105,13 +98,14 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       mix_id: data.mix_id ?? null,
       stoccaggio: data.stoccaggio ?? null,
       accreditamento_crm: data.accreditamento_crm ?? null,
+      volume_ml: data.volume_ml ?? null,
     }
 
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
       'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
       'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
-      'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm']
+      'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm', 'volume_ml']
     const placeholders = cols.map(c => `@${c}`).join(', ')
     const insertComposto = db.prepare(
       `INSERT INTO composti (${cols.join(', ')}) VALUES (${placeholders})`
@@ -166,6 +160,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       mix_id: data.mix_id ?? null,
       stoccaggio: data.stoccaggio ?? null,
       accreditamento_crm: data.accreditamento_crm ?? null,
+      volume_ml: data.volume_ml ?? null,
     }
 
     const updateComposto = db.prepare(
@@ -179,6 +174,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
        matrice=@matrice, peso_molecolare=@peso_molecolare, ubicazione=@ubicazione,
        arpa=@arpa, mix=@mix, mix_id=@mix_id,
        stoccaggio=@stoccaggio, accreditamento_crm=@accreditamento_crm,
+       volume_ml=@volume_ml,
        updated_at=datetime('now') WHERE id=@id`
     )
     const deleteLinks = db.prepare('DELETE FROM composti_metodi WHERE composto_id = ?')
@@ -187,14 +183,83 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     )
 
     db.transaction(() => {
+      // 1. Aggiorna il composto corrente
       updateComposto.run(row)
 
-      // G-2: sincronizzazione fiale per lotto
-      if (row.fiala !== undefined && row.fiala !== null && row.lotto) {
+      // G-2: sincronizzazione fiale per lotto (composti senza mix_id)
+      if (row.fiala !== undefined && row.fiala !== null && row.lotto && !row.mix_id) {
         db.prepare('UPDATE composti SET fiala = ? WHERE lotto = ? AND id != ?')
           .run(row.fiala, row.lotto, id)
       }
 
+      // MIX-SYNC: se il composto appartiene a un mix, propaga tutti i campi comuni
+      // a tutti gli altri composti dello stesso mix_id (escluso nome che è unico per composto)
+      if (row.mix_id) {
+        db.prepare(`
+          UPDATE composti SET
+            codice_interno      = ?,
+            forma_commerciale   = ?,
+            concentrazione      = ?,
+            unita_conc          = ?,
+            solvente            = ?,
+            fiala               = ?,
+            produttore          = ?,
+            lotto               = ?,
+            operatore_apertura  = ?,
+            data_apertura       = ?,
+            scadenza_prodotto   = ?,
+            classe              = ?,
+            destinazione_uso    = ?,
+            work_standard       = ?,
+            ubicazione          = ?,
+            stoccaggio          = ?,
+            accreditamento_crm  = ?,
+            volume_ml           = ?,
+            arpa                = ?,
+            updated_at          = datetime('now')
+          WHERE mix_id = ? AND id != ?
+        `).run(
+          row.codice_interno,
+          row.forma_commerciale,
+          row.concentrazione,
+          row.unita_conc,
+          row.solvente,
+          row.fiala,
+          row.produttore,
+          row.lotto,
+          row.operatore_apertura,
+          row.data_apertura,
+          row.scadenza_prodotto,
+          row.classe,
+          row.destinazione_uso,
+          row.work_standard,
+          row.ubicazione,
+          row.stoccaggio,
+          row.accreditamento_crm,
+          row.volume_ml,
+          row.arpa,
+          row.mix_id,
+          id
+        )
+
+        // Sincronizza anche i metodi: applica gli stessi metodi_ids a tutti i composti del mix
+        const altriIds = db.prepare(
+          'SELECT id FROM composti WHERE mix_id = ? AND id != ?'
+        ).all(row.mix_id, id) as { id: number }[]
+
+        const deleteLinksMix = db.prepare('DELETE FROM composti_metodi WHERE composto_id = ?')
+        const insertLinkMix = db.prepare(
+          'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
+        )
+        for (const altro of altriIds) {
+          deleteLinksMix.run(altro.id)
+          for (const mid of metodiIds) {
+            insertLinkMix.run(altro.id, mid)
+          }
+        }
+      }
+
+      // Aggiorna i metodi del composto corrente
       deleteLinks.run(id)
       for (const mid of metodiIds) {
         insertLink.run(id, mid)
@@ -209,7 +274,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     return { ok: true }
   })
 
-  // FEAT-2: restituisce quanti composti condividono lo stesso lotto del composto id
   ipcMain.handle('composti:count-by-lotto', (_, id: number) => {
     const db = getDb()
     const row = db.prepare('SELECT lotto, mix_id FROM composti WHERE id = ?').get(id) as any
@@ -220,13 +284,19 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     return { count: result.count, lotto: row.lotto }
   })
 
-  // FEAT-2: elimina tutti i composti con lo stesso lotto
   ipcMain.handle('composti:delete-by-lotto', (_, lotto: string) => {
     getDb().prepare('DELETE FROM composti WHERE lotto = ?').run(lotto)
     return { ok: true }
   })
 
-  // FEAT-metodi-campo: create-mix ora accetta metodi_ids e li salva per ogni composto creato
+  // MIX-SYNC: restituisce il numero di composti appartenenti allo stesso mix_id
+  ipcMain.handle('composti:count-by-mix', (_, mix_id: string) => {
+    const result = getDb().prepare(
+      'SELECT COUNT(*) as count FROM composti WHERE mix_id = ?'
+    ).get(mix_id) as { count: number }
+    return result?.count ?? 0
+  })
+
   ipcMain.handle('composti:create-mix', (_, data: {
     forma_commerciale: string
     forma: string
@@ -239,7 +309,12 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     scadenza_prodotto: string | null
     classe: string | null
     destinazione_uso: string | null
+    ubicazione?: string | null
+    work_standard?: string | null
+    volume_ml?: number | null
     fiala?: string | null
+    codice_interno?: string | null
+    operatore_apertura?: string | null
     metodi_ids?: string[]
     nomi: string[]
   }) => {
@@ -251,7 +326,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
       'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
-      'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm']
+      'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm', 'volume_ml']
     const placeholders = cols.map(c => `@${c}`).join(', ')
     const insert = db.prepare(
       `INSERT INTO composti (${cols.join(', ')}) VALUES (${placeholders})`
@@ -261,7 +336,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     )
 
     const common = {
-      codice_interno: null,
+      codice_interno: data.codice_interno || null,
       formula: null,
       classe: data.classe || null,
       forma: data.forma || 'Solution',
@@ -273,27 +348,27 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       fiala: data.fiala ?? null,
       produttore: data.produttore || null,
       lotto: data.lotto || null,
-      operatore_apertura: null,
+      operatore_apertura: data.operatore_apertura || null,
       data_apertura: data.data_apertura || null,
       scadenza_prodotto: data.scadenza_prodotto || null,
       data_dismissione: null,
       destinazione_uso: data.destinazione_uso || null,
-      work_standard: null,
+      work_standard: data.work_standard || null,
       matrice: null,
       peso_molecolare: null,
-      ubicazione: null,
+      ubicazione: data.ubicazione || null,
       arpa: 'N',
       mix: data.forma_commerciale,
       mix_id,
       stoccaggio: null,
       accreditamento_crm: null,
+      volume_ml: data.volume_ml ?? null,
     }
 
     const count = db.transaction(() => {
       for (const nome of data.nomi) {
         const result = insert.run({ ...common, nome })
         const newId = result.lastInsertRowid
-        // FEAT-metodi-campo: salva i link metodi per ogni composto del mix
         for (const mid of metodiIds) {
           insertLink.run(newId, mid)
         }
@@ -329,7 +404,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       data.nuova_scadenza || null
     )
 
-    // Fix BUG-2: aggiorna data_dismissione sul composto (e sul mix intero se presente)
     if (data.tipo === 'Dismissione') {
       const comp = db.prepare('SELECT mix_id FROM composti WHERE id = ?').get(compostoId) as { mix_id: string | null } | undefined
       if (comp?.mix_id) {
@@ -378,7 +452,13 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       const preparazioni = db.prepare(
         'SELECT * FROM preparazioni WHERE composto_id = ? ORDER BY data_prep ASC'
       ).all(c.id)
-      return { ...c, storia, preparazioni }
+      const metodi = db.prepare(`
+        SELECT m.nome FROM metodi m
+        INNER JOIN composti_metodi cm ON cm.metodo_id = m.id
+        WHERE cm.composto_id = ?
+        ORDER BY m.nome ASC
+      `).all(c.id) as { nome: string }[]
+      return { ...c, storia, preparazioni, metodi }
     })
 
     return result

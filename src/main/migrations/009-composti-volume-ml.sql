@@ -1,0 +1,1 @@
+ALTER TABLE composti ADD COLUMN volume_ml REAL DEFAULT NULL;

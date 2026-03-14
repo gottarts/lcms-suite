@@ -192,6 +192,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
             <Field label="Purezza" value={composto.purezza ? `${composto.purezza}%` : null} />
             <Field label="Concentrazione" value={composto.concentrazione ? `${parseConcentrazione(composto.concentrazione)} ${composto.unita_conc ?? 'mg/L'}` : null} />
             <Field label="Solvente" value={composto.solvente} />
+            <Field label="Volume mL" value={composto.volume_ml ? `${composto.volume_ml} mL` : null} />
             <Field label="N° Fiale" value={composto.fiala} />
             <Separator />
             <Field label="Produttore" value={composto.produttore} />
