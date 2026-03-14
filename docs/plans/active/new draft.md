@@ -1,14 +1,8 @@
 # prossimi feat (cancellare quado passa al plan):
 
- ## bug fix
-non funziona apri fial su miscele
-
-[2] Error occurred in handler for 'composti:apri-fiala': Error: No handler registered for 'composti:apri-fiala'
-[2]     at Session.<anonymous> (node:electron/js2c/browser_init:2:116772)
-[2]     at Session.emit (node:events:508:28)
 
 
-non inserisce il metodo nell aggiungi mix
+
 
 
 

@@ -26,9 +26,10 @@ const DB_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: 'work_standard', label: 'Work Standard' },
   { key: 'ubicazione', label: 'Ubicazione' },
   { key: 'stoccaggio', label: 'Stoccaggio' },
+  { key: 'accreditamento_crm', label: 'Accreditamento CRM' },   // ← aggiunto (migration 005)
+  { key: 'volume_ml', label: 'Volume (mL)' },                    // ← aggiunto (migration 009)
   { key: 'peso_molecolare', label: 'Peso Molecolare (MW)' },
   { key: 'matrice', label: 'Matrice' },
-  { key: 'pos', label: 'POS' },
   { key: 'note', label: 'Note' },
   // FEAT-metodi-import: colonna metodi analitici
   { key: 'metodi_nomi', label: 'Metodi Analitici (separati da ;)' },
@@ -104,6 +105,11 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     'data_scadenza_soluzione', 'data_dismissione',
   ])
 
+  // Campi numerici: vengono convertiti con parseFloat invece di restare stringa
+  const NUMERIC_FIELDS = new Set([
+    'volume_ml', 'peso_molecolare', 'concentrazione', 'purezza',
+  ])
+
   function reset() {
     setStep('upload')
     setCsvHeaders([])
@@ -145,9 +151,10 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
       work_standard:      ['workdestinazione', 'workstandard', 'work'],
       ubicazione:         ['ubicazione', 'location', 'posizione'],
       stoccaggio:         ['stoccaggio', 'storage'],
+      accreditamento_crm: ['accreditamentocrm', 'accreditamento', 'crm', 'iso17034'], // ← aggiunto
+      volume_ml:          ['volumeml', 'volume', 'vol', 'volml'],                     // ← aggiunto
       peso_molecolare:    ['pesomolecolare', 'mw', 'pm'],
       matrice:            ['matrice', 'matrix'],
-      pos:                ['pos'],
       note:               ['note', 'notes', 'annotazioni'],
       // FEAT-metodi-import: alias per la colonna metodi
       metodi_nomi:        ['metodi', 'metodo', 'metodianalitici', 'methods', 'method'],
@@ -283,8 +290,19 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
         }
 
         const raw = row[i] ?? ''
-        const val = DATE_FIELDS.has(dbField) ? parseDate(raw) : String(raw).trim()
-        if (val !== '' && !composto[dbField]) composto[dbField] = val
+
+        let val: unknown
+        if (DATE_FIELDS.has(dbField)) {
+          val = parseDate(raw)
+        } else if (NUMERIC_FIELDS.has(dbField)) {
+          // Converte i campi numerici in number (non stringa) per il DB
+          const n = parseFloat(String(raw).replace(',', '.'))
+          val = isNaN(n) ? '' : n
+        } else {
+          val = String(raw).trim()
+        }
+
+        if (val !== '' && val !== null && !composto[dbField]) composto[dbField] = val
       })
 
       if (!composto.nome) continue

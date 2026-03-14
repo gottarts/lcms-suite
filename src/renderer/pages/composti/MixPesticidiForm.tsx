@@ -129,7 +129,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     { key: 'metodi_nomi',       label: 'Metodi (sep. ;)', multi: true },
   ]
 
-  function handleTextImport(values: Record<string, string>) {
+  async function handleTextImport(values: Record<string, string>) {
     const locked = new Set<string>()
 
     const formKeys = ['solvente', 'concentrazione', 'stoccaggio', 'destinazione_uso', 'codice_interno'] as const
@@ -163,7 +163,18 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       if (prodArr.length > 0)  locked.add('produttore')
     }
 
-    if (values['metodi_nomi']) locked.add('metodi_nomi')
+    if (values['metodi_nomi']) {
+      locked.add('metodi_nomi')
+      const nomiMetodi = values['metodi_nomi'].split(';').map((s: string) => s.trim()).filter(Boolean)
+      for (const nome of nomiMetodi) {
+        try {
+          const metodo = await window.electronAPI.invoke('metodi:get-or-create', nome) as any
+          setMetodi(prev => prev.find((m: any) => m.id === metodo.id) ? prev : [...prev, metodo])
+          setMetodiIds(prev => prev.includes(metodo.id) ? prev : [...prev, metodo.id])
+        } catch (err) { console.error('Errore import metodo:', err) }
+      }
+    }
+
     setImportedFields(locked)
   }
 

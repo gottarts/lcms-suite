@@ -478,5 +478,38 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     })
 
     return result
+  
+
+return result
+  })
+
+  ipcMain.handle('composti:apri-fiala', (_, compostoId: number, data: {
+    fiala_numero: number
+    data_apertura: string
+    operatore?: string
+    note?: string
+  }) => {
+    const db = getDb()
+    const comp = db.prepare('SELECT lotto FROM composti WHERE id = ?').get(compostoId) as any
+
+    if (comp?.lotto) {
+      const siblings = db.prepare('SELECT id FROM composti WHERE lotto = ?').all(comp.lotto) as any[]
+      const stmt = db.prepare(
+        `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
+         VALUES (?, 'apertura_fiala', ?, ?, ?)`
+      )
+      db.transaction(() => {
+        for (const s of siblings) {
+          stmt.run(s.id, data.data_apertura, data.fiala_numero, data.note || null)
+        }
+      })()
+      return { count: siblings.length }
+    } else {
+      const result = db.prepare(
+        `INSERT INTO composti_storia (composto_id, tipo, data, fiala_numero, note)
+         VALUES (?, 'apertura_fiala', ?, ?, ?)`
+      ).run(compostoId, data.data_apertura, data.fiala_numero, data.note || null)
+      return { id: result.lastInsertRowid }
+    }
   })
 }
