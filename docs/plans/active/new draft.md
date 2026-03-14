@@ -12,12 +12,9 @@
 
 
 
- adesso ci sono due meccanismi di importazione massiva. Tramite aggiugi mix si puo sostanzialmtene importare miscele con import text guidato. Pero in relta c'e da definire la logica. 
- Questa importazione non importa un unico prodotto ma piu prodotti (infatti si possono avere piu lotti) il problema e che la app considera tutti i lotti come se fossero un unico mix_id. in realta non e formalmente cosi. Se importo 20 righe di composti con 4 lotti ho 4 crm miscela quindi 4 mix_id. 
  
- A questo punto terrei la feat che e utili ma farei in modo che solo un singolo mix possa essere aggiunto tramite aggiungi mix. 
 
- Per aggiungere massivamente piu mix useremo il import normale della tabella composti Import csv (o excel). applicherei anche a questo la funzione di selezione e aggancio dei campi (adesso ce solo funzione aggancio campi ma non anteprima e scelta riga intestazione). Una cosa molto importatnte e la questione Forma. attualemnte forma ha Solution e Neat ma va aggiunta anche Mix e i composti che hanno Mix dovranno avere il badge. In sosteanza se si fa un import di sostanza e ci sono piu composti con nomi diversi e stessi campi allora il composto fa parte di una mix e dovra avere forma Mix e badge. Considererei mix come una proprieta che deriva dall'avere piu righe in tabella con lo stesso lotto.
+ Per aggiungere massivamente piu mix useremo il import normale della tabella composti Import csv (o excel). applicherei anche a questo la funzione di selezione dell intestaione e aggancio dei campi (adesso ce solo funzione aggancio campi ma non anteprima e scelta riga intestazione). Una cosa molto importatnte e la questione Forma. attualemnte forma ha Solution e Neat ma va aggiunta anche Mix e i composti che hanno Mix dovranno avere il badge. In sosteanza se si fa un import di sostanza e ci sono piu composti con nomi diversi e stessi campi allora il composto fa parte di una mix e dovra avere forma Mix e badge. Considererei mix come una proprieta che deriva dall'avere piu righe in tabella con lo stesso lotto. viceversa se si importa una serie di miscele tramite il form aggiungi mix e dentro ci fossere delle sostanze in dei lotti unici (cioe un lotto una sostanza) allora il badge mix non deve esserci (anche se importato da aggiungi mix) e la fora deve andare in automatico su Solution.
 
 per quanto riguarda il tasto cancella va fatta una miglioria. Bisogna dare la possibilita di cancellare massivamente i composti. vedi tu quale il modo piu comodo. Si puo fare che quando si applica un filtro alla tabella ci sia il tasto nuovo lotto, rivalidazione, dismetti, cancella che sia applica a tutta la selezione
 

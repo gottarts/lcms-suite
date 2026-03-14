@@ -39,7 +39,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     scadenza_prodotto: '', classe: '', destinazione_uso: '',
     stoccaggio: '', accreditamento_crm: 'ISO 17034', codice_interno: '',
     fiale: '1', ubicazione: '', work_standard: '', volume_ml: '',
-    operatore_apertura: '',   // ← fix: campo aggiunto
+    operatore_apertura: '',
   })
   const [nomi, setNomi] = useState<string[]>([])
   const [componentiImportati, setComponentiImportati] = useState<ComponenteImportato[] | null>(null)
@@ -78,7 +78,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       scadenza_prodotto: '', classe: '', destinazione_uso: '',
       stoccaggio: '', accreditamento_crm: 'ISO 17034', codice_interno: '',
       fiale: '1', ubicazione: '', work_standard: '', volume_ml: '',
-      operatore_apertura: '',   // ← fix: campo aggiunto
+      operatore_apertura: '',
     })
     setNomi([])
     setComponentiImportati(null)
@@ -195,44 +195,73 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
 
   const handleSave = async () => {
     if (!nomi.length) return
-    // forma_commerciale obbligatoria solo se NON viene dall'import per riga
     if (!importedFields.has('forma_commerciale') && !form.forma_commerciale.trim()) return
     setSaving(true)
     try {
-      // Se forma_commerciale viene dall'import (per riga), usa quella del primo componente come label del mix
-      const formaCommercialeLabel = importedFields.has('forma_commerciale') && componentiImportati?.[0]?.forma_commerciale
-        ? componentiImportati[0].forma_commerciale!
-        : form.forma_commerciale
-
       const baseData = {
         ...form,
-        forma_commerciale: formaCommercialeLabel,
         forma: 'mix',
         concentrazione: form.concentrazione ? parseFloat(form.concentrazione) : null,
         unita_conc: form.unita_conc || UNITA_DEFAULT,
         fiala: form.fiale ? String(parseInt(form.fiale)) : null,
         ubicazione: form.ubicazione || null,
         work_standard: form.work_standard || null,
-        operatore_apertura: form.operatore_apertura || null,   // ← fix: incluso nel payload
+        operatore_apertura: form.operatore_apertura || null,
         volume_ml: form.volume_ml ? parseFloat(form.volume_ml) : null,
         metodi_ids: metodiIds,
       }
 
-      let result: { count: number }
-
+      // CASO A: componenti importati con dati per riga (da TextImportDialog)
       if (componentiImportati && componentiImportati.length > 0) {
-        result = await compostiApi.createMix({ ...baseData, componenti: componentiImportati })
+
+        // Raggruppa i componenti per lotto.
+        // Il lotto è ciò che identifica il flacone fisico → ogni lotto distinto
+        // genera un mix_id separato. Righe senza lotto finiscono in un unico gruppo.
+        const gruppi = new Map<string, ComponenteImportato[]>()
+        for (const comp of componentiImportati) {
+          const chiave = comp.lotto?.trim() || 'nolotto'
+          if (!gruppi.has(chiave)) gruppi.set(chiave, [])
+          gruppi.get(chiave)!.push(comp)
+        }
+
+        let totaleComponenti = 0
+        for (const [, gruppo] of gruppi) {
+          // forma_commerciale è uguale per tutte le righe dello stesso lotto
+          // (stesso flacone = stesso prodotto commerciale)
+          const formaCommercialeGruppo =
+            gruppo.find(c => c.forma_commerciale?.trim())?.forma_commerciale ||
+            form.forma_commerciale
+
+          await compostiApi.createMix({
+            ...baseData,
+            forma_commerciale: formaCommercialeGruppo,
+            componenti: gruppo,
+          })
+          totaleComponenti += gruppo.length
+        }
+
+        onSave(); onClose(); reset()
+        const numMix = gruppi.size
+        alert(
+          numMix > 1
+            ? `${numMix} mix creati — ${totaleComponenti} componenti totali`
+            : `Mix creato — ${totaleComponenti} componenti aggiunti`
+        )
+
+      // CASO B: nomi da file .txt semplice (nessun dato per riga, lotto unico dal form)
       } else {
-        result = await compostiApi.createMix({ ...baseData, nomi })
+        const result = await compostiApi.createMix({
+          ...baseData,
+          forma_commerciale: form.forma_commerciale,
+          nomi,
+        })
+        onSave(); onClose(); reset()
+        alert(`Mix creato — ${result.count} componenti aggiunti`)
       }
 
-      onSave(); onClose(); reset()
-      alert(`Mix creato — ${result.count} componenti aggiunti`)
     } finally { setSaving(false) }
   }
 
-  // Il form è valido se: ha componenti (da import con forma_commerciale per riga)
-  // oppure ha forma_commerciale compilata manualmente + nomi
   const canSave = nomi.length > 0 && (
     importedFields.has('forma_commerciale') ||
     form.forma_commerciale.trim() !== ''
@@ -240,6 +269,13 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
   const lockedClass = (key: string) => importedFields.has(key) ? 'bg-muted opacity-80' : ''
   const hasPerRowData = componentiImportati !== null &&
     componentiImportati.some(c => c.lotto || c.scadenza_prodotto || c.data_apertura || c.produttore)
+
+  // Numero di mix distinti che verranno creati — mostrato nel bottone e nel banner
+  const numMixAnteprima = (() => {
+    if (!componentiImportati || componentiImportati.length === 0) return 1
+    const lotti = new Set(componentiImportati.map(c => c.lotto?.trim() || 'nolotto'))
+    return lotti.size
+  })()
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { onClose(); reset() } }}>
@@ -352,7 +388,6 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
               <Label className="text-xs">Scadenza Prodotto {importedFields.has('scadenza_prodotto') && <span className="ml-1 text-blue-600 font-normal normal-case">(da file, per riga)</span>}</Label>
               <Input type="date" value={form.scadenza_prodotto} onChange={e => set('scadenza_prodotto', e.target.value)} disabled={importedFields.has('scadenza_prodotto')} className={lockedClass('scadenza_prodotto')} />
             </div>
-            {/* ← fix: campo Operatore Apertura aggiunto */}
             <div>
               <Label className="text-xs">Operatore Apertura</Label>
               <Input value={form.operatore_apertura} onChange={e => set('operatore_apertura', e.target.value)} placeholder="es. Mario Rossi" />
@@ -450,7 +485,11 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
           {importedFields.has('nomi') && nomi.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-0.5">
-                📥 {hasPerRowData ? 'Componenti importati con dati per riga (lotto, scadenza, ecc.)' : 'Nomi importati da file'}
+                📥 {hasPerRowData
+                  ? numMixAnteprima > 1
+                    ? `Componenti importati — verranno creati ${numMixAnteprima} mix distinti (lotti diversi)`
+                    : 'Componenti importati con dati per riga (lotto, scadenza, ecc.)'
+                  : 'Nomi importati da file'}
               </span>
               <button type="button" className="text-xs text-muted-foreground hover:text-foreground underline"
                 onClick={() => { setNomi([]); setComponentiImportati(null); setImportedFields(new Set()) }}>
@@ -479,7 +518,11 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         <DialogFooter>
           <Button variant="ghost" onClick={() => { onClose(); reset() }}>Annulla</Button>
           <Button onClick={handleSave} disabled={!canSave || saving}>
-            {saving ? 'Creazione...' : `Crea Mix (${nomi.length} componenti)`}
+            {saving
+              ? 'Creazione...'
+              : numMixAnteprima > 1
+                ? `Crea ${numMixAnteprima} Mix (${nomi.length} componenti)`
+                : `Crea Mix (${nomi.length} componenti)`}
           </Button>
         </DialogFooter>
       </DialogContent>
