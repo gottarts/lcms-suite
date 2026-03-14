@@ -39,6 +39,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     scadenza_prodotto: '', classe: '', destinazione_uso: '',
     stoccaggio: '', accreditamento_crm: 'ISO 17034', codice_interno: '',
     fiale: '1', ubicazione: '', work_standard: '', volume_ml: '',
+    operatore_apertura: '',   // ← fix: campo aggiunto
   })
   const [nomi, setNomi] = useState<string[]>([])
   const [componentiImportati, setComponentiImportati] = useState<ComponenteImportato[] | null>(null)
@@ -77,6 +78,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       scadenza_prodotto: '', classe: '', destinazione_uso: '',
       stoccaggio: '', accreditamento_crm: 'ISO 17034', codice_interno: '',
       fiale: '1', ubicazione: '', work_standard: '', volume_ml: '',
+      operatore_apertura: '',   // ← fix: campo aggiunto
     })
     setNomi([])
     setComponentiImportati(null)
@@ -211,6 +213,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         fiala: form.fiale ? String(parseInt(form.fiale)) : null,
         ubicazione: form.ubicazione || null,
         work_standard: form.work_standard || null,
+        operatore_apertura: form.operatore_apertura || null,   // ← fix: incluso nel payload
         volume_ml: form.volume_ml ? parseFloat(form.volume_ml) : null,
         metodi_ids: metodiIds,
       }
@@ -348,6 +351,11 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
             <div>
               <Label className="text-xs">Scadenza Prodotto {importedFields.has('scadenza_prodotto') && <span className="ml-1 text-blue-600 font-normal normal-case">(da file, per riga)</span>}</Label>
               <Input type="date" value={form.scadenza_prodotto} onChange={e => set('scadenza_prodotto', e.target.value)} disabled={importedFields.has('scadenza_prodotto')} className={lockedClass('scadenza_prodotto')} />
+            </div>
+            {/* ← fix: campo Operatore Apertura aggiunto */}
+            <div>
+              <Label className="text-xs">Operatore Apertura</Label>
+              <Input value={form.operatore_apertura} onChange={e => set('operatore_apertura', e.target.value)} placeholder="es. Mario Rossi" />
             </div>
             <div>
               <Label className="text-xs">Classe</Label>

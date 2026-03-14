@@ -10,7 +10,7 @@
 
  ## importante
 
- import csv non ha l importazione dei metodi e del volume. fai un controllo se importat utti i campi possibili.
+
 
  adesso ci sono due meccanismi di importazione massiva. Tramite aggiugi mix si puo sostanzialmtene importare miscele con import text guidato. Pero in relta c'e da definire la logica. 
  Questa importazione non importa un unico prodotto ma piu prodotti (infatti si possono avere piu lotti) il problema e che la app considera tutti i lotti come se fossero un unico mix_id. in realta non e formalmente cosi. Se importo 20 righe di composti con 4 lotti ho 4 crm miscela quindi 4 mix_id. 
