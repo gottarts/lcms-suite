@@ -9,16 +9,30 @@ export function registerCompostiIpc(): void {
     metodo_id?: string
   }) => {
     const db = getDb()
-    let sql = `SELECT c.*,
-  COUNT(CASE WHEN p.stato = 'Attiva' THEN 1 END) AS prep_attive_count,
-  COUNT(CASE WHEN p.stato = 'Attiva' AND p.scadenza < date('now') THEN 1 END) AS prep_scadute_count,
-  COUNT(CASE WHEN cs.tipo = 'apertura_fiala' THEN 1 END) AS fiale_aperte_count,
-   (SELECT MAX(nuova_scadenza) FROM composti_storia
-   WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) AS ultima_rivalidazione,
-  (SELECT GROUP_CONCAT(metodo_id) FROM composti_metodi WHERE composto_id = c.id) AS metodi_ids_raw
-FROM composti c
-LEFT JOIN preparazioni p ON p.composto_id = c.id
-LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
+
+    // ─── QUERY OTTIMIZZATA ────────────────────────────────────────────────────
+    // Versione precedente: LEFT JOIN preparazioni + LEFT JOIN composti_storia
+    // generava un prodotto cartesiano (N_prep × N_storia righe per composto)
+    // prima del GROUP BY, rendendo la query O(N²) con 2000+ righe.
+    //
+    // Versione attuale: subquery scalari correlate su colonne indicizzate (PK).
+    // SQLite risolve ogni subquery con una index scan su composto_id → O(N log N).
+    // Il GROUP BY è stato rimosso perché non è più necessario.
+    // ─────────────────────────────────────────────────────────────────────────
+    let sql = `
+SELECT c.*,
+  (SELECT COUNT(*) FROM preparazioni
+   WHERE composto_id = c.id AND stato = 'Attiva')                                        AS prep_attive_count,
+  (SELECT COUNT(*) FROM preparazioni
+   WHERE composto_id = c.id AND stato = 'Attiva' AND scadenza < date('now'))             AS prep_scadute_count,
+  (SELECT COUNT(*) FROM composti_storia
+   WHERE composto_id = c.id AND tipo = 'apertura_fiala')                                 AS fiale_aperte_count,
+  (SELECT MAX(nuova_scadenza) FROM composti_storia
+   WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL)   AS ultima_rivalidazione,
+  (SELECT GROUP_CONCAT(metodo_id) FROM composti_metodi
+   WHERE composto_id = c.id)                                                             AS metodi_ids_raw
+FROM composti c`
+
     const params: unknown[] = []
     const conditions: string[] = []
 
@@ -40,7 +54,7 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     if (conditions.length) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
-    sql += ' GROUP BY c.id ORDER BY c.id ASC'
+    sql += ' ORDER BY c.id ASC'
 
     return db.prepare(sql).all(...params)
   })

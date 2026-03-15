@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { compostiApi } from '@/lib/api'
 import { CompostiTable } from './CompostiTable'
@@ -148,26 +148,27 @@ export function CompostiPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleteMixInfo, setDeleteMixInfo] = useState<{ count: number; lotto: string | null } | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
-  // mixTemplate: quando "Nuovo lotto" viene chiamato su un composto di un mix,
-  // contiene i dati pre-compilati da passare a MixPesticidiForm
   const [mixTemplate, setMixTemplate] = useState<any>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [etichetteOpen, setEtichetteOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
 
-  const load = () => compostiApi.list().then(rows =>
-    setComposti(rows.map((c: any) => ({
-      ...c,
-      metodi_ids: c.metodi_ids_raw ? c.metodi_ids_raw.split(',') : [],
-    })))
-  )
-  const loadMetodi = () => window.electronAPI.invoke('metodi:list').then(setMetodi)
+  const load = useCallback(() =>
+    compostiApi.list().then(rows =>
+      setComposti(rows.map((c: any) => ({
+        ...c,
+        metodi_ids: c.metodi_ids_raw ? c.metodi_ids_raw.split(',') : [],
+      })))
+    ), [])
+
+  const loadMetodi = useCallback(() =>
+    window.electronAPI.invoke('metodi:list').then(setMetodi), [])
 
   useEffect(() => {
     load()
     loadMetodi()
-  }, [])
+  }, [load, loadMetodi])
 
   const metodiNomeMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -220,7 +221,7 @@ export function CompostiPage() {
     attenzione: filtered.filter(c => { const s = computeStato(c); return s === 'scaduto' || s === 'rivalidato_scaduto' }).length,
   }), [filtered])
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (deleteId !== null) {
       if (deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1) {
         await window.electronAPI.invoke('composti:delete-by-lotto', deleteMixInfo.lotto)
@@ -232,25 +233,20 @@ export function CompostiPage() {
       setPanelId(null)
       load()
     }
-  }
+  }, [deleteId, deleteMixInfo, load])
 
-  const handleEdit = (composto: any) => {
+  const handleEdit = useCallback((composto: any) => {
     setEditComposto(composto)
     setPanelId(null)
     setFormOpen(true)
-  }
+  }, [])
 
-  const handleNewLotto = async (composto: any) => {
-    // Se il composto appartiene a un mix, aprire MixPesticidiForm pre-compilato
-    // con i dati comuni del mix e la lista dei nomi dei componenti.
+  const handleNewLotto = useCallback(async (composto: any) => {
     if (composto.mix_id) {
       try {
         const componenti = await window.electronAPI.invoke(
           'composti:list-by-mix', composto.mix_id
         ) as any[]
-
-        // Dati comuni del mix da pre-compilare (dal composto corrente, escludendo
-        // i campi per-riga che l'utente dovrà compilare per il nuovo flacone)
         const template = {
           forma_commerciale: composto.forma_commerciale || composto.mix || '',
           concentrazione: composto.concentrazione ? String(composto.concentrazione) : '',
@@ -265,18 +261,14 @@ export function CompostiPage() {
           codice_interno: composto.codice_interno || '',
           fiala: composto.fiala || '1',
           volume_ml: composto.volume_ml ? String(composto.volume_ml) : '',
-          // Campi del nuovo flacone lasciati vuoti — l'utente li compila
           lotto: '',
           data_apertura: '',
           scadenza_prodotto: '',
           operatore_apertura: '',
           produttore: composto.produttore || '',
-          // Lista nomi componenti del mix originale
           _nomi: componenti.map((c: any) => c.nome),
-          // Mix IDs dei metodi (per pre-selezionarli)
           _metodi_ids: composto.metodi_ids || [],
         }
-
         setMixTemplate(template)
         setMixOpen(true)
         setPanelId(null)
@@ -285,25 +277,45 @@ export function CompostiPage() {
       }
       return
     }
-
-    // Composto singolo: comportamento originale
     setTemplate(composto)
     setEditComposto(null)
     setPanelId(null)
     setFormOpen(true)
-  }
+  }, [])
 
-  const handleRivalida = (row: any) => setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Rivalidazione' })
-  const handleDismetti = (row: any) => setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Dismissione' })
-  const handleOpenStorico = (row: any) => { setPanelTab('storico'); setPanelId(row.id) }
-  const handleOpenPreparazioni = (row: any) => { setPanelTab('preparazioni'); setPanelId(row.id) }
+  // ─── Handler stabili per CompostiTable (memo) ────────────────────────────
+  // Questi non dipendono da stato che cambia spesso, quindi le referenze
+  // rimangono stabili tra render — memo su CompostiTable può fare il suo lavoro.
 
-  const handleRequestDelete = async (id: number) => {
+  const handleRowClick = useCallback((row: any) => {
+    setPanelTab('dettaglio')
+    setPanelId(row.id)
+  }, [])
+
+  const handleRivalida = useCallback((row: any) =>
+    setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Rivalidazione' }), [])
+
+  const handleDismetti = useCallback((row: any) =>
+    setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Dismissione' }), [])
+
+  const handleOpenStorico = useCallback((row: any) => {
+    setPanelTab('storico')
+    setPanelId(row.id)
+  }, [])
+
+  const handleOpenPreparazioni = useCallback((row: any) => {
+    setPanelTab('preparazioni')
+    setPanelId(row.id)
+  }, [])
+
+  const handleRequestDelete = useCallback(async (id: number) => {
     setPanelId(null)
     const info = await window.electronAPI.invoke('composti:count-by-lotto', id)
     setDeleteMixInfo(info)
     setDeleteId(id)
-  }
+  }, [])
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   const hasFiltriAttivi = filtroStati.length > 0 || filtroWorks.length > 0 || filtroDestinazioni.length > 0 || filtroMetodi.length > 0
 
@@ -405,7 +417,7 @@ export function CompostiPage() {
 
       <CompostiTable
         data={filtered}
-        onRowClick={row => { setPanelTab('dettaglio'); setPanelId(row.id) }}
+        onRowClick={handleRowClick}
         onNewLotto={handleNewLotto}
         onRivalida={handleRivalida}
         onDismetti={handleDismetti}

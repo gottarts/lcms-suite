@@ -1,3 +1,4 @@
+import { memo, useMemo, useState } from 'react'
 import { DataTable, type Column } from '@/components/shared/DataTable'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
@@ -5,7 +6,6 @@ import { formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { FialeSelector } from './FialeSelector'
 import { ApriAperturaDialog } from './ApriAperturaDialog'
-import { useState } from 'react'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator,
@@ -20,14 +20,30 @@ interface CompostiTableProps {
   onDismetti: (row: any) => void
   onRefresh: () => void
   onOpenStorico?: (row: any) => void
-  // FEAT-I: callback per aprire il pannello sulla tab Preparazioni
   onOpenPreparazioni?: (row: any) => void
 }
 
-export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDismetti, onRefresh, onOpenStorico, onOpenPreparazioni }: CompostiTableProps) {
-  const [apriTarget, setApriTarget] = useState<{ compostoId: number; fialaNumero: number; nome: string; lotto: string | null } | null>(null)
+// ─── memo: evita re-render quando cambia solo panelId in CompostiPage ────────
+export const CompostiTable = memo(function CompostiTable({
+  data,
+  onRowClick,
+  onNewLotto,
+  onRivalida,
+  onDismetti,
+  onRefresh,
+  onOpenStorico,
+  onOpenPreparazioni,
+}: CompostiTableProps) {
+  const [apriTarget, setApriTarget] = useState<{
+    compostoId: number
+    fialaNumero: number
+    nome: string
+    lotto: string | null
+  } | null>(null)
 
-  const columns: Column<any>[] = [
+  // ─── useMemo: columns non viene ricreato ad ogni render ──────────────────
+  // Le callback (onRowClick, ecc.) sono stabili se il parent usa useCallback.
+  const columns: Column<any>[] = useMemo(() => [
     {
       key: 'nome',
       label: 'Nome',
@@ -35,25 +51,24 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
       render: (v, row) => {
         const numeroFiale = parseInt(row.fiala) || 1
         const stato = computeStato(row)
-        const isRivalidato = stato === 'rivalidato_attivo' || stato === 'rivalidato_in_scadenza' || stato === 'rivalidato_scaduto'
+        const isRivalidato =
+          stato === 'rivalidato_attivo' ||
+          stato === 'rivalidato_in_scadenza' ||
+          stato === 'rivalidato_scaduto'
         return (
           <span className="flex items-center gap-2">
             <span>
-              {/* Badge MIX basato su forma, non su mix_id — così scompare se l'utente cambia forma a Neat/Solution */}
               {row.forma?.toLowerCase() === 'mix' && (
                 <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-100">
                   MIX
                 </Badge>
               )}
-              {/* Tag RIVAL. — identico per stile a MIX ma arancione, compare solo se rivalidato oltre scadenza */}
               {isRivalidato && (
                 <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-100">
                   RIVAL.
                 </Badge>
               )}
               {String(v)}
-              {/* FEAT-I: pulsante PREP cliccabile per tutti i Neat, mostra conteggio anche se 0.
-                  Sostituisce il vecchio badge statico {row.prep_attive_count} prep. */}
               {row.forma === 'Neat' && (
                 <Badge
                   variant="outline"
@@ -74,7 +89,14 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
               <FialeSelector
                 numeroFiale={numeroFiale}
                 fialeAperte={row.fiale_aperte_count ?? 0}
-                onApri={(fialaNumero) => setApriTarget({ compostoId: row.id, fialaNumero, nome: row.nome, lotto: row.lotto ?? null })}
+                onApri={(fialaNumero) =>
+                  setApriTarget({
+                    compostoId: row.id,
+                    fialaNumero,
+                    nome: row.nome,
+                    lotto: row.lotto ?? null,
+                  })
+                }
               />
             )}
           </span>
@@ -82,18 +104,30 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
       },
     },
     { key: 'codice_interno', label: 'Codice' },
-    { key: 'classe', label: 'Classe', render: (v) => v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—' },
+    {
+      key: 'classe',
+      label: 'Classe',
+      render: (v) =>
+        v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—',
+    },
     { key: 'forma', label: 'Forma', render: (v) => v || '—' },
     { key: 'produttore', label: 'Produttore' },
     { key: 'lotto', label: 'Lotto' },
-    { key: 'scadenza_prodotto', label: 'Scadenza', render: (v) => formatDate(v as string) },
+    {
+      key: 'scadenza_prodotto',
+      label: 'Scadenza',
+      render: (v) => formatDate(v as string),
+    },
     {
       key: 'stato',
       label: 'Stato',
       sortable: false,
       render: (_, row) => {
         const stato = computeStato(row)
-        const isRivalidato = stato === 'rivalidato_attivo' || stato === 'rivalidato_in_scadenza' || stato === 'rivalidato_scaduto'
+        const isRivalidato =
+          stato === 'rivalidato_attivo' ||
+          stato === 'rivalidato_in_scadenza' ||
+          stato === 'rivalidato_scaduto'
         return (
           <div className="flex flex-col items-start gap-0.5">
             <StatusBadge status={stato} />
@@ -119,12 +153,12 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
       className: 'w-10',
       render: (_, row) => (
         <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
             <Button size="icon" variant="ghost" className="h-7 w-7">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem onClick={() => onRowClick(row)}>
               <Eye className="h-3.5 w-3.5 mr-2" /> Apri
             </DropdownMenuItem>
@@ -145,7 +179,8 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         </DropdownMenu>
       ),
     },
-  ]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [onRowClick, onNewLotto, onRivalida, onDismetti, onOpenStorico, onOpenPreparazioni])
 
   return (
     <>
@@ -156,7 +191,11 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         compostoNome={apriTarget?.nome}
         fialaNumero={apriTarget?.fialaNumero ?? 1}
         compostoLotto={apriTarget?.lotto}
-        conteggioLotto={apriTarget?.lotto ? data.filter(c => c.lotto === apriTarget.lotto).length : 0}
+        conteggioLotto={
+          apriTarget?.lotto
+            ? data.filter((c) => c.lotto === apriTarget.lotto).length
+            : 0
+        }
         onSaved={() => { setApriTarget(null); onRefresh() }}
       />
       <DataTable
@@ -164,8 +203,10 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         data={data}
         onRowClick={onRowClick}
         emptyMessage="Nessun composto trovato"
-        rowClassName={(row) => computeStato(row) === 'dismesso' ? 'opacity-40 text-muted-foreground' : ''}
+        rowClassName={(row) =>
+          computeStato(row) === 'dismesso' ? 'opacity-40 text-muted-foreground' : ''
+        }
       />
     </>
   )
-}
+})
