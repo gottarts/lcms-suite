@@ -65,6 +65,14 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     return { ...composto, metodi_ids, storia, preparazioni }
   })
 
+  // Restituisce tutti i composti di un mix dato il mix_id.
+  // Usato da "Nuovo lotto" per pre-caricare i nomi dei componenti nel MixPesticidiForm.
+  ipcMain.handle('composti:list-by-mix', (_, mix_id: string) => {
+    return getDb()
+      .prepare('SELECT * FROM composti WHERE mix_id = ? ORDER BY id ASC')
+      .all(mix_id) as any[]
+  })
+
   ipcMain.handle('composti:create', (_, data: Record<string, unknown>) => {
     const db = getDb()
     const metodiIds = (data.metodi_ids as string[] | undefined) || []
@@ -182,7 +190,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
 
-    // Legge il vecchio lotto PRIMA dell'update, serve per LOTTO-SYNC
     const vecchioLotto = row.mix_id
       ? (db.prepare('SELECT lotto FROM composti WHERE id = ?').get(id) as any)?.lotto ?? null
       : null
@@ -196,17 +203,19 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       }
 
       if (row.mix_id) {
-        // MIX-SYNC: propaga solo i campi comuni a tutti i composti del mix.
-        // I campi per-riga (lotto, scadenza_prodotto, data_apertura, produttore,
-        // forma_commerciale) NON vengono toccati — ogni composto ha il suo valore.
         db.prepare(`
           UPDATE composti SET
+            forma               = ?,
+            forma_commerciale   = ?,
             codice_interno      = ?,
             concentrazione      = ?,
             unita_conc          = ?,
             solvente            = ?,
             fiala               = ?,
+            produttore          = ?,
             operatore_apertura  = ?,
+            data_apertura       = ?,
+            scadenza_prodotto   = ?,
             classe              = ?,
             destinazione_uso    = ?,
             work_standard       = ?,
@@ -218,15 +227,17 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
             updated_at          = datetime('now')
           WHERE mix_id = ? AND id != ?
         `).run(
+          row.forma,
+          row.forma_commerciale,
           row.codice_interno, row.concentrazione, row.unita_conc,
-          row.solvente, row.fiala, row.operatore_apertura,
+          row.solvente, row.fiala,
+          row.produttore, row.operatore_apertura,
+          row.data_apertura, row.scadenza_prodotto,
           row.classe, row.destinazione_uso,
           row.work_standard, row.ubicazione, row.stoccaggio, row.accreditamento_crm,
           row.volume_ml, row.arpa, row.mix_id, id
         )
 
-        // LOTTO-SYNC: se il lotto è cambiato, aggiorna tutti i composti del mix
-        // che avevano il vecchio lotto con il nuovo valore.
         if (row.lotto !== vecchioLotto && row.lotto) {
           db.prepare(
             'UPDATE composti SET lotto = ?, updated_at = datetime(\'now\') WHERE mix_id = ? AND lotto = ? AND id != ?'
@@ -304,7 +315,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     codice_interno?: string | null
     operatore_apertura?: string | null
     metodi_ids?: string[]
-    // Supporta sia il vecchio formato (nomi: string[]) che il nuovo (componenti: Array<{...}>)
     nomi?: string[]
     componenti?: Array<{
       nome: string
@@ -332,12 +342,11 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
 
-    // Campi comuni a tutti i composti del mix (fallback se non specificati per riga)
     const common = {
       codice_interno: data.codice_interno || null,
       formula: null,
       classe: data.classe || null,
-      forma: data.forma || 'Solution',
+      forma: data.forma || 'Mix',
       forma_commerciale: data.forma_commerciale,
       purezza: null,
       concentrazione: data.concentrazione,
@@ -363,7 +372,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
       volume_ml: data.volume_ml ?? null,
     }
 
-    // Normalizza input: accetta sia componenti (nuovo, per-riga) che nomi (vecchio, .txt)
     const componenti: Array<{
       nome: string
       forma_commerciale?: string | null
@@ -380,7 +388,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
         const row = {
           ...common,
           nome: comp.nome,
-          // I valori per-riga sovrascrivono i comuni se presenti
           forma_commerciale: comp.forma_commerciale ?? common.forma_commerciale,
           mix:               comp.forma_commerciale ?? common.forma_commerciale,
           lotto:             comp.lotto             ?? common.lotto,
@@ -478,9 +485,6 @@ LEFT JOIN composti_storia cs ON cs.composto_id = c.id`
     })
 
     return result
-  
-
-return result
   })
 
   ipcMain.handle('composti:apri-fiala', (_, compostoId: number, data: {

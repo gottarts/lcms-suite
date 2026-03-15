@@ -338,11 +338,13 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <div className="grid grid-cols-4 gap-3">
               <div>
                 <Label className="text-xs">Forma</Label>
+                {/* TASK 1: aggiunta opzione Mix */}
                 <Select value={form.forma || ''} onValueChange={v => set('forma', v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Neat">Neat</SelectItem>
                     <SelectItem value="Solution">Solution</SelectItem>
+                    <SelectItem value="Mix">Mix</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -362,7 +364,8 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                 </Select>
               </div>
               <div><Label className="text-xs">Solvente</Label><Input value={form.solvente || ''} onChange={e => set('solvente', e.target.value)} /></div>
-              {form.forma === 'Solution' && (
+              {/* TASK 1: volume_ml visibile anche per Mix */}
+              {(form.forma === 'Solution' || form.forma === 'Mix') && (
                 <div>
                   <Label className="text-xs">Volume mL</Label>
                   <Input

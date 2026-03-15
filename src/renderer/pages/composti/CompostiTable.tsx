@@ -39,7 +39,8 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
         return (
           <span className="flex items-center gap-2">
             <span>
-              {row.mix_id && (
+              {/* Badge MIX basato su forma, non su mix_id — così scompare se l'utente cambia forma a Neat/Solution */}
+              {row.forma?.toLowerCase() === 'mix' && (
                 <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-100">
                   MIX
                 </Badge>
@@ -82,7 +83,7 @@ export function CompostiTable({ data, onRowClick, onNewLotto, onRivalida, onDism
     },
     { key: 'codice_interno', label: 'Codice' },
     { key: 'classe', label: 'Classe', render: (v) => v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—' },
-    { key: 'forma', label: 'Forma', render: (v, row) => row.mix_id ? 'Mix' : v },
+    { key: 'forma', label: 'Forma', render: (v) => v || '—' },
     { key: 'produttore', label: 'Produttore' },
     { key: 'lotto', label: 'Lotto' },
     { key: 'scadenza_prodotto', label: 'Scadenza', render: (v) => formatDate(v as string) },

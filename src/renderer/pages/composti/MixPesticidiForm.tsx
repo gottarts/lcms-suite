@@ -17,6 +17,25 @@ const DESTINAZIONI_USO = [
   'Standard Interno',
 ]
 
+// TASK 0: Helper — restituisce i gruppi per lotto se e solo se TUTTI i lotti sono unici.
+// Restituisce null se almeno un lotto è condiviso (caso mix normale → nessun picker).
+function rilevaCasoLottiUnici(
+  componenti: ComponenteImportato[]
+): ComponenteImportato[][] | null {
+  if (!componenti.length) return null
+  const gruppi = new Map<string, ComponenteImportato[]>()
+  for (const c of componenti) {
+    const chiave = c.lotto?.trim() || 'nolotto'
+    if (!gruppi.has(chiave)) gruppi.set(chiave, [])
+    gruppi.get(chiave)!.push(c)
+  }
+  // Se almeno un lotto ha più di una sostanza → caso mix normale, nessun picker
+  if ([...gruppi.values()].some(g => g.length > 1)) return null
+  // Con un solo gruppo (tutti senza lotto) non ha senso mostrare il picker
+  if (gruppi.size <= 1) return null
+  return [...gruppi.values()]
+}
+
 interface ComponenteImportato {
   nome: string
   forma_commerciale?: string | null
@@ -30,9 +49,32 @@ interface MixPesticidiFormProps {
   open: boolean
   onClose: () => void
   onSave: () => void
+  // Quando presente, pre-compila il form con i dati di un mix esistente (caso "Nuovo lotto")
+  mixTemplate?: {
+    forma_commerciale: string
+    concentrazione: string
+    unita_conc: string
+    solvente: string
+    classe: string
+    destinazione_uso: string
+    work_standard: string
+    ubicazione: string
+    stoccaggio: string
+    accreditamento_crm: string
+    codice_interno: string
+    fiala: string
+    volume_ml: string
+    lotto: string
+    data_apertura: string
+    scadenza_prodotto: string
+    operatore_apertura: string
+    produttore: string
+    _nomi: string[]
+    _metodi_ids: string[]
+  } | null
 }
 
-export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProps) {
+export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPesticidiFormProps) {
   const [form, setForm] = useState({
     forma_commerciale: '', concentrazione: '', unita_conc: UNITA_DEFAULT,
     solvente: '', produttore: '', lotto: '', data_apertura: '',
@@ -54,6 +96,9 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
   const [metodiToast, setMetodiToast] = useState('')
   const [importTextOpen, setImportTextOpen] = useState(false)
   const [importedFields, setImportedFields] = useState<Set<string>>(new Set())
+  // TASK 0: stati per il dialog selezione lotti unici
+  const [lottiUnici, setLottiUnici] = useState<ComponenteImportato[][]>([])
+  const [selezioneLottiOpen, setSelezioneLottiOpen] = useState(false)
 
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
 
@@ -71,6 +116,45 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     }).catch(err => console.error('Error loading metodi:', err))
   }, [])
 
+  // Pre-compila il form quando viene passato un mixTemplate (caso "Nuovo lotto" su un mix)
+  useEffect(() => {
+    if (!open) return
+    if (mixTemplate) {
+      setForm({
+        forma_commerciale: mixTemplate.forma_commerciale,
+        concentrazione:    mixTemplate.concentrazione,
+        unita_conc:        mixTemplate.unita_conc || UNITA_DEFAULT,
+        solvente:          mixTemplate.solvente,
+        produttore:        mixTemplate.produttore,
+        lotto:             '',
+        data_apertura:     '',
+        scadenza_prodotto: '',
+        classe:            mixTemplate.classe,
+        destinazione_uso:  mixTemplate.destinazione_uso,
+        stoccaggio:        mixTemplate.stoccaggio,
+        accreditamento_crm: mixTemplate.accreditamento_crm || 'ISO 17034',
+        codice_interno:    mixTemplate.codice_interno,
+        fiale:             mixTemplate.fiala || '1',
+        ubicazione:        mixTemplate.ubicazione,
+        work_standard:     mixTemplate.work_standard,
+        volume_ml:         mixTemplate.volume_ml,
+        operatore_apertura: '',
+      })
+      setNomi(mixTemplate._nomi)
+      setComponentiImportati(null)
+      // I nomi sono pre-caricati ma non bloccati: l'utente può modificarli
+      // I campi comuni sono pre-compilati ma editabili
+      setImportedFields(new Set())
+      // Pre-seleziona i metodi del mix originale
+      if (mixTemplate._metodi_ids?.length > 0) {
+        setMetodiIds(mixTemplate._metodi_ids)
+      }
+    } else {
+      // Apertura normale senza template: reset completo
+      reset()
+    }
+  }, [open, mixTemplate])
+
   const reset = () => {
     setForm({
       forma_commerciale: '', concentrazione: '', unita_conc: UNITA_DEFAULT,
@@ -86,6 +170,8 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     setMetodiInput('')
     setMetodiToast('')
     setImportedFields(new Set())
+    setLottiUnici([])
+    setSelezioneLottiOpen(false)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -163,6 +249,14 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       if (scadArr.length > 0)  locked.add('scadenza_prodotto')
       if (aperArr.length > 0)  locked.add('data_apertura')
       if (prodArr.length > 0)  locked.add('produttore')
+
+      // TASK 0: controlla subito su comps se tutti i lotti sono unici.
+      // In quel caso mostra il picker per scegliere quale mix inserire.
+      const gruppiUnici = rilevaCasoLottiUnici(comps)
+      if (gruppiUnici) {
+        setLottiUnici(gruppiUnici)
+        setSelezioneLottiOpen(true)
+      }
     }
 
     if (values['metodi_nomi']) {
@@ -200,7 +294,7 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     try {
       const baseData = {
         ...form,
-        forma: 'mix',
+        forma: 'Mix',
         concentrazione: form.concentrazione ? parseFloat(form.concentrazione) : null,
         unita_conc: form.unita_conc || UNITA_DEFAULT,
         fiala: form.fiale ? String(parseInt(form.fiale)) : null,
@@ -214,9 +308,6 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
       // CASO A: componenti importati con dati per riga (da TextImportDialog)
       if (componentiImportati && componentiImportati.length > 0) {
 
-        // Raggruppa i componenti per lotto.
-        // Il lotto è ciò che identifica il flacone fisico → ogni lotto distinto
-        // genera un mix_id separato. Righe senza lotto finiscono in un unico gruppo.
         const gruppi = new Map<string, ComponenteImportato[]>()
         for (const comp of componentiImportati) {
           const chiave = comp.lotto?.trim() || 'nolotto'
@@ -224,31 +315,31 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
           gruppi.get(chiave)!.push(comp)
         }
 
-        let totaleComponenti = 0
-        for (const [, gruppo] of gruppi) {
-          // forma_commerciale è uguale per tutte le righe dello stesso lotto
-          // (stesso flacone = stesso prodotto commerciale)
-          const formaCommercialeGruppo =
-            gruppo.find(c => c.forma_commerciale?.trim())?.forma_commerciale ||
-            form.forma_commerciale
-
-          await compostiApi.createMix({
-            ...baseData,
-            forma_commerciale: formaCommercialeGruppo,
-            componenti: gruppo,
-          })
-          totaleComponenti += gruppo.length
+        // Se ci sono più gruppi-lotto distinti, mostrare il picker invece di creare tutto in silenzio.
+        // L'utente deve scegliere quale mix inserire adesso — per le altre usa Import CSV.
+        if (gruppi.size > 1) {
+          setSaving(false)
+          setLottiUnici([...gruppi.values()])
+          setSelezioneLottiOpen(true)
+          return
         }
 
-        onSave(); onClose(); reset()
-        const numMix = gruppi.size
-        alert(
-          numMix > 1
-            ? `${numMix} mix creati — ${totaleComponenti} componenti totali`
-            : `Mix creato — ${totaleComponenti} componenti aggiunti`
-        )
+        // Gruppo singolo: procedi con la creazione
+        const [, gruppo] = [...gruppi.entries()][0]
+        const formaCommercialeGruppo =
+          gruppo.find(c => c.forma_commerciale?.trim())?.forma_commerciale ||
+          form.forma_commerciale
 
-      // CASO B: nomi da file .txt semplice (nessun dato per riga, lotto unico dal form)
+        await compostiApi.createMix({
+          ...baseData,
+          forma_commerciale: formaCommercialeGruppo,
+          componenti: gruppo,
+        })
+
+        onSave(); onClose(); reset()
+        alert(`Mix creato — ${gruppo.length} componenti aggiunti`)
+
+      // CASO B: nomi da file .txt semplice
       } else {
         const result = await compostiApi.createMix({
           ...baseData,
@@ -270,7 +361,6 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
   const hasPerRowData = componentiImportati !== null &&
     componentiImportati.some(c => c.lotto || c.scadenza_prodotto || c.data_apertura || c.produttore)
 
-  // Numero di mix distinti che verranno creati — mostrato nel bottone e nel banner
   const numMixAnteprima = (() => {
     if (!componentiImportati || componentiImportati.length === 0) return 1
     const lotti = new Set(componentiImportati.map(c => c.lotto?.trim() || 'nolotto'))
@@ -281,13 +371,27 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
     <Dialog open={open} onOpenChange={v => { if (!v) { onClose(); reset() } }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-heading">Aggiungi Mix Pesticidi</DialogTitle>
+          <DialogTitle className="font-heading">
+            {mixTemplate ? `Nuovo lotto — ${mixTemplate.forma_commerciale}` : 'Aggiungi Mix Pesticidi'}
+          </DialogTitle>
         </DialogHeader>
 
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Carica un file .txt con un nome per riga oppure importa da file Excel/CSV.
-          Verranno creati N record con i metadati comuni del flacone.
-        </p>
+        {mixTemplate && (
+          <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800 flex items-start gap-2">
+            <span className="text-base leading-none mt-0.5">ℹ️</span>
+            <p>
+              Stai creando un <strong>nuovo lotto</strong> del mix <strong>{mixTemplate.forma_commerciale}</strong> ({mixTemplate._nomi.length} componenti).
+              I metadati comuni sono pre-compilati — compila lotto, date e operatore per il nuovo flacone.
+            </p>
+          </div>
+        )}
+
+        {!mixTemplate && (
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Carica un file .txt con un nome per riga oppure importa da file Excel/CSV.
+            Verranno creati N record con i metadati comuni del flacone.
+          </p>
+        )}
 
         <div className="space-y-4">
 
@@ -533,6 +637,69 @@ export function MixPesticidiForm({ open, onClose, onSave }: MixPesticidiFormProp
         fields={importFields}
         onImport={handleTextImport}
       />
+
+      {/* TASK 0: dialog selezione mix quando il file contiene solo lotti unici */}
+      <Dialog open={selezioneLottiOpen} onOpenChange={v => !v && setSelezioneLottiOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Seleziona la mix da inserire</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2">
+            <p className="text-sm text-muted-foreground">
+              Il file contiene <strong>{lottiUnici.length} sostanze con lotti distinti</strong>.
+              Ogni lotto corrisponde a un flacone separato — seleziona quale mix vuoi inserire ora,
+              oppure usa <strong>Importa CSV</strong> nella tabella composti per caricarle tutte insieme.
+            </p>
+
+            <div className="space-y-2 mt-3 max-h-64 overflow-y-auto pr-1">
+              {lottiUnici.map((gruppo, i) => {
+                const lotto = gruppo[0]?.lotto || '— senza lotto —'
+                const formaComm = gruppo[0]?.forma_commerciale || ''
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className="w-full text-left rounded-md border px-4 py-3 hover:bg-muted/50 transition-colors"
+                    onClick={() => {
+                      setComponentiImportati(gruppo)
+                      setNomi(gruppo.map(c => c.nome))
+                      if (gruppo[0]?.forma_commerciale) {
+                        setImportedFields(prev => new Set([...prev, 'forma_commerciale']))
+                      }
+                      setSelezioneLottiOpen(false)
+                      setLottiUnici([])
+                    }}
+                  >
+                    <div className="text-sm font-medium font-mono">{lotto}</div>
+                    {formaComm && (
+                      <div className="text-xs text-muted-foreground mt-0.5">{formaComm}</div>
+                    )}
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {gruppo.length} composto{gruppo.length !== 1 ? 'i' : ''}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setComponentiImportati(null)
+                setNomi([])
+                setImportedFields(new Set())
+                setLottiUnici([])
+                setSelezioneLottiOpen(false)
+              }}
+            >
+              Annulla import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

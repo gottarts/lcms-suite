@@ -9,7 +9,7 @@ const DB_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: 'nome', label: 'Nome', required: true },
   { key: 'codice_interno', label: 'Codice Interno' },
   { key: 'classe', label: 'Classe' },
-  { key: 'forma', label: 'Forma (Neat/Solution/Stock)' },
+  { key: 'forma', label: 'Forma (Neat/Solution/Mix)' },
   { key: 'forma_commerciale', label: 'Forma Commerciale' },
   { key: 'formula', label: 'Formula' },
   { key: 'purezza', label: 'Purezza (%)' },
@@ -26,12 +26,11 @@ const DB_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: 'work_standard', label: 'Work Standard' },
   { key: 'ubicazione', label: 'Ubicazione' },
   { key: 'stoccaggio', label: 'Stoccaggio' },
-  { key: 'accreditamento_crm', label: 'Accreditamento CRM' },   // ← aggiunto (migration 005)
-  { key: 'volume_ml', label: 'Volume (mL)' },                    // ← aggiunto (migration 009)
+  { key: 'accreditamento_crm', label: 'Accreditamento CRM' },
+  { key: 'volume_ml', label: 'Volume (mL)' },
   { key: 'peso_molecolare', label: 'Peso Molecolare (MW)' },
   { key: 'matrice', label: 'Matrice' },
   { key: 'note', label: 'Note' },
-  // FEAT-metodi-import: colonna metodi analitici
   { key: 'metodi_nomi', label: 'Metodi Analitici (separati da ;)' },
   { key: '_skip', label: '— Ignora colonna —' },
 ]
@@ -83,6 +82,34 @@ function cellToString(val: unknown): string {
   return String(val).replace(/\r?\n/g, ' ').trim()
 }
 
+// TASK 2: helper — analizza le righe mappate e restituisce una mappa lotto → mix_id
+// per i lotti che compaiono in più di una riga.
+function calcolaMixDaLotto(
+  rows: string[][],
+  headers: string[],
+  mapping: Record<string, string>
+): Map<string, string> {
+  const lottoHeader = Object.entries(mapping).find(([, v]) => v === 'lotto')?.[0]
+  if (!lottoHeader) return new Map()
+  const lottoIdx = headers.indexOf(lottoHeader)
+  if (lottoIdx === -1) return new Map()
+
+  const count = new Map<string, number>()
+  for (const row of rows) {
+    const val = row[lottoIdx]?.trim()
+    if (val) count.set(val, (count.get(val) ?? 0) + 1)
+  }
+
+  let i = 0
+  const mixIdMap = new Map<string, string>()
+  for (const [lotto, n] of count.entries()) {
+    if (n > 1) {
+      mixIdMap.set(lotto, `mix_${Date.now().toString(36)}_${i++}_${lotto.replace(/\W/g, '')}`)
+    }
+  }
+  return mixIdMap
+}
+
 interface ImportDialogProps {
   open: boolean
   onClose: () => void
@@ -91,21 +118,24 @@ interface ImportDialogProps {
 
 export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [step, setStep] = useState<'upload' | 'sheet' | 'mapping' | 'preview' | 'importing' | 'done' | 'error'>('upload')
+  // TASK 3: aggiunto step 'header' all'union type
+  const [step, setStep] = useState<'upload' | 'sheet' | 'header' | 'mapping' | 'preview' | 'importing' | 'done' | 'error'>('upload')
   const [csvHeaders, setCsvHeaders] = useState<string[]>([])
   const [csvRows, setCsvRows] = useState<string[][]>([])
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [errorMsg, setErrorMsg] = useState('')
   const [importCount, setImportCount] = useState(0)
+  const [mixImportCount, setMixImportCount] = useState(0)
   const [sheetNames, setSheetNames] = useState<string[]>([])
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null)
+  // TASK 3: righe grezze del file per la selezione intestazione
+  const [rawRows, setRawRows] = useState<string[][]>([])
 
   const DATE_FIELDS = new Set([
     'data_apertura', 'data_preparazione', 'scadenza_prodotto',
     'data_scadenza_soluzione', 'data_dismissione',
   ])
 
-  // Campi numerici: vengono convertiti con parseFloat invece di restare stringa
   const NUMERIC_FIELDS = new Set([
     'volume_ml', 'peso_molecolare', 'concentrazione', 'purezza',
   ])
@@ -117,8 +147,10 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     setMapping({})
     setErrorMsg('')
     setImportCount(0)
+    setMixImportCount(0)
     setSheetNames([])
     setWorkbook(null)
+    setRawRows([]) // TASK 3
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -151,12 +183,11 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
       work_standard:      ['workdestinazione', 'workstandard', 'work'],
       ubicazione:         ['ubicazione', 'location', 'posizione'],
       stoccaggio:         ['stoccaggio', 'storage'],
-      accreditamento_crm: ['accreditamentocrm', 'accreditamento', 'crm', 'iso17034'], // ← aggiunto
-      volume_ml:          ['volumeml', 'volume', 'vol', 'volml'],                     // ← aggiunto
+      accreditamento_crm: ['accreditamentocrm', 'accreditamento', 'crm', 'iso17034'],
+      volume_ml:          ['volumeml', 'volume', 'vol', 'volml'],
       peso_molecolare:    ['pesomolecolare', 'mw', 'pm'],
       matrice:            ['matrice', 'matrix'],
       note:               ['note', 'notes', 'annotazioni'],
-      // FEAT-metodi-import: alias per la colonna metodi
       metodi_nomi:        ['metodi', 'metodo', 'metodianalitici', 'methods', 'method'],
     }
 
@@ -164,18 +195,23 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     for (const h of headers) {
       const hClean = h.replace(/_\d+$/, '')
       const hn = normalize(hClean)
+
+      // Colonna senza intestazione → ignora sempre, senza tentare match
+      if (!hn) {
+        auto[h] = '_skip'
+        continue
+      }
+
       seen[hn] = (seen[hn] ?? 0) + 1
 
       let matched = '_skip'
 
-      // Prima prova match esatto
       for (const [dbKey, synonyms] of Object.entries(aliases)) {
         if (synonyms.some(s => normalize(s) === hn)) {
           matched = dbKey
           break
         }
       }
-      // Se non trovato, prova contains solo per alias lunghi (evita falsi positivi)
       if (matched === '_skip') {
         for (const [dbKey, synonyms] of Object.entries(aliases)) {
           if (synonyms.some(s => normalize(s).length >= 5 && (hn.includes(normalize(s)) || normalize(s).includes(hn)))) {
@@ -190,6 +226,7 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     return auto
   }
 
+  // TASK 3: processSheet ora si ferma allo step 'header' invece di andare a 'mapping'
   function processSheet(ws: XLSX.WorkSheet) {
     const rows = XLSX.utils.sheet_to_json(ws, {
       header: 1,
@@ -198,31 +235,22 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
       defval: null,
     }) as unknown[][]
 
-    if (rows.length < 2) {
-      setErrorMsg("Il foglio sembra vuoto o ha solo l'intestazione.")
+    if (rows.length < 1) {
+      setErrorMsg('Il foglio sembra vuoto.')
       setStep('error')
       return
     }
 
-    const headers = (rows[0] as unknown[]).map(h =>
-      String(h ?? '').replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim()
+    // Converti tutte le righe in stringhe e salva come rawRows
+    const raw: string[][] = rows.map(r =>
+      (r as unknown[]).map(cell => {
+        if (cell instanceof Date) return parseDate(cell)
+        return cellToString(cell)
+      })
     )
 
-    const dataRows: string[][] = rows
-      .slice(1)
-      .filter(r => r.some(c => c != null && c !== ''))
-      .map(r =>
-        headers.map((_, i) => {
-          const val = r[i]
-          if (val instanceof Date) return parseDate(val)
-          return cellToString(val)
-        })
-      )
-
-    setCsvHeaders(headers)
-    setCsvRows(dataRows)
-    setMapping(autoMap(headers))
-    setStep('mapping')
+    setRawRows(raw)
+    setStep('header') // TASK 3: l'utente sceglie quale riga è l'intestazione
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -267,13 +295,18 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     let count = 0
     let errori = 0
 
-    // FEAT-metodi-import: carica tutti i metodi esistenti una volta sola
     let metodiEsistenti: any[] = []
     try {
       metodiEsistenti = await window.electronAPI.invoke('metodi:list') as any[]
     } catch {
       metodiEsistenti = []
     }
+
+    // TASK 2 — PASSO 1: costruire tutti i composti senza chiamare ancora l'IPC
+    const compostiDaImportare: Array<{
+      composto: Record<string, unknown>
+      metodiNomiRaw: string
+    }> = []
 
     for (const row of csvRows) {
       const composto: Record<string, unknown> = {}
@@ -283,7 +316,6 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
         const dbField = mapping[h]
         if (!dbField || dbField === '_skip') return
 
-        // FEAT-metodi-import: intercetta la colonna metodi prima di metterla nel payload
         if (dbField === 'metodi_nomi') {
           metodiNomiRaw = String(row[i] ?? '').trim()
           return
@@ -295,7 +327,6 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
         if (DATE_FIELDS.has(dbField)) {
           val = parseDate(raw)
         } else if (NUMERIC_FIELDS.has(dbField)) {
-          // Converte i campi numerici in number (non stringa) per il DB
           const n = parseFloat(String(raw).replace(',', '.'))
           val = isNaN(n) ? '' : n
         } else {
@@ -306,8 +337,24 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
       })
 
       if (!composto.nome) continue
+      compostiDaImportare.push({ composto, metodiNomiRaw })
+    }
 
-      // FEAT-metodi-import: risolve i nomi metodi in ID, crea quelli mancanti
+    // TASK 2 — PASSO 2: post-processing mix — assegna mix_id, mix, forma ai composti
+    // che hanno un lotto condiviso con almeno un altro composto nella stessa importazione.
+    const mixIdMap = calcolaMixDaLotto(csvRows, csvHeaders, mapping)
+    setMixImportCount(mixIdMap.size)
+    for (const { composto } of compostiDaImportare) {
+      const lotto = (composto.lotto as string)?.trim()
+      if (lotto && mixIdMap.has(lotto)) {
+        composto.mix_id = mixIdMap.get(lotto)!
+        composto.mix = lotto
+        composto.forma = 'Mix'
+      }
+    }
+
+    // TASK 2 — PASSO 3: import effettivo
+    for (const { composto, metodiNomiRaw } of compostiDaImportare) {
       if (metodiNomiRaw) {
         const nomiMetodi = metodiNomiRaw
           .split(';')
@@ -316,17 +363,14 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
 
         const ids: string[] = []
         for (const nome of nomiMetodi) {
-          // Cerca tra quelli già esistenti (case-insensitive)
           let metodo = metodiEsistenti.find(
             (m: any) => m.nome.toLowerCase() === nome.toLowerCase()
           )
           if (!metodo) {
-            // Non esiste: lo crea e aggiorna la lista locale
             try {
               metodo = await window.electronAPI.invoke('metodi:get-or-create', nome) as any
               metodiEsistenti.push(metodo)
             } catch {
-              // Se fallisce la creazione, salta questo metodo
               continue
             }
           }
@@ -354,11 +398,13 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     onSave()
   }
 
-  // Usa indice esplicito per gestire colonne con nomi duplicati
   const mappedCols = csvHeaders
     .map((h, i) => ({ h, i }))
     .filter(({ h }) => mapping[h] && mapping[h] !== '_skip')
   const previewRows = csvRows.slice(0, 5)
+
+  // TASK 2: calcola quanti mix verranno rilevati — usato nel banner dello step preview
+  const mixRilevatiCount = calcolaMixDaLotto(csvRows, csvHeaders, mapping).size
 
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
@@ -372,7 +418,6 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
           <div className="space-y-4 py-4">
             <p className="text-sm text-muted-foreground">
               Seleziona un file <strong>.csv</strong> o <strong>.xlsx</strong> esportato da Excel.
-              La prima riga deve contenere le intestazioni delle colonne.
             </p>
             <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
               <p className="font-medium mb-1">💡 Colonna Metodi Analitici</p>
@@ -416,6 +461,64 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
           </div>
         )}
 
+        {/* TASK 3 — STEP: SELEZIONE RIGA INTESTAZIONE */}
+        {step === 'header' && (
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Clicca sulla riga che contiene le <strong>intestazioni delle colonne</strong>.
+            </p>
+
+            <div className="border rounded-md overflow-auto max-h-72">
+              <table className="text-xs w-full">
+                <tbody>
+                  {rawRows.slice(0, 20).map((row, ri) => (
+                    <tr
+                      key={ri}
+                      className="cursor-pointer hover:bg-blue-50 border-b transition-colors"
+                      onClick={() => {
+                        const headers = row.map(c => String(c ?? '').trim())
+                        const dataRows = rawRows
+                          .slice(ri + 1)
+                          .filter(r => r.some(c => c !== '' && c != null))
+                        setCsvHeaders(headers)
+                        setCsvRows(dataRows)
+                        setMapping(autoMap(headers))
+                        setStep('mapping')
+                      }}
+                    >
+                      <td className="px-2 py-1.5 text-muted-foreground w-8 select-none font-mono border-r">
+                        {ri + 1}
+                      </td>
+                      {row.slice(0, 8).map((cell, ci) => (
+                        <td
+                          key={ci}
+                          className="px-2 py-1.5 border-r truncate max-w-[120px]"
+                          title={String(cell ?? '')}
+                        >
+                          {String(cell ?? '')}
+                        </td>
+                      ))}
+                      {row.length > 8 && (
+                        <td className="px-2 py-1.5 text-muted-foreground italic">
+                          +{row.length - 8} colonne
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Mostrate le prime 20 righe. Clicca sulla riga che fa da intestazione.
+            </p>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={handleClose}>Annulla</Button>
+            </DialogFooter>
+          </div>
+        )}
+
         {/* STEP: MAPPATURA COLONNE */}
         {step === 'mapping' && (
           <div className="space-y-4 py-2">
@@ -423,6 +526,17 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
               Trovate <strong>{csvHeaders.length} colonne</strong> e <strong>{csvRows.length} righe</strong>.
               Controlla la mappatura automatica e correggila se necessario.
             </p>
+
+            {/* Banner mix rilevati — visibile già in mappatura se la colonna lotto è già agganciata */}
+            {mixRilevatiCount > 0 && (
+              <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800 flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5">ℹ️</span>
+                <p>
+                  Rilevati <strong>{mixRilevatiCount} mix</strong> (composti con lotto condiviso).
+                  Verranno importati con <strong>Forma = Mix</strong> e stesso <code className="text-xs bg-blue-100 px-1 rounded">mix_id</code>.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
               {csvHeaders.map((h, i) => (
                 <div key={`${h}-${i}`} className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1.5">
@@ -461,6 +575,19 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
             <p className="text-sm text-muted-foreground">
               Anteprima delle prime 5 righe (colonne ignorate escluse). Verranno importati <strong>{csvRows.length}</strong> composti.
             </p>
+
+            {/* TASK 2: banner mix rilevati */}
+            {mixRilevatiCount > 0 && (
+              <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800 flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5">ℹ️</span>
+                <p>
+                  Rilevati <strong>{mixRilevatiCount} mix</strong> (composti con lotto condiviso).
+                  Verranno importati con <strong>Forma = Mix</strong> e stesso{' '}
+                  <code className="text-xs bg-blue-100 px-1 rounded">mix_id</code>.
+                </p>
+              </div>
+            )}
+
             <div className="overflow-x-auto border rounded">
               <table className="text-xs w-full">
                 <thead className="bg-muted">
@@ -510,6 +637,11 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
               {errorMsg || `Importati ${importCount} composti con successo.`}
             </p>
             <Badge variant="outline" className="text-base px-4 py-1">{importCount} composti aggiunti</Badge>
+            {mixImportCount > 0 && (
+              <p className="text-sm text-blue-700">
+                🧪 <strong>{mixImportCount} mix</strong> identificati (composti con lotto condiviso).
+              </p>
+            )}
             <DialogFooter className="justify-center pt-2">
               <Button onClick={handleClose}>Chiudi</Button>
             </DialogFooter>
