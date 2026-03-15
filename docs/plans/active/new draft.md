@@ -16,8 +16,6 @@
 
  ## altri
   
-serve un tasto che escluda i scaduti (un filtro di qualche tipo)
-Forse è il caso di mettere filtro su ogni colonna (oltre l ordina che gia abbiamo) e poi magari la possibilita di aggiungere altre colonne a scelta...
  
 POi ce il discorso del campo classe che in inserimento e bloccato con solo alcune possibilita. bisogna lasciare libero (suggeeire i composti le classi gia create). I campi di tutti i form potrebbereo andare in automatico a popolare i moduli anagrafiche. Nel caso di classi inserendo (o importando composti) la app compila in agrafiche tutte quelle inserire nel db composti. In questo modo se ci sono classi simili esempio Pesticidi e fito si va anagrafiche si modifica e l app mergia la voce in anagrafighe e mette tutti i composti sotto anagrafica scelta (dimmi se capisci sta cosa).
 
