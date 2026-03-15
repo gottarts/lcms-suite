@@ -431,30 +431,49 @@ FROM composti c`
     nuova_scadenza?: string
   }) => {
     const db = getDb()
-    const result = db.prepare(
+
+    // Recupera mix_id del composto cliccato
+    const comp = db.prepare('SELECT mix_id FROM composti WHERE id = ?').get(compostoId) as { mix_id: string | null } | undefined
+    const mixId = comp?.mix_id ?? null
+
+    // Se è un mix, propaga la storia a tutti i componenti; altrimenti solo al singolo
+    const targets: number[] = mixId
+      ? (db.prepare('SELECT id FROM composti WHERE mix_id = ?').all(mixId) as any[]).map((r: any) => r.id)
+      : [compostoId]
+
+    const insertStmt = db.prepare(
       `INSERT INTO composti_storia
          (composto_id, tipo, data, note, n_registro_qc, batch_analitico, lotto_crm_valido, nuova_scadenza)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      compostoId, data.tipo, data.data, data.note || null,
-      data.n_registro_qc || null, data.batch_analitico || null,
-      data.lotto_crm_valido || null, data.nuova_scadenza || null
     )
 
-    if (data.tipo === 'Dismissione') {
-      const comp = db.prepare('SELECT mix_id FROM composti WHERE id = ?').get(compostoId) as { mix_id: string | null } | undefined
-      if (comp?.mix_id) {
-        db.prepare(
-          `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE mix_id = ?`
-        ).run(data.data, comp.mix_id)
-      } else {
-        db.prepare(
-          `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE id = ?`
-        ).run(data.data, compostoId)
-      }
-    }
+    let firstId: number | bigint = 0
 
-    return { id: result.lastInsertRowid }
+    db.transaction(() => {
+      for (const targetId of targets) {
+        const result = insertStmt.run(
+          targetId, data.tipo, data.data, data.note || null,
+          data.n_registro_qc || null, data.batch_analitico || null,
+          data.lotto_crm_valido || null, data.nuova_scadenza || null
+        )
+        if (targetId === compostoId) firstId = result.lastInsertRowid
+      }
+
+      // Dismissione: aggiorna data_dismissione su tutti i target
+      if (data.tipo === 'Dismissione') {
+        if (mixId) {
+          db.prepare(
+            `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE mix_id = ?`
+          ).run(data.data, mixId)
+        } else {
+          db.prepare(
+            `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE id = ?`
+          ).run(data.data, compostoId)
+        }
+      }
+    })()
+
+    return { id: firstId }
   })
 
   ipcMain.handle('composti:lotti-validi', (_, compostoId: number) => {
