@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
-import { Plus, Search, FlaskConical, Filter, Upload, Download, ChevronDown } from 'lucide-react'
+import { Plus, Search, FlaskConical, Filter, Upload, Download, ChevronDown,
+         Copy, RotateCcw, Archive, Trash2 } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
 import { ExportDialog } from './ExportDialog'
 import { EtichetteDialog } from './EtichetteDialog'
@@ -154,6 +155,11 @@ export function CompostiPage() {
   const [etichetteOpen, setEtichetteOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
 
+  // ─── Bulk selection ────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkStoriaAction, setBulkStoriaAction] = useState<'Rivalidazione' | 'Dismissione' | null>(null)
+
   const load = useCallback(() =>
     compostiApi.list().then(rows =>
       setComposti(rows.map((c: any) => ({
@@ -169,6 +175,12 @@ export function CompostiPage() {
     load()
     loadMetodi()
   }, [load, loadMetodi])
+
+  // Reset selezione al cambio di qualsiasi filtro o ricerca
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [debouncedSearch, filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi,
+      filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire])
 
   const metodiNomeMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -235,6 +247,24 @@ export function CompostiPage() {
     }
   }, [deleteId, deleteMixInfo, load])
 
+  const handleBulkDelete = useCallback(async () => {
+    for (const id of selectedIds) {
+      await compostiApi.delete(id)
+    }
+    setSelectedIds(new Set())
+    setBulkDeleteOpen(false)
+    load()
+  }, [selectedIds, load])
+
+  const handleBulkStoria = useCallback(async (payload: any) => {
+    for (const id of selectedIds) {
+      await compostiApi.addStoria(id, payload)
+    }
+    setSelectedIds(new Set())
+    setBulkStoriaAction(null)
+    load()
+  }, [selectedIds, load])
+
   const handleEdit = useCallback((composto: any) => {
     setEditComposto(composto)
     setPanelId(null)
@@ -284,8 +314,6 @@ export function CompostiPage() {
   }, [])
 
   // ─── Handler stabili per CompostiTable (memo) ────────────────────────────
-  // Questi non dipendono da stato che cambia spesso, quindi le referenze
-  // rimangono stabili tra render — memo su CompostiTable può fare il suo lavoro.
 
   const handleRowClick = useCallback((row: any) => {
     setPanelTab('dettaglio')
@@ -319,26 +347,45 @@ export function CompostiPage() {
 
   const hasFiltriAttivi = filtroStati.length > 0 || filtroWorks.length > 0 || filtroDestinazioni.length > 0 || filtroMetodi.length > 0
 
+  // Label plurale per bulk
+  const nSel = selectedIds.size
+  const selLabel = `${nSel} compost${nSel === 1 ? 'o' : 'i'}`
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-heading text-lg font-semibold">Reference Standards</h2>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground mr-1">
             Visualizzati: {filtered.length} / Totali: {composti.length}
           </span>
+
+          {/* Importa / Aggiungi */}
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-4 w-4 mr-1" /> Importa CSV
           </Button>
           <Button size="sm" variant="outline" onClick={() => { setMixTemplate(null); setMixOpen(true) }}>
             <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
           </Button>
+
+          <div className="w-px h-5 bg-border mx-0.5" />
+
+          {/* Esporta / Etichette — smart: usa selezione se presente */}
           <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
             <Download className="h-4 w-4 mr-1" /> Esporta
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setEtichetteOpen(true)}>
-            🏷️ Etichette
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setEtichetteOpen(true)}
+            title={nSel > 0 ? `Etichette per ${nSel} selezionati` : 'Etichette per tutti i visualizzati'}
+          >
+            🏷️ Etichette{nSel > 0 && <span className="ml-1 text-xs text-primary font-medium">({nSel})</span>}
           </Button>
+
+          <div className="w-px h-5 bg-border mx-0.5" />
+
+          {/* Nuovo composto */}
           <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
           </Button>
@@ -415,6 +462,75 @@ export function CompostiPage() {
         onClickAttenzione={() => { if (filtroAttenzione) { setFiltroAttenzione(false) } else { setFiltroStati([]); setFiltroInScadenza(false); setFiltroAttenzione(true) } }}
       />
 
+      {/* ─── Barra bulk actions ─────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-3 py-2 my-2 rounded-md bg-muted border text-sm min-h-[44px]">
+        <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
+          <input
+            type="checkbox"
+            className="rounded"
+            checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
+            onChange={e =>
+              setSelectedIds(e.target.checked ? new Set(filtered.map(c => c.id)) : new Set())
+            }
+          />
+          <span className="text-muted-foreground text-xs">
+            {nSel > 0
+              ? `${selLabel} selezionat${nSel === 1 ? 'o' : 'i'}`
+              : `Seleziona tutti (${filtered.length})`}
+          </span>
+        </label>
+
+        {nSel > 0 && (
+          <>
+            <div className="border-l h-4 mx-1 shrink-0" />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const first = composti.find(c => selectedIds.has(c.id))
+                  if (first) handleNewLotto(first)
+                }}
+              >
+                <Copy className="h-3 w-3 mr-1" /> Nuovo lotto
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setBulkStoriaAction('Rivalidazione')}
+              >
+                <RotateCcw className="h-3 w-3 mr-1" /> Rivalidazione
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setBulkStoriaAction('Dismissione')}
+              >
+                <Archive className="h-3 w-3 mr-1" /> Dismetti
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 text-xs"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-3 w-3 mr-1" /> Cancella
+              </Button>
+            </div>
+            <button
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground shrink-0"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Deseleziona
+            </button>
+          </>
+        )}
+      </div>
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+
       <CompostiTable
         data={filtered}
         onRowClick={handleRowClick}
@@ -424,6 +540,8 @@ export function CompostiPage() {
         onRefresh={load}
         onOpenStorico={handleOpenStorico}
         onOpenPreparazioni={handleOpenPreparazioni}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
 
       <CompostoForm
@@ -441,7 +559,7 @@ export function CompostiPage() {
       />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onSave={load} />
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} filteredIds={filtered.map((c: any) => c.id)} />
-      <EtichetteDialog open={etichetteOpen} onClose={() => setEtichetteOpen(false)} filteredIds={filtered.map((c: any) => c.id)} />
+      <EtichetteDialog open={etichetteOpen} onClose={() => setEtichetteOpen(false)} filteredIds={nSel > 0 ? [...selectedIds] : filtered.map((c: any) => c.id)} />
       <CompostoPanel
         key={panelId ?? 'none'}
         compostoId={panelId}
@@ -452,6 +570,8 @@ export function CompostiPage() {
         onRefreshList={load}
         defaultTab={panelTab}
       />
+
+      {/* StoriaDialog singolo (da pannello o dropdown riga) */}
       <StoriaDialog
         open={storiaTarget !== null}
         onOpenChange={v => !v && setStoriaTarget(null)}
@@ -460,6 +580,19 @@ export function CompostiPage() {
         tipo={storiaTarget?.tipo ?? ''}
         onSaved={() => { load(); setStoriaTarget(null) }}
       />
+
+      {/* StoriaDialog bulk */}
+      <StoriaDialog
+        open={bulkStoriaAction !== null}
+        onOpenChange={v => !v && setBulkStoriaAction(null)}
+        compostoId={[...selectedIds][0] ?? null}
+        compostoNome={`${selLabel} selezionat${nSel === 1 ? 'o' : 'i'}`}
+        tipo={bulkStoriaAction ?? ''}
+        onSaved={() => {}}
+        onSavedBulk={handleBulkStoria}
+      />
+
+      {/* ConfirmDialog eliminazione singola */}
       <ConfirmDialog
         open={deleteId !== null}
         title="Elimina composto"
@@ -472,6 +605,17 @@ export function CompostiPage() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => { setDeleteId(null); setDeleteMixInfo(null) }}
+      />
+
+      {/* ConfirmDialog eliminazione bulk */}
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Elimina composti selezionati"
+        message={`Stai per eliminare ${selLabel} e tutti i dati correlati (preparazioni, storia, associazioni metodi). L'operazione non è reversibile.`}
+        confirmLabel={`Elimina ${selLabel}`}
+        variant="danger"
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteOpen(false)}
       />
     </div>
   )

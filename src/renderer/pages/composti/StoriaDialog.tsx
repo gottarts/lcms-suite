@@ -14,16 +14,17 @@ interface StoriaDialogProps {
   compostoNome?: string
   tipo: 'Rivalidazione' | 'Dismissione' | ''
   onSaved: () => void
+  onSavedBulk?: (payload: any) => Promise<void>
 }
 
-export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tipo, onSaved }: StoriaDialogProps) {
+export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tipo, onSaved, onSavedBulk }: StoriaDialogProps) {
   const [data, setData] = useState(new Date().toISOString().split('T')[0])
   const [note, setNote] = useState('')
   const [nRegistroQc, setNRegistroQc] = useState('')
   const [batchAnalitico, setBatchAnalitico] = useState('')
   const [lottoCrmValido, setLottoCrmValido] = useState('')
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
-  const [nuovaScadenza, setNuovaScadenza] = useState('')  // ← NUOVO
+  const [nuovaScadenza, setNuovaScadenza] = useState('')
 
   useEffect(() => {
     if (open && compostoId) {
@@ -32,7 +33,7 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
       setNRegistroQc('')
       setBatchAnalitico('')
       setLottoCrmValido('')
-      setNuovaScadenza('')  // ← NUOVO: reset all'apertura
+      setNuovaScadenza('')
 
       if (tipo === 'Rivalidazione') {
         window.electronAPI.invoke('composti:lotti-validi', compostoId)
@@ -44,18 +45,27 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
   }, [open, compostoId, tipo])
 
   const handleConfirm = async () => {
-    if (!compostoId || !tipo) return
-    await compostiApi.addStoria(compostoId, {
+    if (!tipo) return
+    const payload = {
       tipo,
       data,
       note: note || undefined,
       n_registro_qc: nRegistroQc || undefined,
       batch_analitico: batchAnalitico || undefined,
       lotto_crm_valido: lottoCrmValido || undefined,
-      nuova_scadenza: nuovaScadenza || undefined,  // ← NUOVO
-    })
-    onOpenChange(false)
-    onSaved()
+      nuova_scadenza: nuovaScadenza || undefined,
+    }
+    if (onSavedBulk) {
+      // Modalità bulk: delega al parent che itera su tutti gli ID selezionati
+      await onSavedBulk(payload)
+      onOpenChange(false)
+    } else {
+      // Modalità singolo (comportamento originale)
+      if (!compostoId) return
+      await compostiApi.addStoria(compostoId, payload)
+      onOpenChange(false)
+      onSaved()
+    }
   }
 
   return (
@@ -120,7 +130,6 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
                 )}
               </div>
 
-              {/* ← NUOVO: campo nuova data di scadenza */}
               <div>
                 <Label className="text-xs">Nuova data di scadenza</Label>
                 <Input

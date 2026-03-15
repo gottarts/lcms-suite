@@ -251,7 +251,8 @@ export function EtichetteDialog({ open, onClose, filteredIds }: EtichetteDialogP
   }
 
   // Stima numero totale etichette (basata solo sul conteggio composti, senza fiale)
-  const stimaLabel = `${filteredIds.length} compound${filteredIds.length !== 1 ? 'i' : ''} visibili · copie = n° fiale`
+  const n = filteredIds.length
+  const stimaLabel = `Verranno generate etichette per ${n} compost${n === 1 ? 'o' : 'i'}. Per composti con più fiale, verrà stampata una copia per ogni fiala.`
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>

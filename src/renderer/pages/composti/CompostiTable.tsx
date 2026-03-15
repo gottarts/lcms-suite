@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useState, useRef, useCallback } from 'react'
 import { DataTable, type Column } from '@/components/shared/DataTable'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +21,8 @@ interface CompostiTableProps {
   onRefresh: () => void
   onOpenStorico?: (row: any) => void
   onOpenPreparazioni?: (row: any) => void
+  selectedIds?: Set<number>
+  onSelectionChange?: (ids: Set<number>) => void
 }
 
 // ─── memo: evita re-render quando cambia solo panelId in CompostiPage ────────
@@ -33,6 +35,8 @@ export const CompostiTable = memo(function CompostiTable({
   onRefresh,
   onOpenStorico,
   onOpenPreparazioni,
+  selectedIds = new Set(),
+  onSelectionChange,
 }: CompostiTableProps) {
   const [apriTarget, setApriTarget] = useState<{
     compostoId: number
@@ -41,9 +45,49 @@ export const CompostiTable = memo(function CompostiTable({
     lotto: string | null
   } | null>(null)
 
+  // Indice dell'ultima riga cliccata — usato per Shift+click range selection
+  const lastCheckedIndexRef = useRef<number>(-1)
+
+  // Handler stabile per toggle singolo + Shift+range
+  const handleCheckboxChange = useCallback((row: any, checked: boolean, shiftKey: boolean) => {
+    const rowIndex = data.findIndex(r => r.id === row.id)
+    const next = new Set(selectedIds)
+
+    if (shiftKey && lastCheckedIndexRef.current >= 0) {
+      // Seleziona/deseleziona il range tra lastCheckedIndex e rowIndex
+      const from = Math.min(lastCheckedIndexRef.current, rowIndex)
+      const to   = Math.max(lastCheckedIndexRef.current, rowIndex)
+      for (let i = from; i <= to; i++) {
+        if (checked) next.add(data[i].id)
+        else next.delete(data[i].id)
+      }
+    } else {
+      if (checked) next.add(row.id)
+      else next.delete(row.id)
+    }
+
+    lastCheckedIndexRef.current = rowIndex
+    onSelectionChange?.(next)
+  }, [data, selectedIds, onSelectionChange])
+
   // ─── useMemo: columns non viene ricreato ad ogni render ──────────────────
-  // Le callback (onRowClick, ecc.) sono stabili se il parent usa useCallback.
   const columns: Column<any>[] = useMemo(() => [
+    {
+      key: '__select__',
+      label: '',
+      sortable: false,
+      className: 'w-8 pr-0',
+      render: (_: unknown, row: any) => (
+        <div onClick={e => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            className="rounded cursor-pointer"
+            checked={selectedIds.has(row.id)}
+            onChange={(e) => handleCheckboxChange(row, e.target.checked, e.nativeEvent.shiftKey)}
+          />
+        </div>
+      ),
+    },
     {
       key: 'nome',
       label: 'Nome',
@@ -179,8 +223,8 @@ export const CompostiTable = memo(function CompostiTable({
         </DropdownMenu>
       ),
     },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [onRowClick, onNewLotto, onRivalida, onDismetti, onOpenStorico, onOpenPreparazioni])
+  ], [onRowClick, onNewLotto, onRivalida, onDismetti, onOpenStorico, onOpenPreparazioni,
+      selectedIds, onSelectionChange, handleCheckboxChange])
 
   return (
     <>
