@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
 import { Plus, Search, FlaskConical, Filter, Upload, Download, ChevronDown,
-         Copy, RotateCcw, Archive, Trash2 } from 'lucide-react'
+         Copy, RotateCcw, Archive, Trash2, Eye, EyeOff, Columns } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
 import { ExportDialog } from './ExportDialog'
 import { EtichetteDialog } from './EtichetteDialog'
@@ -36,6 +36,48 @@ const DESTINAZIONI_USO = [
   'Standard Interno',
 ]
 
+// ─── Definizione colonne per il toggle visibilità ─────────────────────────────
+const COL_DEFS: { key: string; label: string }[] = [
+  { key: 'nome',             label: 'Nome' },
+  { key: 'codice_interno',   label: 'Codice' },
+  { key: 'classe',           label: 'Classe' },
+  { key: 'forma',            label: 'Forma' },
+  { key: 'produttore',       label: 'Produttore' },
+  { key: 'lotto',            label: 'Lotto' },
+  { key: 'scadenza_prodotto',label: 'Scadenza' },
+  { key: 'solvente',         label: 'Solvente' },
+  { key: 'ubicazione',       label: 'Ubicazione' },
+  { key: 'stoccaggio',       label: 'Stoccaggio' },
+  { key: 'work_standard',    label: 'Work' },
+  { key: 'stato',            label: 'Stato' },
+  { key: 'destinazione_uso', label: 'Destinazione' },
+  { key: 'forma_commerciale',label: 'Forma comm.' },
+  { key: 'matrice',          label: 'Matrice' },
+  { key: 'mw',               label: 'MW' },
+  { key: 'formula',          label: 'Formula' },
+]
+
+const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
+  nome:              true,
+  codice_interno:    true,
+  classe:            true,
+  forma:             true,
+  produttore:        true,
+  lotto:             true,
+  scadenza_prodotto: true,
+  solvente:          true,
+  ubicazione:        true,
+  stoccaggio:        false,
+  work_standard:     true,
+  stato:             true,
+  destinazione_uso:  false,
+  forma_commerciale: false,
+  matrice:           false,
+  mw:                false,
+  formula:           false,
+}
+
+// ─── MultiSelectDropdown (invariato) ─────────────────────────────────────────
 function MultiSelectDropdown({
   label,
   options,
@@ -116,6 +158,8 @@ function MultiSelectDropdown({
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function CompostiPage() {
   const location = useLocation()
   const [composti, setComposti] = useState<any[]>([])
@@ -132,6 +176,7 @@ export function CompostiPage() {
     debounceTimer.current = setTimeout(() => setDebouncedSearch(value), 500)
   }
 
+  // ─── Filtri ───────────────────────────────────────────────────────────────
   const [filtroStati, setFiltroStati] = useState<string[]>([])
   const [filtroWorks, setFiltroWorks] = useState<string[]>([])
   const [filtroDestinazioni, setFiltroDestinazioni] = useState<string[]>([])
@@ -140,7 +185,64 @@ export function CompostiPage() {
   const [filtroInScadenza, setFiltroInScadenza] = useState(false)
   const [mostraDismessi, setMostraDismessi] = useState(false)
   const [mostraDaAprire, setMostraDaAprire] = useState(true)
+  // Nuovo: nascondi scaduti
+  const [nascondiScaduti, setNascondiScaduti] = useState(false)
+  // Filtri per colonna
+  const [colFilters, setColFilters] = useState<Record<string, string>>({})
 
+  // ─── Visibilità colonne (persistita in localStorage) ─────────────────────
+  const [colVisible, setColVisible] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('composti-col-visible')
+      return saved ? { ...DEFAULT_COL_VISIBLE, ...JSON.parse(saved) } : DEFAULT_COL_VISIBLE
+    } catch {
+      return DEFAULT_COL_VISIBLE
+    }
+  })
+  const [colMenuOpen, setColMenuOpen] = useState(false)
+  const colMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) {
+        setColMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleColVisibleChange = useCallback((key: string, visible: boolean) => {
+    setColVisible(prev => {
+      const next = { ...prev, [key]: visible }
+      localStorage.setItem('composti-col-visible', JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const resetColVisible = useCallback(() => {
+    setColVisible(DEFAULT_COL_VISIBLE)
+    localStorage.removeItem('composti-col-visible')
+  }, [])
+
+  const nascosteCount = useMemo(
+    () => COL_DEFS.filter(d => colVisible[d.key] === false).length,
+    [colVisible]
+  )
+
+  // ─── Handler filtri per colonna ───────────────────────────────────────────
+  const handleColFilter = useCallback((key: string, value: string) => {
+    setColFilters(prev => {
+      if (!value) {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      }
+      return { ...prev, [key]: value }
+    })
+  }, [])
+
+  // ─── Dialogs / panel ─────────────────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false)
   const [editComposto, setEditComposto] = useState<any>(null)
   const [template, setTemplate] = useState<any>(null)
@@ -155,7 +257,7 @@ export function CompostiPage() {
   const [etichetteOpen, setEtichetteOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
 
-  // ─── Bulk selection ────────────────────────────────────────────────────────
+  // ─── Bulk selection ───────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkStoriaAction, setBulkStoriaAction] = useState<'Rivalidazione' | 'Dismissione' | null>(null)
@@ -180,7 +282,7 @@ export function CompostiPage() {
   useEffect(() => {
     setSelectedIds(new Set())
   }, [debouncedSearch, filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi,
-      filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire])
+      filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire, nascondiScaduti, colFilters])
 
   const metodiNomeMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -194,6 +296,8 @@ export function CompostiPage() {
 
   const filtered = useMemo(() => {
     let result = composti
+
+    // Ricerca globale
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase()
       result = result.filter(c =>
@@ -216,6 +320,18 @@ export function CompostiPage() {
         c.metodi_ids?.some((id: string) => metodiNomeMap[id]?.includes(q))
       )
     }
+
+    // Filtri per colonna (in AND con ricerca globale)
+    if (Object.keys(colFilters).length > 0) {
+      result = result.filter(c =>
+        Object.entries(colFilters).every(([key, val]) => {
+          const cellVal = String(c[key] ?? '').toLowerCase()
+          return cellVal.includes(val.toLowerCase())
+        })
+      )
+    }
+
+    // Multi-select
     if (filtroStati.length > 0) result = result.filter(c => filtroStati.some(s => computeStato(c) === STATO_MAP[s]))
     if (filtroWorks.length > 0) result = result.filter(c => filtroWorks.includes(c.work_standard))
     if (filtroDestinazioni.length > 0) result = result.filter(c => filtroDestinazioni.includes(c.destinazione_uso))
@@ -224,8 +340,19 @@ export function CompostiPage() {
     if (filtroAttenzione) result = result.filter(c => { const s = computeStato(c); return s === 'scaduto' || s === 'rivalidato_scaduto' })
     if (!mostraDismessi) result = result.filter(c => computeStato(c) !== 'dismesso')
     if (!mostraDaAprire) result = result.filter(c => computeStato(c) !== 'da_aprire')
+
+    // Nascondi scaduti
+    if (nascondiScaduti) {
+      result = result.filter(c => {
+        const s = computeStato(c)
+        return s !== 'scaduto' && s !== 'rivalidato_scaduto'
+      })
+    }
+
     return result
-  }, [composti, metodiNomeMap, debouncedSearch, filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi, filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire])
+  }, [composti, metodiNomeMap, debouncedSearch, colFilters,
+      filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi,
+      filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire, nascondiScaduti])
 
   const stats = useMemo(() => ({
     attivi: filtered.filter(c => { const s = computeStato(c); return s === 'attivo' || s === 'rivalidato_attivo' }).length,
@@ -314,7 +441,6 @@ export function CompostiPage() {
   }, [])
 
   // ─── Handler stabili per CompostiTable (memo) ────────────────────────────
-
   const handleRowClick = useCallback((row: any) => {
     setPanelTab('dettaglio')
     setPanelId(row.id)
@@ -342,27 +468,30 @@ export function CompostiPage() {
     setDeleteMixInfo(info)
     setDeleteId(id)
   }, [])
-
   // ─────────────────────────────────────────────────────────────────────────
 
-  const hasFiltriAttivi = filtroStati.length > 0 || filtroWorks.length > 0 || filtroDestinazioni.length > 0 || filtroMetodi.length > 0
+  const hasFiltriAttivi = filtroStati.length > 0 || filtroWorks.length > 0 ||
+    filtroDestinazioni.length > 0 || filtroMetodi.length > 0 ||
+    nascondiScaduti || Object.keys(colFilters).length > 0
 
-  // Label plurale per bulk
   const nSel = selectedIds.size
   const selLabel = `${nSel} compost${nSel === 1 ? 'o' : 'i'}`
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-heading text-lg font-semibold">Reference Standards</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground mr-1">
-            Visualizzati: {filtered.length} / Totali: {composti.length}
-          </span>
+      {/* ─── Toolbar principale ────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
 
-          {/* Importa / Aggiungi */}
-          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
-            <Upload className="h-4 w-4 mr-1" /> Importa CSV
+        {/* Contatore */}
+        <span className="text-sm text-muted-foreground shrink-0">
+          Visualizzati: {filtered.length} / Totali: {composti.length}
+        </span>
+
+        <div className="flex items-center gap-2 flex-wrap ml-auto">
+
+          {/* Gruppo 1 — Aggiungi */}
+          <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
+            <Plus className="h-4 w-4 mr-1" /> Nuovo composto
           </Button>
           <Button size="sm" variant="outline" onClick={() => { setMixTemplate(null); setMixOpen(true) }}>
             <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
@@ -370,7 +499,10 @@ export function CompostiPage() {
 
           <div className="w-px h-5 bg-border mx-0.5" />
 
-          {/* Esporta / Etichette — smart: usa selezione se presente */}
+          {/* Gruppo 2 — Import / Export */}
+          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-1" /> Importa
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
             <Download className="h-4 w-4 mr-1" /> Esporta
           </Button>
@@ -385,15 +517,56 @@ export function CompostiPage() {
 
           <div className="w-px h-5 bg-border mx-0.5" />
 
-          {/* Nuovo composto */}
-          <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
-            <Plus className="h-4 w-4 mr-1" /> Nuovo composto
-          </Button>
+          {/* Gruppo 3 — Colonne */}
+          <div className="relative" ref={colMenuRef}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setColMenuOpen(v => !v)}
+            >
+              <Columns className="h-4 w-4 mr-1" />
+              Colonne
+              {nascosteCount > 0 && (
+                <Badge className="ml-1 h-4 px-1 text-xs py-0 bg-muted text-muted-foreground">
+                  {nascosteCount}
+                </Badge>
+              )}
+            </Button>
+            {colMenuOpen && (
+              <div className="absolute right-0 z-50 mt-1 w-52 rounded-md border bg-popover shadow-md p-2">
+                <div className="text-xs font-medium text-muted-foreground px-1 mb-2">
+                  Colonne visibili
+                </div>
+                {COL_DEFS.map(({ key, label }) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 px-1 py-1 text-sm cursor-pointer hover:bg-accent rounded select-none"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={colVisible[key] !== false}
+                      onChange={e => handleColVisibleChange(key, e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+                <div className="border-t mt-2 pt-2">
+                  <button
+                    className="w-full text-xs text-muted-foreground px-1 py-1 hover:text-foreground text-left"
+                    onClick={resetColVisible}
+                  >
+                    Ripristina default
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="mb-4">
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Ricerca globale */}
           <div className="relative w-80">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -403,6 +576,8 @@ export function CompostiPage() {
               className="pl-9"
             />
           </div>
+
+          {/* Multi-select filtri */}
           <div className="flex items-center gap-2 border-l pl-3 flex-wrap">
             <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <MultiSelectDropdown label="Stato" options={Object.keys(STATO_MAP)} selected={filtroStati} onChange={setFiltroStati} />
@@ -412,6 +587,7 @@ export function CompostiPage() {
           </div>
         </div>
 
+        {/* Badge filtri attivi */}
         {hasFiltriAttivi && (
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {filtroStati.map(s => (
@@ -438,7 +614,29 @@ export function CompostiPage() {
                 <button onClick={() => setFiltroMetodi(prev => prev.filter(x => x !== id))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
               </Badge>
             ))}
-            <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFiltroStati([]); setFiltroWorks([]); setFiltroDestinazioni([]); setFiltroMetodi([]) }}>
+            {nascondiScaduti && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Scaduti esclusi
+                <button onClick={() => setNascondiScaduti(false)} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            )}
+            {Object.entries(colFilters).map(([key, val]) => (
+              <Badge key={key} variant="secondary" className="flex items-center gap-1">
+                {COL_DEFS.find(d => d.key === key)?.label ?? key}: "{val}"
+                <button onClick={() => handleColFilter(key, '')} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            ))}
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setFiltroStati([])
+                setFiltroWorks([])
+                setFiltroDestinazioni([])
+                setFiltroMetodi([])
+                setNascondiScaduti(false)
+                setColFilters({})
+              }}
+            >
               Rimuovi tutti
             </button>
           </div>
@@ -453,6 +651,15 @@ export function CompostiPage() {
             <input type="checkbox" checked={mostraDaAprire} onChange={e => setMostraDaAprire(e.target.checked)} className="rounded" />
             Mostra da aprire
           </label>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={nascondiScaduti}
+              onChange={e => setNascondiScaduti(e.target.checked)}
+              className="rounded"
+            />
+            Escludi scaduti
+          </label>
         </div>
       </div>
 
@@ -462,7 +669,7 @@ export function CompostiPage() {
         onClickAttenzione={() => { if (filtroAttenzione) { setFiltroAttenzione(false) } else { setFiltroStati([]); setFiltroInScadenza(false); setFiltroAttenzione(true) } }}
       />
 
-      {/* ─── Barra bulk actions ─────────────────────────────────────────────── */}
+      {/* ─── Barra bulk actions ────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-3 py-2 my-2 rounded-md bg-muted border text-sm min-h-[44px]">
         <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
           <input
@@ -529,7 +736,7 @@ export function CompostiPage() {
           </>
         )}
       </div>
-      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────────── */}
 
       <CompostiTable
         data={filtered}
@@ -542,6 +749,9 @@ export function CompostiPage() {
         onOpenPreparazioni={handleOpenPreparazioni}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
+        colVisible={colVisible}
+        colFilters={colFilters}
+        onColFilter={handleColFilter}
       />
 
       <CompostoForm
@@ -558,7 +768,7 @@ export function CompostiPage() {
         mixTemplate={mixTemplate}
       />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onSave={load} />
-      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} filteredIds={filtered.map((c: any) => c.id)} />
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} filteredIds={filtered.map((c: any) => c.id)} selectedIds={nSel > 0 ? [...selectedIds] : []} />
       <EtichetteDialog open={etichetteOpen} onClose={() => setEtichetteOpen(false)} filteredIds={nSel > 0 ? [...selectedIds] : filtered.map((c: any) => c.id)} />
       <CompostoPanel
         key={panelId ?? 'none'}
@@ -571,7 +781,7 @@ export function CompostiPage() {
         defaultTab={panelTab}
       />
 
-      {/* StoriaDialog singolo (da pannello o dropdown riga) */}
+      {/* StoriaDialog singolo */}
       <StoriaDialog
         open={storiaTarget !== null}
         onOpenChange={v => !v && setStoriaTarget(null)}

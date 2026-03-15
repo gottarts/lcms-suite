@@ -20,6 +20,9 @@ export interface Column<T> {
   render?: (value: unknown, row: T) => ReactNode
   sortable?: boolean
   className?: string
+  // Filtro per colonna — opzionale
+  filterValue?: string
+  onFilterChange?: (value: string) => void
 }
 
 interface DataTableProps<T> {
@@ -64,24 +67,26 @@ export function DataTable<T extends Record<string, unknown>>({
     })
   }, [data, sortKey, sortDir])
 
-  // Il ref va sul contenitore scrollabile — è il div wrappato da <Table> in table.tsx
+  // Il ref va sul contenitore scrollabile
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const virtualizer = useVirtualizer({
     count: sorted.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 10, // righe extra renderizzate fuori viewport (sopra e sotto)
+    overscan: 10,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
 
-  // Padding superiore e inferiore per simulare le righe non renderizzate
   const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0
   const paddingBottom =
     virtualItems.length > 0
       ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
       : 0
+
+  // Determina se almeno una colonna ha il filtro per colonna attivo
+  const hasColFilters = columns.some(col => col.onFilterChange !== undefined)
 
   if (data.length === 0) {
     return (
@@ -91,26 +96,87 @@ export function DataTable<T extends Record<string, unknown>>({
     )
   }
 
+  // ─── Render dell'header di una singola colonna (riutilizzato nei due branch) ───
+  const renderTh = (col: Column<T>, isNative: boolean) => {
+    const sortable = col.sortable !== false
+
+    if (isNative) {
+      // Branch virtualizzato: <th> nativo
+      return (
+        <th
+          key={col.key}
+          className={cn(
+            'px-2 text-left align-top font-medium text-muted-foreground',
+            hasColFilters ? 'py-2' : 'h-10',
+            sortable && 'cursor-pointer select-none',
+            col.className
+          )}
+          onClick={() => sortable && handleSort(col.key)}
+        >
+          <div className="flex items-center gap-1">
+            {col.label}
+            {sortKey === col.key && (
+              sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+            )}
+          </div>
+          {col.onFilterChange && (
+            <div onClick={e => e.stopPropagation()} className="mt-1">
+              <input
+                type="text"
+                value={col.filterValue ?? ''}
+                onChange={e => col.onFilterChange!(e.target.value)}
+                placeholder="Filtra..."
+                className="w-full h-6 px-1.5 text-xs rounded border border-input bg-background
+                           text-foreground placeholder:text-muted-foreground focus:outline-none
+                           focus:ring-1 focus:ring-ring font-normal"
+              />
+            </div>
+          )}
+        </th>
+      )
+    } else {
+      // Branch shadcn: <TableHead>
+      return (
+        <TableHead
+          key={col.key}
+          className={cn(
+            sortable && 'cursor-pointer select-none',
+            hasColFilters && 'align-top py-2',
+            col.className
+          )}
+          onClick={() => sortable && handleSort(col.key)}
+        >
+          <div className="flex items-center gap-1">
+            {col.label}
+            {sortKey === col.key && (
+              sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+            )}
+          </div>
+          {col.onFilterChange && (
+            <div onClick={e => e.stopPropagation()} className="mt-1">
+              <input
+                type="text"
+                value={col.filterValue ?? ''}
+                onChange={e => col.onFilterChange!(e.target.value)}
+                placeholder="Filtra..."
+                className="w-full h-6 px-1.5 text-xs rounded border border-input bg-background
+                           text-foreground placeholder:text-muted-foreground focus:outline-none
+                           focus:ring-1 focus:ring-ring font-normal"
+              />
+            </div>
+          )}
+        </TableHead>
+      )
+    }
+  }
+
   // Liste corte: rendering normale senza virtualizzazione
   if (sorted.length < VIRTUALIZE_THRESHOLD) {
     return (
       <Table>
         <TableHeader>
           <TableRow>
-            {columns.map(col => (
-              <TableHead
-                key={col.key}
-                className={cn(col.sortable !== false && 'cursor-pointer select-none', col.className)}
-                onClick={() => col.sortable !== false && handleSort(col.key)}
-              >
-                <div className="flex items-center gap-1">
-                  {col.label}
-                  {sortKey === col.key && (
-                    sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                  )}
-                </div>
-              </TableHead>
-            ))}
+            {columns.map(col => renderTh(col, false))}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -134,9 +200,7 @@ export function DataTable<T extends Record<string, unknown>>({
     )
   }
 
-  // Liste lunghe: virtualizzazione con altezza fissa del contenitore
-  // Il contenitore scrollabile ha altezza massima di 75vh per non occupare
-  // tutto lo schermo. L'header della tabella è sticky grazie a `top-0`.
+  // Liste lunghe: virtualizzazione
   return (
     <div
       ref={scrollRef}
@@ -146,28 +210,10 @@ export function DataTable<T extends Record<string, unknown>>({
       <table className="w-full caption-bottom text-sm">
         <thead className="sticky top-0 z-10 bg-background [&_tr]:border-b">
           <tr>
-            {columns.map(col => (
-              <th
-                key={col.key}
-                className={cn(
-                  'h-10 px-2 text-left align-middle font-medium text-muted-foreground',
-                  col.sortable !== false && 'cursor-pointer select-none',
-                  col.className
-                )}
-                onClick={() => col.sortable !== false && handleSort(col.key)}
-              >
-                <div className="flex items-center gap-1">
-                  {col.label}
-                  {sortKey === col.key && (
-                    sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                  )}
-                </div>
-              </th>
-            ))}
+            {columns.map(col => renderTh(col, true))}
           </tr>
         </thead>
         <tbody className="[&_tr:last-child]:border-0">
-          {/* Riga di padding superiore — simula le righe sopra il viewport */}
           {paddingTop > 0 && (
             <tr style={{ height: paddingTop }}>
               <td colSpan={columns.length} />
@@ -198,7 +244,6 @@ export function DataTable<T extends Record<string, unknown>>({
             )
           })}
 
-          {/* Riga di padding inferiore — simula le righe sotto il viewport */}
           {paddingBottom > 0 && (
             <tr style={{ height: paddingBottom }}>
               <td colSpan={columns.length} />

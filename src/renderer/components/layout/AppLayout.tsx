@@ -4,7 +4,7 @@ import { Topbar } from './Topbar'
 import { useState, useEffect } from 'react'
 
 const pageTitles: Record<string, string> = {
-  '/composti': 'Standard di Riferimento',
+  '/composti': 'Reference Standards',
   '/metodi': 'Metodi Analitici',
   '/strumenti': 'Strumenti',
   '/consumabili': 'Consumabili',

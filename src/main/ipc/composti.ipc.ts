@@ -549,4 +549,17 @@ FROM composti c`
       return { id: result.lastInsertRowid }
     }
   })
+
+  // ─── Dati per stampa etichette vial ──────────────────────────────────────
+  ipcMain.handle('composti:etichette-data', (_, ids: number[]) => {
+    const db = getDb()
+    if (!ids?.length) return []
+    return ids
+      .map(id => db.prepare(
+        `SELECT id, nome, lotto, concentrazione, unita_conc, solvente,
+                data_apertura, scadenza_prodotto, operatore_apertura, fiala
+         FROM composti WHERE id = ?`
+      ).get(id))
+      .filter(Boolean)
+  })
 }

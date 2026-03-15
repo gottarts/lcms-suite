@@ -84,6 +84,7 @@ function cellToString(val: unknown): string {
 
 // TASK 2: helper — analizza le righe mappate e restituisce una mappa lotto → mix_id
 // per i lotti che compaiono in più di una riga.
+// DOPO (fix) — stesso lotto + stesso nome = duplicato, non mix
 function calcolaMixDaLotto(
   rows: string[][],
   headers: string[],
@@ -94,16 +95,24 @@ function calcolaMixDaLotto(
   const lottoIdx = headers.indexOf(lottoHeader)
   if (lottoIdx === -1) return new Map()
 
-  const count = new Map<string, number>()
+  const nomeHeader = Object.entries(mapping).find(([, v]) => v === 'nome')?.[0]
+  const nomeIdx = nomeHeader ? headers.indexOf(nomeHeader) : -1
+
+  // Per ogni lotto, raccoglie i nomi distinti delle righe che lo usano
+  const nomiPerLotto = new Map<string, Set<string>>()
   for (const row of rows) {
-    const val = row[lottoIdx]?.trim()
-    if (val) count.set(val, (count.get(val) ?? 0) + 1)
+    const lotto = row[lottoIdx]?.trim()
+    if (!lotto) continue
+    const nome = (nomeIdx >= 0 ? row[nomeIdx]?.trim() : '') || '__noname__'
+    if (!nomiPerLotto.has(lotto)) nomiPerLotto.set(lotto, new Set())
+    nomiPerLotto.get(lotto)!.add(nome)
   }
 
+  // È un mix solo se lo stesso lotto appare con almeno 2 nomi DISTINTI
   let i = 0
   const mixIdMap = new Map<string, string>()
-  for (const [lotto, n] of count.entries()) {
-    if (n > 1) {
+  for (const [lotto, nomi] of nomiPerLotto.entries()) {
+    if (nomi.size > 1) {
       mixIdMap.set(lotto, `mix_${Date.now().toString(36)}_${i++}_${lotto.replace(/\W/g, '')}`)
     }
   }

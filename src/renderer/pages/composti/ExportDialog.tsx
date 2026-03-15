@@ -11,12 +11,13 @@ interface ExportDialogProps {
   open: boolean
   onClose: () => void
   filteredIds: number[]
+  selectedIds?: number[]
 }
 
 type Formato = 'csv' | 'pdf'
-type Scope = 'filtered' | 'all'
+type Scope = 'selected' | 'filtered' | 'all'
 
-// ── Helper pulizia testo (rimuove spazi multipli e caratteri anomali) ────────
+// ── Helper pulizia testo ─────────────────────────────────────────────────────
 
 function cleanText(s: any): string {
   if (!s) return ''
@@ -208,7 +209,6 @@ function exportPDF(data: any[]) {
     doc.setDrawColor(220, 220, 220)
     doc.line(14, 29, 196, 29)
 
-    // Dati anagrafici — riga Metodi aggiunta, riga Mix visibile solo se è un mix
     const metodiStr = metodiToString(c) || '—'
     const anagrafica = [
       ['Codice interno', c.codice_interno ?? '—', 'Classe', c.classe ?? '—'],
@@ -315,18 +315,21 @@ function exportPDF(data: any[]) {
 
 // ── Componente principale ────────────────────────────────────────────────────
 
-export function ExportDialog({ open, onClose, filteredIds }: ExportDialogProps) {
+export function ExportDialog({ open, onClose, filteredIds, selectedIds = [] }: ExportDialogProps) {
   const [formato, setFormato] = useState<Formato>('csv')
-  const [scope, setScope] = useState<Scope>('filtered')
+  // Se ci sono selezionati, pre-seleziona "selected"; altrimenti "filtered"
+  const [scope, setScope] = useState<Scope>(selectedIds.length > 0 ? 'selected' : 'filtered')
   const [loading, setLoading] = useState(false)
+
+  const idsToExport = scope === 'selected' ? selectedIds : scope === 'filtered' ? filteredIds : undefined
 
   const handleExport = async () => {
     setLoading(true)
     try {
       const data = await window.electronAPI.invoke(
         'composti:export-data',
-        scope,
-        scope === 'filtered' ? filteredIds : undefined
+        scope === 'all' ? 'all' : 'filtered',
+        scope !== 'all' ? idsToExport : undefined
       )
 
       if (formato === 'csv') {
@@ -340,8 +343,30 @@ export function ExportDialog({ open, onClose, filteredIds }: ExportDialogProps) 
     }
   }
 
+  const scopeOption = (value: Scope, label: string, sublabel: string) => (
+    <label
+      className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
+      style={{
+        borderColor: scope === value ? 'hsl(var(--primary))' : undefined,
+        backgroundColor: scope === value ? 'hsl(var(--primary) / 0.05)' : undefined,
+      }}
+    >
+      <input
+        type="radio"
+        name="scope"
+        value={value}
+        checked={scope === value}
+        onChange={() => setScope(value)}
+      />
+      <div className="text-sm">
+        {label}
+        <span className="ml-1 text-xs text-muted-foreground">{sublabel}</span>
+      </div>
+    </label>
+  )
+
   return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+    <Dialog open={open} onOpenChange={v => { if (!v) { onClose() } }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Esporta dati</DialogTitle>
@@ -353,9 +378,13 @@ export function ExportDialog({ open, onClose, filteredIds }: ExportDialogProps) 
           <div className="space-y-2">
             <Label className="text-sm font-medium">Formato</Label>
             <div className="space-y-2">
-              <label className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
-                style={{ borderColor: formato === 'csv' ? 'hsl(var(--primary))' : undefined,
-                         backgroundColor: formato === 'csv' ? 'hsl(var(--primary) / 0.05)' : undefined }}>
+              <label
+                className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
+                style={{
+                  borderColor: formato === 'csv' ? 'hsl(var(--primary))' : undefined,
+                  backgroundColor: formato === 'csv' ? 'hsl(var(--primary) / 0.05)' : undefined,
+                }}
+              >
                 <input
                   type="radio"
                   name="formato"
@@ -371,9 +400,13 @@ export function ExportDialog({ open, onClose, filteredIds }: ExportDialogProps) 
                   </div>
                 </div>
               </label>
-              <label className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
-                style={{ borderColor: formato === 'pdf' ? 'hsl(var(--primary))' : undefined,
-                         backgroundColor: formato === 'pdf' ? 'hsl(var(--primary) / 0.05)' : undefined }}>
+              <label
+                className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
+                style={{
+                  borderColor: formato === 'pdf' ? 'hsl(var(--primary))' : undefined,
+                  backgroundColor: formato === 'pdf' ? 'hsl(var(--primary) / 0.05)' : undefined,
+                }}
+              >
                 <input
                   type="radio"
                   name="formato"
@@ -396,40 +429,21 @@ export function ExportDialog({ open, onClose, filteredIds }: ExportDialogProps) 
           <div className="space-y-2">
             <Label className="text-sm font-medium">Composti da includere</Label>
             <div className="space-y-2">
-              <label className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
-                style={{ borderColor: scope === 'filtered' ? 'hsl(var(--primary))' : undefined,
-                         backgroundColor: scope === 'filtered' ? 'hsl(var(--primary) / 0.05)' : undefined }}>
-                <input
-                  type="radio"
-                  name="scope"
-                  value="filtered"
-                  checked={scope === 'filtered'}
-                  onChange={() => setScope('filtered')}
-                />
-                <div className="text-sm">
-                  Solo visibili
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    ({filteredIds.length} composti con i filtri attuali)
-                  </span>
-                </div>
-              </label>
-              <label className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
-                style={{ borderColor: scope === 'all' ? 'hsl(var(--primary))' : undefined,
-                         backgroundColor: scope === 'all' ? 'hsl(var(--primary) / 0.05)' : undefined }}>
-                <input
-                  type="radio"
-                  name="scope"
-                  value="all"
-                  checked={scope === 'all'}
-                  onChange={() => setScope('all')}
-                />
-                <div className="text-sm">
-                  Tutti i composti
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    (inclusi dismessi e scaduti)
-                  </span>
-                </div>
-              </label>
+              {selectedIds.length > 0 && scopeOption(
+                'selected',
+                'Selezionati',
+                `(${selectedIds.length} composti selezionati con i checkbox)`
+              )}
+              {scopeOption(
+                'filtered',
+                'Solo visibili',
+                `(${filteredIds.length} composti con i filtri attuali)`
+              )}
+              {scopeOption(
+                'all',
+                'Tutti i composti',
+                '(inclusi dismessi e scaduti)'
+              )}
             </div>
           </div>
 

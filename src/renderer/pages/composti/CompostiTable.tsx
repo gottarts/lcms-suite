@@ -23,6 +23,11 @@ interface CompostiTableProps {
   onOpenPreparazioni?: (row: any) => void
   selectedIds?: Set<number>
   onSelectionChange?: (ids: Set<number>) => void
+  // Visibilità colonne
+  colVisible?: Record<string, boolean>
+  // Filtri per colonna
+  colFilters?: Record<string, string>
+  onColFilter?: (key: string, value: string) => void
 }
 
 // ─── memo: evita re-render quando cambia solo panelId in CompostiPage ────────
@@ -37,6 +42,9 @@ export const CompostiTable = memo(function CompostiTable({
   onOpenPreparazioni,
   selectedIds = new Set(),
   onSelectionChange,
+  colVisible,
+  colFilters,
+  onColFilter,
 }: CompostiTableProps) {
   const [apriTarget, setApriTarget] = useState<{
     compostoId: number
@@ -54,7 +62,6 @@ export const CompostiTable = memo(function CompostiTable({
     const next = new Set(selectedIds)
 
     if (shiftKey && lastCheckedIndexRef.current >= 0) {
-      // Seleziona/deseleziona il range tra lastCheckedIndex e rowIndex
       const from = Math.min(lastCheckedIndexRef.current, rowIndex)
       const to   = Math.max(lastCheckedIndexRef.current, rowIndex)
       for (let i = from; i <= to; i++) {
@@ -71,160 +78,262 @@ export const CompostiTable = memo(function CompostiTable({
   }, [data, selectedIds, onSelectionChange])
 
   // ─── useMemo: columns non viene ricreato ad ogni render ──────────────────
-  const columns: Column<any>[] = useMemo(() => [
-    {
-      key: '__select__',
-      label: '',
-      sortable: false,
-      className: 'w-8 pr-0',
-      render: (_: unknown, row: any) => (
-        <div onClick={e => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            className="rounded cursor-pointer"
-            checked={selectedIds.has(row.id)}
-            onChange={(e) => handleCheckboxChange(row, e.target.checked, e.nativeEvent.shiftKey)}
-          />
-        </div>
-      ),
-    },
-    {
-      key: 'nome',
-      label: 'Nome',
-      className: 'font-medium',
-      render: (v, row) => {
-        const numeroFiale = parseInt(row.fiala) || 1
-        const stato = computeStato(row)
-        const isRivalidato =
-          stato === 'rivalidato_attivo' ||
-          stato === 'rivalidato_in_scadenza' ||
-          stato === 'rivalidato_scaduto'
-        return (
-          <span className="flex items-center gap-2">
-            <span>
-              {row.forma?.toLowerCase() === 'mix' && (
-                <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-100">
-                  MIX
-                </Badge>
-              )}
-              {isRivalidato && (
-                <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-100">
-                  RIVAL.
-                </Badge>
-              )}
-              {String(v)}
-              {row.forma === 'Neat' && (
-                <Badge
-                  variant="outline"
-                  className="ml-2 text-xs cursor-pointer hover:bg-accent"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onOpenPreparazioni?.(row)
-                  }}
-                >
-                  prep {row.prep_attive_count ?? 0}
-                </Badge>
-              )}
-              {row.prep_scadute_count > 0 && (
-                <Badge variant="destructive" className="ml-2 text-xs">⚠</Badge>
+  const columns: Column<any>[] = useMemo(() => {
+    const allColumns: Column<any>[] = [
+      // ── Checkbox selezione — sempre visibile, non filtrabile ──────────────
+      {
+        key: '__select__',
+        label: '',
+        sortable: false,
+        className: 'w-8 pr-0',
+        render: (_: unknown, row: any) => (
+          <div onClick={e => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              className="rounded cursor-pointer"
+              checked={selectedIds.has(row.id)}
+              onChange={(e) => handleCheckboxChange(row, e.target.checked, e.nativeEvent.shiftKey)}
+            />
+          </div>
+        ),
+      },
+
+      // ── Colonne dati ─────────────────────────────────────────────────────
+      {
+        key: 'nome',
+        label: 'Nome',
+        className: 'font-medium',
+        filterValue: colFilters?.['nome'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('nome', v) : undefined,
+        render: (v, row) => {
+          const numeroFiale = parseInt(row.fiala) || 1
+          const stato = computeStato(row)
+          const isRivalidato =
+            stato === 'rivalidato_attivo' ||
+            stato === 'rivalidato_in_scadenza' ||
+            stato === 'rivalidato_scaduto'
+          return (
+            <span className="flex items-center gap-2">
+              <span>
+                {row.forma?.toLowerCase() === 'mix' && (
+                  <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-100">
+                    MIX
+                  </Badge>
+                )}
+                {isRivalidato && (
+                  <Badge className="mr-1.5 text-[10px] px-1.5 py-0 bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-100">
+                    RIVAL.
+                  </Badge>
+                )}
+                {String(v)}
+                {row.forma === 'Neat' && (
+                  <Badge
+                    variant="outline"
+                    className="ml-2 text-xs cursor-pointer hover:bg-accent"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenPreparazioni?.(row)
+                    }}
+                  >
+                    prep {row.prep_attive_count ?? 0}
+                  </Badge>
+                )}
+                {row.prep_scadute_count > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-xs">⚠</Badge>
+                )}
+              </span>
+              {numeroFiale > 1 && (
+                <FialeSelector
+                  numeroFiale={numeroFiale}
+                  fialeAperte={row.fiale_aperte_count ?? 0}
+                  onApri={(fialaNumero) =>
+                    setApriTarget({
+                      compostoId: row.id,
+                      fialaNumero,
+                      nome: row.nome,
+                      lotto: row.lotto ?? null,
+                    })
+                  }
+                />
               )}
             </span>
-            {numeroFiale > 1 && (
-              <FialeSelector
-                numeroFiale={numeroFiale}
-                fialeAperte={row.fiale_aperte_count ?? 0}
-                onApri={(fialaNumero) =>
-                  setApriTarget({
-                    compostoId: row.id,
-                    fialaNumero,
-                    nome: row.nome,
-                    lotto: row.lotto ?? null,
-                  })
-                }
-              />
-            )}
-          </span>
-        )
+          )
+        },
       },
-    },
-    { key: 'codice_interno', label: 'Codice' },
-    {
-      key: 'classe',
-      label: 'Classe',
-      render: (v) =>
-        v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—',
-    },
-    { key: 'forma', label: 'Forma', render: (v) => v || '—' },
-    { key: 'produttore', label: 'Produttore' },
-    { key: 'lotto', label: 'Lotto' },
-    {
-      key: 'scadenza_prodotto',
-      label: 'Scadenza',
-      render: (v) => formatDate(v as string),
-    },
-    {
-      key: 'stato',
-      label: 'Stato',
-      sortable: false,
-      render: (_, row) => {
-        const stato = computeStato(row)
-        const isRivalidato =
-          stato === 'rivalidato_attivo' ||
-          stato === 'rivalidato_in_scadenza' ||
-          stato === 'rivalidato_scaduto'
-        return (
-          <div className="flex flex-col items-start gap-0.5">
-            <StatusBadge status={stato} />
-            {isRivalidato && (
-              <button
-                className="text-[10px] text-blue-500 hover:underline leading-tight"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onOpenStorico?.(row)
-                }}
+      {
+        key: 'codice_interno',
+        label: 'Codice',
+        filterValue: colFilters?.['codice_interno'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('codice_interno', v) : undefined,
+      },
+      {
+        key: 'classe',
+        label: 'Classe',
+        filterValue: colFilters?.['classe'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('classe', v) : undefined,
+        render: (v) =>
+          v ? <Badge variant="outline" className="text-xs">{String(v)}</Badge> : '—',
+      },
+      {
+        key: 'forma',
+        label: 'Forma',
+        filterValue: colFilters?.['forma'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('forma', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'produttore',
+        label: 'Produttore',
+        filterValue: colFilters?.['produttore'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('produttore', v) : undefined,
+      },
+      {
+        key: 'lotto',
+        label: 'Lotto',
+        filterValue: colFilters?.['lotto'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('lotto', v) : undefined,
+      },
+      {
+        key: 'scadenza_prodotto',
+        label: 'Scadenza',
+        render: (v) => formatDate(v as string),
+      },
+      {
+        key: 'solvente',
+        label: 'Solvente',
+        filterValue: colFilters?.['solvente'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('solvente', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'ubicazione',
+        label: 'Ubicazione',
+        filterValue: colFilters?.['ubicazione'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('ubicazione', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'stoccaggio',
+        label: 'Stoccaggio',
+        filterValue: colFilters?.['stoccaggio'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('stoccaggio', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'work_standard',
+        label: 'Work',
+        filterValue: colFilters?.['work_standard'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('work_standard', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'destinazione_uso',
+        label: 'Destinazione',
+        filterValue: colFilters?.['destinazione_uso'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('destinazione_uso', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'forma_commerciale',
+        label: 'Forma comm.',
+        filterValue: colFilters?.['forma_commerciale'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('forma_commerciale', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'matrice',
+        label: 'Matrice',
+        filterValue: colFilters?.['matrice'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('matrice', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'mw',
+        label: 'MW',
+        render: (v) => v || '—',
+      },
+      {
+        key: 'formula',
+        label: 'Formula',
+        filterValue: colFilters?.['formula'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('formula', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
+        key: 'stato',
+        label: 'Stato',
+        sortable: false,
+        render: (_, row) => {
+          const stato = computeStato(row)
+          const isRivalidato =
+            stato === 'rivalidato_attivo' ||
+            stato === 'rivalidato_in_scadenza' ||
+            stato === 'rivalidato_scaduto'
+          return (
+            <div className="flex flex-col items-start gap-0.5">
+              <StatusBadge status={stato} />
+              {isRivalidato && (
+                <button
+                  className="text-[10px] text-blue-500 hover:underline leading-tight"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenStorico?.(row)
+                  }}
+                >
+                  Scadenza estesa — vedi storico
+                </button>
+              )}
+            </div>
+          )
+        },
+      },
+
+      // ── Azioni — sempre visibile ──────────────────────────────────────────
+      {
+        key: 'id',
+        label: '',
+        sortable: false,
+        className: 'w-10',
+        render: (_, row) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button size="icon" variant="ghost" className="h-7 w-7">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuItem onClick={() => onRowClick(row)}>
+                <Eye className="h-3.5 w-3.5 mr-2" /> Apri
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onNewLotto(row)}>
+                <Copy className="h-3.5 w-3.5 mr-2" /> Nuovo lotto
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRivalida(row)}>
+                <RotateCcw className="h-3.5 w-3.5 mr-2" /> Rivalidazione
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onDismetti(row)}
+                className="text-destructive focus:text-destructive"
               >
-                Scadenza estesa — vedi storico
-              </button>
-            )}
-          </div>
-        )
+                <XCircle className="h-3.5 w-3.5 mr-2" /> Dismetti
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
       },
-    },
-    {
-      key: 'id',
-      label: '',
-      sortable: false,
-      className: 'w-10',
-      render: (_, row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button size="icon" variant="ghost" className="h-7 w-7">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuItem onClick={() => onRowClick(row)}>
-              <Eye className="h-3.5 w-3.5 mr-2" /> Apri
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onNewLotto(row)}>
-              <Copy className="h-3.5 w-3.5 mr-2" /> Nuovo lotto
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRivalida(row)}>
-              <RotateCcw className="h-3.5 w-3.5 mr-2" /> Rivalidazione
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onDismetti(row)}
-              className="text-destructive focus:text-destructive"
-            >
-              <XCircle className="h-3.5 w-3.5 mr-2" /> Dismetti
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
-    },
-  ], [onRowClick, onNewLotto, onRivalida, onDismetti, onOpenStorico, onOpenPreparazioni,
-      selectedIds, onSelectionChange, handleCheckboxChange])
+    ]
+
+    // ── Filtra per visibilità — __select__ e id (azioni) sempre incluse ────
+    if (!colVisible) return allColumns
+    return allColumns.filter(col =>
+      col.key === '__select__' || col.key === 'id' || colVisible[col.key] !== false
+    )
+  }, [
+    onRowClick, onNewLotto, onRivalida, onDismetti, onOpenStorico, onOpenPreparazioni,
+    selectedIds, onSelectionChange, handleCheckboxChange,
+    colVisible, colFilters, onColFilter,
+  ])
 
   return (
     <>
