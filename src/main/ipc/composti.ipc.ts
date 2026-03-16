@@ -303,6 +303,11 @@ FROM composti c`
     return { ok: true }
   })
 
+  ipcMain.handle('composti:delete-by-mix-id', (_, mix_id: string) => {
+    getDb().prepare('DELETE FROM composti WHERE mix_id = ?').run(mix_id)
+    return { ok: true }
+  })
+
   ipcMain.handle('composti:count-by-mix', (_, mix_id: string) => {
     const result = getDb().prepare(
       'SELECT COUNT(*) as count FROM composti WHERE mix_id = ?'

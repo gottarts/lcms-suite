@@ -17,25 +17,6 @@ const DESTINAZIONI_USO = [
   'Standard Interno',
 ]
 
-// TASK 0: Helper — restituisce i gruppi per lotto se e solo se TUTTI i lotti sono unici.
-// Restituisce null se almeno un lotto è condiviso (caso mix normale → nessun picker).
-function rilevaCasoLottiUnici(
-  componenti: ComponenteImportato[]
-): ComponenteImportato[][] | null {
-  if (!componenti.length) return null
-  const gruppi = new Map<string, ComponenteImportato[]>()
-  for (const c of componenti) {
-    const chiave = c.lotto?.trim() || 'nolotto'
-    if (!gruppi.has(chiave)) gruppi.set(chiave, [])
-    gruppi.get(chiave)!.push(c)
-  }
-  // Se almeno un lotto ha più di una sostanza → caso mix normale, nessun picker
-  if ([...gruppi.values()].some(g => g.length > 1)) return null
-  // Con un solo gruppo (tutti senza lotto) non ha senso mostrare il picker
-  if (gruppi.size <= 1) return null
-  return [...gruppi.values()]
-}
-
 interface ComponenteImportato {
   nome: string
   forma_commerciale?: string | null
@@ -49,7 +30,6 @@ interface MixPesticidiFormProps {
   open: boolean
   onClose: () => void
   onSave: () => void
-  // Quando presente, pre-compila il form con i dati di un mix esistente (caso "Nuovo lotto")
   mixTemplate?: {
     forma_commerciale: string
     concentrazione: string
@@ -96,7 +76,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
   const [metodiToast, setMetodiToast] = useState('')
   const [importTextOpen, setImportTextOpen] = useState(false)
   const [importedFields, setImportedFields] = useState<Set<string>>(new Set())
-  // TASK 0: stati per il dialog selezione lotti unici
   const [lottiUnici, setLottiUnici] = useState<ComponenteImportato[][]>([])
   const [selezioneLottiOpen, setSelezioneLottiOpen] = useState(false)
 
@@ -116,7 +95,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
     }).catch(err => console.error('Error loading metodi:', err))
   }, [])
 
-  // Pre-compila il form quando viene passato un mixTemplate (caso "Nuovo lotto" su un mix)
   useEffect(() => {
     if (!open) return
     if (mixTemplate) {
@@ -142,15 +120,11 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
       })
       setNomi(mixTemplate._nomi)
       setComponentiImportati(null)
-      // I nomi sono pre-caricati ma non bloccati: l'utente può modificarli
-      // I campi comuni sono pre-compilati ma editabili
       setImportedFields(new Set())
-      // Pre-seleziona i metodi del mix originale
       if (mixTemplate._metodi_ids?.length > 0) {
         setMetodiIds(mixTemplate._metodi_ids)
       }
     } else {
-      // Apertura normale senza template: reset completo
       reset()
     }
   }, [open, mixTemplate])
@@ -250,11 +224,15 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
       if (aperArr.length > 0)  locked.add('data_apertura')
       if (prodArr.length > 0)  locked.add('produttore')
 
-      // TASK 0: controlla subito su comps se tutti i lotti sono unici.
-      // In quel caso mostra il picker per scegliere quale mix inserire.
-      const gruppiUnici = rilevaCasoLottiUnici(comps)
-      if (gruppiUnici) {
-        setLottiUnici(gruppiUnici)
+      // Se ci sono più lotti distinti, mostra subito il picker
+      const gruppi = new Map<string, ComponenteImportato[]>()
+      for (const c of comps) {
+        const chiave = c.lotto?.trim() || 'nolotto'
+        if (!gruppi.has(chiave)) gruppi.set(chiave, [])
+        gruppi.get(chiave)!.push(c)
+      }
+      if (gruppi.size > 1) {
+        setLottiUnici([...gruppi.values()])
         setSelezioneLottiOpen(true)
       }
     }
@@ -287,9 +265,34 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
     reader.readAsText(file)
   }
 
+  // ─── Selezione lotto dal picker ───────────────────────────────────────────
+  // Imposta componentiImportati con il gruppo selezionato e aggiorna importedFields
+  // in modo che handleSave passi per il CASO A (createMix con componenti per riga).
+  const handleLottoSelect = (gruppo: ComponenteImportato[]) => {
+    setComponentiImportati(gruppo)
+    setNomi(gruppo.map(c => c.nome))
+
+    const locked = new Set<string>(['nomi'])
+    if (gruppo.some(c => c.forma_commerciale)) locked.add('forma_commerciale')
+    if (gruppo.some(c => c.lotto))             locked.add('lotto')
+    if (gruppo.some(c => c.scadenza_prodotto)) locked.add('scadenza_prodotto')
+    if (gruppo.some(c => c.data_apertura))     locked.add('data_apertura')
+    if (gruppo.some(c => c.produttore))        locked.add('produttore')
+    setImportedFields(locked)
+
+    // Se tutti i componenti del gruppo hanno la stessa forma_commerciale, usala nel form
+    const formaUnica = gruppo[0]?.forma_commerciale
+    if (formaUnica && gruppo.every(c => c.forma_commerciale === formaUnica)) {
+      setForm(f => ({ ...f, forma_commerciale: formaUnica }))
+    }
+
+    setSelezioneLottiOpen(false)
+    setLottiUnici([])
+  }
+
   const handleSave = async () => {
     if (!nomi.length) return
-    if (!importedFields.has('forma_commerciale') && !form.forma_commerciale.trim()) return
+    if (!importedFields.has('nomi') && !form.forma_commerciale.trim()) return
     setSaving(true)
     try {
       const baseData = {
@@ -305,7 +308,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
         metodi_ids: metodiIds,
       }
 
-      // CASO A: componenti importati con dati per riga (da TextImportDialog)
+      // CASO A: componenti importati con dati per riga (da TextImportDialog + picker)
       if (componentiImportati && componentiImportati.length > 0) {
 
         const gruppi = new Map<string, ComponenteImportato[]>()
@@ -315,8 +318,8 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
           gruppi.get(chiave)!.push(comp)
         }
 
-        // Se ci sono più gruppi-lotto distinti, mostrare il picker invece di creare tutto in silenzio.
-        // L'utente deve scegliere quale mix inserire adesso — per le altre usa Import CSV.
+        // Dopo il picker componentiImportati ha sempre un solo gruppo.
+        // Questo fallback non dovrebbe mai scattare, ma per sicurezza:
         if (gruppi.size > 1) {
           setSaving(false)
           setLottiUnici([...gruppi.values()])
@@ -324,11 +327,11 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
           return
         }
 
-        // Gruppo singolo: procedi con la creazione
         const [, gruppo] = [...gruppi.entries()][0]
         const formaCommercialeGruppo =
           gruppo.find(c => c.forma_commerciale?.trim())?.forma_commerciale ||
-          form.forma_commerciale
+          form.forma_commerciale ||
+          gruppo[0]?.lotto?.trim() || ''
 
         await compostiApi.createMix({
           ...baseData,
@@ -354,7 +357,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
   }
 
   const canSave = nomi.length > 0 && (
-    importedFields.has('forma_commerciale') ||
+    importedFields.has('nomi') ||
     form.forma_commerciale.trim() !== ''
   )
   const lockedClass = (key: string) => importedFields.has(key) ? 'bg-muted opacity-80' : ''
@@ -638,7 +641,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
         onImport={handleTextImport}
       />
 
-      {/* TASK 0: dialog selezione mix quando il file contiene solo lotti unici */}
+      {/* Dialog selezione lotto quando il file contiene più lotti distinti */}
       <Dialog open={selezioneLottiOpen} onOpenChange={v => !v && setSelezioneLottiOpen(false)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -647,9 +650,8 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
 
           <div className="space-y-2 py-2">
             <p className="text-sm text-muted-foreground">
-              Il file contiene <strong>{lottiUnici.length} sostanze con lotti distinti</strong>.
-              Ogni lotto corrisponde a un flacone separato — seleziona quale mix vuoi inserire ora,
-              oppure usa <strong>Importa CSV</strong> nella tabella composti per caricarle tutte insieme.
+              Il file contiene <strong>{lottiUnici.length} lotti distinti</strong>.
+              Seleziona quale mix vuoi inserire ora — per gli altri usa <strong>Importa CSV</strong> nella tabella composti.
             </p>
 
             <div className="space-y-2 mt-3 max-h-64 overflow-y-auto pr-1">
@@ -661,15 +663,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
                     key={i}
                     type="button"
                     className="w-full text-left rounded-md border px-4 py-3 hover:bg-muted/50 transition-colors"
-                    onClick={() => {
-                      setComponentiImportati(gruppo)
-                      setNomi(gruppo.map(c => c.nome))
-                      if (gruppo[0]?.forma_commerciale) {
-                        setImportedFields(prev => new Set([...prev, 'forma_commerciale']))
-                      }
-                      setSelezioneLottiOpen(false)
-                      setLottiUnici([])
-                    }}
+                    onClick={() => handleLottoSelect(gruppo)}
                   >
                     <div className="text-sm font-medium font-mono">{lotto}</div>
                     {formaComm && (

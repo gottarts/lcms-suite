@@ -484,8 +484,8 @@ export function CompostiPage() {
 
         const decision = decisions.get(comp.mix_id) ?? 'all'
         if (decision === 'all') {
-          // Elimina tutto il mix per lotto
-          await window.electronAPI.invoke('composti:delete-by-lotto', comp.lotto)
+          // Elimina tutto il mix per mix_id (non per lotto, evita di colpire composti singoli con stesso lotto)
+          await window.electronAPI.invoke('composti:delete-by-mix-id', comp.mix_id)
         } else {
           // Elimina solo gli ID selezionati di questo mix
           const mixSelected = [...ids].filter(sid => {
@@ -993,8 +993,8 @@ export function CompostiPage() {
         <ConfirmDialog
           open={true}
           title="Mix parzialmente selezionato"
-          message={`Hai selezionato ${currentMixScope.selectedIds.length} componente${currentMixScope.selectedIds.length > 1 ? 'i' : ''} del mix "${currentMixScope.mixNome}" (${currentMixScope.totalCount} totali). Vuoi applicare l'azione solo ai selezionati o a tutto il mix?`}
-          confirmLabel={`Tutto il mix (${currentMixScope.totalCount})`}
+          message={`Hai selezionato ${currentMixScope.selectedIds.length} di ${currentMixScope.totalCount} componenti del mix "${currentMixScope.mixNome}". Vuoi applicare l'azione solo ai ${currentMixScope.selectedIds.length} selezionati o a tutti i ${currentMixScope.totalCount} componenti del mix?`}
+          confirmLabel={`Tutti i ${currentMixScope.totalCount} del mix`}
           secondaryAction={{
             label: `Solo i ${currentMixScope.selectedIds.length} selezionati`,
             onClick: () => handleMixScopeDecision('selected'),
