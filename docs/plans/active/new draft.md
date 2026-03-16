@@ -11,7 +11,7 @@
  ## importante
 
  
-
+adesso segnale non ha accreditamento tra i campi da segnalare. Forse perche ha il tasto altro...
 
 
  ## altri
