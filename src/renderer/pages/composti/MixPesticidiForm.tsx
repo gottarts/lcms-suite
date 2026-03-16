@@ -9,6 +9,8 @@ import { X, Upload } from 'lucide-react'
 import { compostiApi } from '@/lib/api'
 import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
 import { TextImportDialog, type ImportField } from '@/components/shared/TextImportDialog'
+import { AutocompleteInput } from '@/components/shared/AutocompleteInput'
+import { syncAnagrafiche } from '@/lib/anagrafiche-sync'
 
 const DESTINAZIONI_USO = [
   'Taratura',
@@ -79,17 +81,46 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
   const [lottiUnici, setLottiUnici] = useState<ComponenteImportato[][]>([])
   const [selezioneLottiOpen, setSelezioneLottiOpen] = useState(false)
 
+  // TASK A-3: suggerimenti autocomplete (classe, produttore, solvente, ubicazione)
+  const [classiDisponibili, setClassiDisponibili] = useState<string[]>([])
+  const [produttoriDisponibili, setProduttoriDisponibili] = useState<string[]>([])
+  const [solventiDisponibili, setSolventiDisponibili] = useState<string[]>([])
+  const [ubicazioniDisponibili, setUbicazioniDisponibili] = useState<string[]>([])
+  const [operatoriDisponibili, setOperatoriDisponibili] = useState<string[]>([])
+
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
 
   useEffect(() => {
-    try {
-      window.electronAPI.invoke('anagrafiche:list').then((anagrafiche: any[]) => {
-        const anagrafica = anagrafiche.find(
-          (a: any) => a.nome.toLowerCase().includes('stoccaggio') || a.nome.toLowerCase().includes('posizioni')
-        )
-        if (anagrafica?.voci) setVociStoccaggio(anagrafica.voci.map((v: any) => v.valore))
-      }).catch(err => console.error('Error loading anagrafiche:', err))
-    } catch (err) { console.error('Error in useEffect:', err) }
+    window.electronAPI.invoke('anagrafiche:list').then((anagrafiche: any[]) => {
+      const voci = (nomeMatch: string) => {
+        const found = anagrafiche.find((a: any) => a.nome.toLowerCase().includes(nomeMatch))
+        return found?.voci?.map((v: any) => v.valore) ?? []
+      }
+      setVociStoccaggio(voci('stoccaggio') || voci('posizioni'))
+
+      const classiAnagrafica: string[] = voci('classi') || voci('classe')
+      const produttoriAnagrafica: string[] = voci('produttori') || voci('fornitori')
+      const solventiAnagrafica: string[] = voci('solventi')
+      const ubicazioniAnagrafica: string[] = voci('ubicazioni') || voci('stanze')
+      const operatoriAnagrafica: string[] = voci('operatori')
+
+      const merge = (fromAnagrafica: string[], campo: string) =>
+        window.electronAPI.invoke('composti:distinct-values', campo)
+          .then((fromDb: unknown) => {
+            const db = fromDb as string[]
+            const map = new Map<string, string>()
+            ;[...fromAnagrafica, ...db].forEach(v => map.set(v.toLowerCase(), v))
+            return [...map.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+          })
+          .catch(() => fromAnagrafica)
+
+      merge(classiAnagrafica, 'classe').then(setClassiDisponibili)
+      merge(produttoriAnagrafica, 'produttore').then(setProduttoriDisponibili)
+      merge(solventiAnagrafica, 'solvente').then(setSolventiDisponibili)
+      merge(ubicazioniAnagrafica, 'ubicazione').then(setUbicazioniDisponibili)
+      merge(operatoriAnagrafica, 'operatore_apertura').then(setOperatoriDisponibili)
+    }).catch(err => console.error('Error loading anagrafiche:', err))
+
     window.electronAPI.invoke('metodi:list').then((result: unknown) => {
       setMetodi(result as any[])
     }).catch(err => console.error('Error loading metodi:', err))
@@ -224,7 +255,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
       if (aperArr.length > 0)  locked.add('data_apertura')
       if (prodArr.length > 0)  locked.add('produttore')
 
-      // Se ci sono più lotti distinti, mostra subito il picker
       const gruppi = new Map<string, ComponenteImportato[]>()
       for (const c of comps) {
         const chiave = c.lotto?.trim() || 'nolotto'
@@ -265,9 +295,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
     reader.readAsText(file)
   }
 
-  // ─── Selezione lotto dal picker ───────────────────────────────────────────
-  // Imposta componentiImportati con il gruppo selezionato e aggiorna importedFields
-  // in modo che handleSave passi per il CASO A (createMix con componenti per riga).
   const handleLottoSelect = (gruppo: ComponenteImportato[]) => {
     setComponentiImportati(gruppo)
     setNomi(gruppo.map(c => c.nome))
@@ -280,7 +307,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
     if (gruppo.some(c => c.produttore))        locked.add('produttore')
     setImportedFields(locked)
 
-    // Se tutti i componenti del gruppo hanno la stessa forma_commerciale, usala nel form
     const formaUnica = gruppo[0]?.forma_commerciale
     if (formaUnica && gruppo.every(c => c.forma_commerciale === formaUnica)) {
       setForm(f => ({ ...f, forma_commerciale: formaUnica }))
@@ -308,9 +334,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
         metodi_ids: metodiIds,
       }
 
-      // CASO A: componenti importati con dati per riga (da TextImportDialog + picker)
       if (componentiImportati && componentiImportati.length > 0) {
-
         const gruppi = new Map<string, ComponenteImportato[]>()
         for (const comp of componentiImportati) {
           const chiave = comp.lotto?.trim() || 'nolotto'
@@ -318,8 +342,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
           gruppi.get(chiave)!.push(comp)
         }
 
-        // Dopo il picker componentiImportati ha sempre un solo gruppo.
-        // Questo fallback non dovrebbe mai scattare, ma per sicurezza:
         if (gruppi.size > 1) {
           setSaving(false)
           setLottiUnici([...gruppi.values()])
@@ -339,16 +361,36 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
           componenti: gruppo,
         })
 
+        // TASK B-3: sync anagrafiche dopo salvataggio mix
+        await syncAnagrafiche({
+          classe:             form.classe,
+          produttore:         form.produttore,
+          solvente:           form.solvente,
+          stoccaggio:         form.stoccaggio,
+          operatore_apertura: form.operatore_apertura,
+          ubicazione:         form.ubicazione,
+        })
+
         onSave(); onClose(); reset()
         alert(`Mix creato — ${gruppo.length} componenti aggiunti`)
 
-      // CASO B: nomi da file .txt semplice
       } else {
         const result = await compostiApi.createMix({
           ...baseData,
           forma_commerciale: form.forma_commerciale,
           nomi,
         })
+
+        // TASK B-3: sync anagrafiche dopo salvataggio mix
+        await syncAnagrafiche({
+          classe:             form.classe,
+          produttore:         form.produttore,
+          solvente:           form.solvente,
+          stoccaggio:         form.stoccaggio,
+          operatore_apertura: form.operatore_apertura,
+          ubicazione:         form.ubicazione,
+        })
+
         onSave(); onClose(); reset()
         alert(`Mix creato — ${result.count} componenti aggiunti`)
       }
@@ -477,11 +519,25 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
             </div>
             <div>
               <Label className="text-xs">Solvente</Label>
-              <Input value={form.solvente} onChange={e => set('solvente', e.target.value)} placeholder="es. MeOH" disabled={importedFields.has('solvente')} className={lockedClass('solvente')} />
+              <AutocompleteInput
+                value={form.solvente}
+                onChange={v => set('solvente', v)}
+                suggestions={solventiDisponibili}
+                placeholder="es. MeOH, ACN..."
+                disabled={importedFields.has('solvente')}
+                className={lockedClass('solvente')}
+              />
             </div>
             <div>
               <Label className="text-xs">Produttore {importedFields.has('produttore') && <span className="ml-1 text-blue-600 font-normal normal-case">(da file, per riga)</span>}</Label>
-              <Input value={form.produttore} onChange={e => set('produttore', e.target.value)} disabled={importedFields.has('produttore')} className={lockedClass('produttore')} placeholder={importedFields.has('produttore') ? 'Valore diverso per ogni riga' : ''} />
+              <AutocompleteInput
+                value={form.produttore}
+                onChange={v => set('produttore', v)}
+                suggestions={produttoriDisponibili}
+                placeholder={importedFields.has('produttore') ? 'Valore diverso per ogni riga' : 'es. Sigma-Aldrich...'}
+                disabled={importedFields.has('produttore')}
+                className={lockedClass('produttore')}
+              />
             </div>
             <div>
               <Label className="text-xs">Lotto {importedFields.has('lotto') && <span className="ml-1 text-blue-600 font-normal normal-case">(da file, per riga)</span>}</Label>
@@ -497,24 +553,25 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
             </div>
             <div>
               <Label className="text-xs">Operatore Apertura</Label>
-              <Input value={form.operatore_apertura} onChange={e => set('operatore_apertura', e.target.value)} placeholder="es. Mario Rossi" />
+              <AutocompleteInput
+                value={form.operatore_apertura}
+                onChange={v => set('operatore_apertura', v)}
+                suggestions={operatoriDisponibili}
+                placeholder="es. Mario Rossi..."
+              />
             </div>
+
+            {/* TASK A-3: classe libera con autocomplete, sostituisce la Select hardcoded */}
             <div>
               <Label className="text-xs">Classe</Label>
-              <Select value={form.classe || '_none'} onValueChange={v => set('classe', v === '_none' ? '' : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">--</SelectItem>
-                  <SelectItem value="Antibiotico">Antibiotico</SelectItem>
-                  <SelectItem value="Antiviral">Antiviral</SelectItem>
-                  <SelectItem value="FANS">FANS</SelectItem>
-                  <SelectItem value="Antimicotico">Antimicotico</SelectItem>
-                  <SelectItem value="Diuretico">Diuretico</SelectItem>
-                  <SelectItem value="psyco">psyco</SelectItem>
-                  <SelectItem value="cardio">cardio</SelectItem>
-                </SelectContent>
-              </Select>
+              <AutocompleteInput
+                value={form.classe}
+                onChange={v => set('classe', v)}
+                suggestions={classiDisponibili}
+                placeholder="es. Pesticidi, Fitofarmaci..."
+              />
             </div>
+
             <div>
               <Label className="text-xs">Destinazione Uso</Label>
               <Select value={form.destinazione_uso || '_none'} onValueChange={v => set('destinazione_uso', v === '_none' ? '' : v)} disabled={importedFields.has('destinazione_uso')}>
@@ -527,7 +584,12 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
             </div>
             <div>
               <Label className="text-xs">Ubicazione</Label>
-              <Input value={form.ubicazione} onChange={e => set('ubicazione', e.target.value)} placeholder="es. Frigo A" />
+              <AutocompleteInput
+                value={form.ubicazione}
+                onChange={v => set('ubicazione', v)}
+                suggestions={ubicazioniDisponibili}
+                placeholder="es. Frigo A, Lab 2..."
+              />
             </div>
             <div>
               <Label className="text-xs">Work Standard</Label>
@@ -538,18 +600,14 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Stoccaggio</Label>
-              {vociStoccaggio.length > 0 ? (
-                <Select value={form.stoccaggio || '_none'} onValueChange={v => set('stoccaggio', v === '_none' ? '' : v)} disabled={importedFields.has('stoccaggio')}>
-                  <SelectTrigger className={lockedClass('stoccaggio')}><SelectValue placeholder="Seleziona posizione..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">— Nessuna —</SelectItem>
-                    {vociStoccaggio.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input value={form.stoccaggio || ''} onChange={e => set('stoccaggio', e.target.value)} placeholder="es. Frigo 1 — Scaffale A" disabled={importedFields.has('stoccaggio')} className={lockedClass('stoccaggio')} />
-              )}
-              {vociStoccaggio.length === 0 && <p className="text-[11px] text-muted-foreground mt-1">Aggiungi posizioni in Anagrafiche → Posizioni stoccaggio per abilitare la tendina.</p>}
+              <AutocompleteInput
+                value={form.stoccaggio || ''}
+                onChange={v => set('stoccaggio', v)}
+                suggestions={vociStoccaggio}
+                placeholder="es. Frigo 1 — Scaffale A"
+                disabled={importedFields.has('stoccaggio')}
+                className={lockedClass('stoccaggio')}
+              />
             </div>
             <div>
               <Label className="text-xs">Accreditamento CRM Provider</Label>
@@ -641,54 +699,32 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
         onImport={handleTextImport}
       />
 
-      {/* Dialog selezione lotto quando il file contiene più lotti distinti */}
       <Dialog open={selezioneLottiOpen} onOpenChange={v => !v && setSelezioneLottiOpen(false)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Seleziona la mix da inserire</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-2 py-2">
             <p className="text-sm text-muted-foreground">
               Il file contiene <strong>{lottiUnici.length} lotti distinti</strong>.
               Seleziona quale mix vuoi inserire ora — per gli altri usa <strong>Importa CSV</strong> nella tabella composti.
             </p>
-
             <div className="space-y-2 mt-3 max-h-64 overflow-y-auto pr-1">
               {lottiUnici.map((gruppo, i) => {
                 const lotto = gruppo[0]?.lotto || '— senza lotto —'
                 const formaComm = gruppo[0]?.forma_commerciale || ''
                 return (
-                  <button
-                    key={i}
-                    type="button"
-                    className="w-full text-left rounded-md border px-4 py-3 hover:bg-muted/50 transition-colors"
-                    onClick={() => handleLottoSelect(gruppo)}
-                  >
+                  <button key={i} type="button" className="w-full text-left rounded-md border px-4 py-3 hover:bg-muted/50 transition-colors" onClick={() => handleLottoSelect(gruppo)}>
                     <div className="text-sm font-medium font-mono">{lotto}</div>
-                    {formaComm && (
-                      <div className="text-xs text-muted-foreground mt-0.5">{formaComm}</div>
-                    )}
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {gruppo.length} composto{gruppo.length !== 1 ? 'i' : ''}
-                    </div>
+                    {formaComm && <div className="text-xs text-muted-foreground mt-0.5">{formaComm}</div>}
+                    <div className="text-xs text-muted-foreground mt-0.5">{gruppo.length} composto{gruppo.length !== 1 ? 'i' : ''}</div>
                   </button>
                 )
               })}
             </div>
           </div>
-
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setComponentiImportati(null)
-                setNomi([])
-                setImportedFields(new Set())
-                setLottiUnici([])
-                setSelezioneLottiOpen(false)
-              }}
-            >
+            <Button variant="ghost" onClick={() => { setComponentiImportati(null); setNomi([]); setImportedFields(new Set()); setLottiUnici([]); setSelezioneLottiOpen(false) }}>
               Annulla import
             </Button>
           </DialogFooter>

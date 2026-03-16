@@ -12,6 +12,22 @@ interface Anagrafica {
   voci: { id: number; anagrafica_id: number; valore: string }[]
 }
 
+// TASK C-3: mappa il nome dell'anagrafica (lowercase) al campo DB corrispondente
+// nei composti. Se il nome non è in mappa, campoDB sarà undefined e la card
+// non mostrerà i controlli di rename/merge con propagazione.
+const NOME_CAMPO_MAP: Record<string, string> = {
+  'classi':               'classe',
+  'classe':               'classe',
+  'produttori':           'produttore',
+  'fornitori':            'produttore',
+  'solventi':             'solvente',
+  'posizioni stoccaggio': 'stoccaggio',
+  'stoccaggio':           'stoccaggio',
+  'operatori':            'operatore_apertura',
+  'ubicazioni':           'ubicazione',
+  'stanze':               'ubicazione',
+}
+
 export function AnagrafichePage() {
   const [anagrafiche, setAnagrafiche] = useState<Anagrafica[]>([])
   const [newName, setNewName] = useState('')
@@ -57,10 +73,10 @@ export function AnagrafichePage() {
             voci={a.voci}
             onRefresh={load}
             onDelete={id => setDeleteId(id)}
+            campoDB={NOME_CAMPO_MAP[a.nome.toLowerCase()]}
           />
         ))}
 
-        {/* New card button */}
         {showNew ? (
           <div className="rounded-lg border-2 border-dashed border-border p-4 flex flex-col items-center justify-center gap-2">
             <Input

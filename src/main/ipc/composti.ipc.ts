@@ -1,6 +1,44 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db'
 
+// ─── Helper: sync anagrafica voci (usato internamente, senza IPC) ───────────
+// Riceve una mappa campo→valore e aggiorna le anagrafiche in blocco.
+// Usa statements pre-compilati e una singola passata per efficienza.
+const ANAGRAFICA_CAMPO_MAP: Record<string, string> = {
+  classe:             'Classi',
+  produttore:         'Produttori',
+  solvente:           'Solventi',
+  stoccaggio:         'Posizioni stoccaggio',
+  ubicazione:         'Ubicazioni',
+  operatore_apertura: 'Operatori',
+}
+
+function syncVociDb(campi: Partial<Record<string, string | null | undefined>>): void {
+  const db = getDb()
+
+  // Prepara statements una volta sola
+  const selectAnag = db.prepare(`SELECT id FROM anagrafiche WHERE LOWER(nome) = LOWER(?)`)
+  const insertAnag = db.prepare(`INSERT INTO anagrafiche (nome) VALUES (?)`)
+  const insertVoce = db.prepare(`INSERT OR IGNORE INTO anagrafiche_voci (anagrafica_id, valore) VALUES (?, ?)`)
+
+  for (const [campo, valore] of Object.entries(campi)) {
+    if (!valore?.trim()) continue
+    const nomeAnagrafica = ANAGRAFICA_CAMPO_MAP[campo]
+    if (!nomeAnagrafica) continue
+
+    try {
+      let anag = selectAnag.get(nomeAnagrafica) as { id: number } | undefined
+      if (!anag) {
+        const res = insertAnag.run(nomeAnagrafica)
+        anag = { id: Number(res.lastInsertRowid) }
+      }
+      insertVoce.run(anag.id, valore.trim())
+    } catch (err) {
+      console.error(`[syncVociDb] errore su campo=${campo} valore=${valore}:`, err)
+    }
+  }
+}
+
 export function registerCompostiIpc(): void {
   ipcMain.handle('composti:list', (_, filters?: {
     search?: string
@@ -144,6 +182,17 @@ FROM composti c`
         insertLink.run(newId, mid)
       }
     })()
+
+    // Sync anagrafiche — copre import CSV, nuovo composto singolo e qualsiasi
+    // altro percorso che passa da composti:create
+    syncVociDb({
+      classe:             row.classe as string,
+      produttore:         row.produttore as string,
+      solvente:           row.solvente as string,
+      ubicazione:         row.ubicazione as string,
+      stoccaggio:         row.stoccaggio as string,
+      operatore_apertura: row.operatore_apertura as string,
+    })
 
     return db.prepare('SELECT * FROM composti WHERE id = ?').get(newId)
   })
@@ -423,6 +472,24 @@ FROM composti c`
       return componenti.length
     })()
 
+    // ─── Sync anagrafiche post-insert ────────────────────────────────────────
+    // Campi comuni del form
+    syncVociDb({
+      classe:             data.classe,
+      solvente:           data.solvente,
+      ubicazione:         data.ubicazione,
+      operatore_apertura: data.operatore_apertura,
+    })
+    // Campi per-riga: un syncVociDb per ogni produttore distinto nei componenti
+    const produttoriVisti = new Set<string>()
+    for (const comp of componenti) {
+      const prod = comp.produttore ?? data.produttore
+      if (prod?.trim()) produttoriVisti.add(prod.trim())
+    }
+    for (const prod of produttoriVisti) {
+      syncVociDb({ produttore: prod })
+    }
+
     return { mix_id, count }
   })
 
@@ -574,4 +641,21 @@ FROM composti c`
       ).get(id))
       .filter(Boolean)
   })
+
+  // ─── TASK A-1: distinct-values ────────────────────────────────────────────
+  // Restituisce i valori distinti non-null di una colonna della tabella composti.
+  // Usato dai form per popolare i suggerimenti dei campi autocomplete.
+  // La whitelist previene injection via nome colonna dinamico.
+
+  ipcMain.handle('composti:distinct-values', (_, campo: string) => {
+    const ALLOWED = ['classe', 'produttore', 'solvente', 'stoccaggio', 'ubicazione', 'operatore_apertura']
+    if (!ALLOWED.includes(campo)) return []
+    const db = getDb()
+    return db.prepare(
+      `SELECT DISTINCT ${campo} AS valore FROM composti
+       WHERE ${campo} IS NOT NULL AND ${campo} != ''
+       ORDER BY ${campo} COLLATE NOCASE`
+    ).all().map((r: any) => r.valore as string)
+  })
+
 }

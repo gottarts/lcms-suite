@@ -34,6 +34,9 @@ export const compostiApi = {
   }) => api.invoke('composti:storia-add', compostoId, data) as Promise<{ id: number }>,
   createMix: (data: Record<string, unknown>) =>
     api.invoke('composti:create-mix', data) as Promise<{ mix_id: string; count: number }>,
+  // TASK A-1: valori distinti di una colonna (per autocomplete)
+  distinctValues: (campo: string) =>
+    api.invoke('composti:distinct-values', campo) as Promise<string[]>,
 }
 
 export const preparazioniApi = {
@@ -69,6 +72,7 @@ export const diarioApi = {
 }
 
 export const anagraficheApi = {
+  // Handlers esistenti
   list: () => api.invoke('anagrafiche:list') as Promise<any[]>,
   create: (nome: string) => api.invoke('anagrafiche:create', nome) as Promise<any>,
   rename: (id: number, nome: string) => api.invoke('anagrafiche:rename', id, nome) as Promise<{ ok: boolean }>,
@@ -76,6 +80,15 @@ export const anagraficheApi = {
   addVoce: (anagId: number, valore: string) => api.invoke('anagrafiche:add-voce', anagId, valore) as Promise<any>,
   updateVoce: (id: number, valore: string) => api.invoke('anagrafiche:update-voce', id, valore) as Promise<{ ok: boolean }>,
   deleteVoce: (id: number) => api.invoke('anagrafiche:delete-voce', id) as Promise<{ ok: boolean }>,
+  // TASK B-1: sync voce da salvataggio composto
+  syncVoce: (nomeAnagrafica: string, valore: string) =>
+    api.invoke('anagrafiche:sync-voce', nomeAnagrafica, valore) as Promise<{ ok: boolean }>,
+  // TASK C-1: rename voce con propagazione ai composti
+  renameVocePropagate: (voceId: number, nuovoValore: string, campoDB: string) =>
+    api.invoke('anagrafiche:rename-voce-propagate', voceId, nuovoValore, campoDB) as Promise<{ ok: boolean }>,
+  // TASK C-2: merge due voci con propagazione ai composti
+  mergeVoci: (sourceId: number, destId: number, campoDB: string) =>
+    api.invoke('anagrafiche:merge-voci', sourceId, destId, campoDB) as Promise<{ ok: boolean }>,
 }
 
 export const queryApi = {

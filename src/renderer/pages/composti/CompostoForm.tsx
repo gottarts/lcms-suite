@@ -3,14 +3,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { X } from 'lucide-react'
 import { compostiApi } from '@/lib/api'
 import { UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/unita'
+import { AutocompleteInput } from '@/components/shared/AutocompleteInput'
+import { syncAnagrafiche } from '@/lib/anagrafiche-sync'
 
-// FEAT-J: valori fissi per destinazione uso (stessa lista usata in CompostiPage per il filtro)
 const DESTINAZIONI_USO = [
   'Taratura',
   'Controllo qualità',
@@ -31,9 +31,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
   const [form, setForm] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
   const [vociStoccaggio, setVociStoccaggio] = useState<string[]>([])
-  // FEAT-K: stato per l'avviso date anomale
   const [warningDate, setWarningDate] = useState(false)
-  // MIX-SYNC: dialog conferma propagazione + conteggio composti nel mix
   const [confirmMixOpen, setConfirmMixOpen] = useState(false)
   const [mixCount, setMixCount] = useState(0)
 
@@ -44,10 +42,16 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
   const [metodiDropdownOpen, setMetodiDropdownOpen] = useState(false)
   const [metodiToast, setMetodiToast] = useState('')
 
+  // TASK A-3: suggerimenti autocomplete (classe, produttore, solvente, ubicazione)
+  const [classiDisponibili, setClassiDisponibili] = useState<string[]>([])
+  const [produttoriDisponibili, setProduttoriDisponibili] = useState<string[]>([])
+  const [solventiDisponibili, setSolventiDisponibili] = useState<string[]>([])
+  const [ubicazioniDisponibili, setUbicazioniDisponibili] = useState<string[]>([])
+  const [operatoriDisponibili, setOperatoriDisponibili] = useState<string[]>([])
+
   useEffect(() => {
     if (composto) {
       setForm({ ...composto })
-      // MIX-SYNC: se è un composto di un mix, conta quanti composti ha il mix
       if (composto.mix_id) {
         window.electronAPI.invoke('composti:count-by-mix', composto.mix_id)
           .then((n: unknown) => setMixCount(n as number))
@@ -89,19 +93,39 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
   }, [composto, template, open])
 
   useEffect(() => {
-    try {
-      window.electronAPI.invoke('anagrafiche:list').then((anagrafiche: any[]) => {
-        const anagrafica = anagrafiche.find(
-          (a: any) => a.nome.toLowerCase().includes('stoccaggio') ||
-                      a.nome.toLowerCase().includes('posizioni')
-        )
-        if (anagrafica?.voci) {
-          setVociStoccaggio(anagrafica.voci.map((v: any) => v.valore))
-        }
-      }).catch(err => console.error('Error loading anagrafiche:', err))
-    } catch (err) {
-      console.error('Error in useEffect:', err)
-    }
+    // Carica anagrafiche una sola volta e ne estrae le voci per ogni campo
+    window.electronAPI.invoke('anagrafiche:list').then((anagrafiche: any[]) => {
+      const voci = (nomeMatch: string) => {
+        const found = anagrafiche.find((a: any) => a.nome.toLowerCase().includes(nomeMatch))
+        return found?.voci?.map((v: any) => v.valore) ?? []
+      }
+      setVociStoccaggio(voci('stoccaggio') || voci('posizioni'))
+
+      // Suggerimenti per i campi autocomplete — dall'anagrafica (già popolata dal sync)
+      // con fallback ai valori distinti nel DB composti (union dei due)
+      const classiAnagrafica: string[] = voci('classi') || voci('classe')
+      const produttoriAnagrafica: string[] = voci('produttori') || voci('fornitori')
+      const solventiAnagrafica: string[] = voci('solventi')
+      const ubicazioniAnagrafica: string[] = voci('ubicazioni') || voci('stanze')
+      const operatoriAnagrafica: string[] = voci('operatori')
+
+      // Merge con i valori distinti dal DB composti (deduplica, case-insensitive)
+      const merge = (fromAnagrafica: string[], campo: string) =>
+        window.electronAPI.invoke('composti:distinct-values', campo)
+          .then((fromDb: unknown) => {
+            const db = fromDb as string[]
+            const set = new Map<string, string>()
+            ;[...fromAnagrafica, ...db].forEach(v => set.set(v.toLowerCase(), v))
+            return [...set.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+          })
+          .catch(() => fromAnagrafica)
+
+      merge(classiAnagrafica, 'classe').then(setClassiDisponibili)
+      merge(produttoriAnagrafica, 'produttore').then(setProduttoriDisponibili)
+      merge(solventiAnagrafica, 'solvente').then(setSolventiDisponibili)
+      merge(ubicazioniAnagrafica, 'ubicazione').then(setUbicazioniDisponibili)
+      merge(operatoriAnagrafica, 'operatore_apertura').then(setOperatoriDisponibili)
+    }).catch(err => console.error('Error loading anagrafiche:', err))
 
     window.electronAPI.invoke('metodi:list').then((result: unknown) => {
       setMetodi(result as any[])
@@ -162,7 +186,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
 
   // --- Fine gestione Metodi ---
 
-  // MIX-SYNC: esecuzione effettiva del salvataggio (dopo eventuale conferma)
   const doSave = async () => {
     setSaving(true)
     try {
@@ -174,14 +197,25 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
       for (const k of Object.keys(data)) {
         if (k !== 'nome' && k !== 'arpa' && k !== 'metodi_ids' && data[k] === '') data[k] = null
       }
+
       if (isEdit) {
         await compostiApi.update(composto.id, data)
       } else {
         await compostiApi.create(data)
       }
+
+      // TASK B-3: sync automatico anagrafiche dopo il salvataggio
+      await syncAnagrafiche({
+        classe:             form.classe,
+        produttore:         form.produttore,
+        solvente:           form.solvente,
+        stoccaggio:         form.stoccaggio,
+        operatore_apertura: form.operatore_apertura,
+        ubicazione:         form.ubicazione,
+      })
+
       onSave()
 
-      // FEAT-K: controllo date dopo il salvataggio
       if (form.data_apertura && form.scadenza_prodotto) {
         const apertura = new Date(form.data_apertura)
         const scadenza = new Date(form.scadenza_prodotto)
@@ -199,13 +233,11 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
     }
   }
 
-  // MIX-SYNC: intercetta il salvataggio — se è un mix in edit chiede conferma prima
   const handleSave = async () => {
     if (!form.nome?.trim()) return
     setWarningDate(false)
 
     if (isEdit && form.mix_id && mixCount > 1) {
-      // Mostra dialog di conferma prima di salvare
       setConfirmMixOpen(true)
       return
     }
@@ -213,7 +245,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
     await doSave()
   }
 
-  // MIX-SYNC: utente ha confermato dal dialog
   const handleConfirmMix = async () => {
     setConfirmMixOpen(false)
     await doSave()
@@ -231,7 +262,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
 
           <div className="space-y-4">
 
-            {/* MIX-SYNC: avviso visibile nel form quando il composto appartiene a un mix */}
             {isEdit && form.mix_id && mixCount > 1 && (
               <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800 flex items-start gap-2">
                 <span className="text-base leading-none mt-0.5">ℹ️</span>
@@ -242,7 +272,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
               </div>
             )}
 
-            {/* FEAT-metodi-campo: campo Metodi in CIMA al form */}
+            {/* Campo Metodi */}
             <div className="mb-2">
               <Label className="text-xs">Metodi Analitici</Label>
 
@@ -326,11 +356,34 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <Separator />
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Identificazione</div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2"><Label className="text-xs">Nome *</Label><Input value={form.nome || ''} onChange={e => set('nome', e.target.value)} /></div>
-              <div><Label className="text-xs">Codice Interno</Label><Input value={form.codice_interno || ''} onChange={e => set('codice_interno', e.target.value)} /></div>
-              <div><Label className="text-xs">Formula</Label><Input value={form.formula || ''} onChange={e => set('formula', e.target.value)} /></div>
-              <div><Label className="text-xs">Classe</Label><Input value={form.classe || ''} onChange={e => set('classe', e.target.value)} /></div>
-              <div><Label className="text-xs">MW</Label><Input type="number" step="0.01" value={form.peso_molecolare || ''} onChange={e => set('peso_molecolare', e.target.value)} /></div>
+              <div className="col-span-2">
+                <Label className="text-xs">Nome *</Label>
+                <Input value={form.nome || ''} onChange={e => set('nome', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Codice Interno</Label>
+                <Input value={form.codice_interno || ''} onChange={e => set('codice_interno', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Formula</Label>
+                <Input value={form.formula || ''} onChange={e => set('formula', e.target.value)} />
+              </div>
+
+              {/* TASK A-3: classe libera con autocomplete */}
+              <div>
+                <Label className="text-xs">Classe</Label>
+                <AutocompleteInput
+                  value={form.classe || ''}
+                  onChange={v => set('classe', v)}
+                  suggestions={classiDisponibili}
+                  placeholder="es. Pesticidi, Antibiotici..."
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">MW</Label>
+                <Input type="number" step="0.01" value={form.peso_molecolare || ''} onChange={e => set('peso_molecolare', e.target.value)} />
+              </div>
             </div>
 
             <Separator />
@@ -338,7 +391,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <div className="grid grid-cols-4 gap-3">
               <div>
                 <Label className="text-xs">Forma</Label>
-                {/* TASK 1: aggiunta opzione Mix */}
                 <Select value={form.forma || ''} onValueChange={v => set('forma', v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -348,10 +400,22 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Forma Commerciale</Label><Input value={form.forma_commerciale || ''} onChange={e => set('forma_commerciale', e.target.value)} /></div>
-              <div><Label className="text-xs">N° Fiale</Label><Input value={form.fiala || ''} onChange={e => set('fiala', e.target.value)} /></div>
-              <div><Label className="text-xs">Purezza (%)</Label><Input type="number" step="0.1" value={form.purezza || ''} onChange={e => set('purezza', e.target.value)} /></div>
-              <div><Label className="text-xs">Concentrazione</Label><Input type="number" step="0.01" value={form.concentrazione || ''} onChange={e => set('concentrazione', e.target.value)} /></div>
+              <div>
+                <Label className="text-xs">Forma Commerciale</Label>
+                <Input value={form.forma_commerciale || ''} onChange={e => set('forma_commerciale', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">N° Fiale</Label>
+                <Input value={form.fiala || ''} onChange={e => set('fiala', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Purezza (%)</Label>
+                <Input type="number" step="0.1" value={form.purezza || ''} onChange={e => set('purezza', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Concentrazione</Label>
+                <Input type="number" step="0.01" value={form.concentrazione || ''} onChange={e => set('concentrazione', e.target.value)} />
+              </div>
               <div>
                 <Label className="text-xs">Unità</Label>
                 <Select value={form.unita_conc || UNITA_DEFAULT} onValueChange={v => set('unita_conc', v)}>
@@ -363,8 +427,15 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Solvente</Label><Input value={form.solvente || ''} onChange={e => set('solvente', e.target.value)} /></div>
-              {/* TASK 1: volume_ml visibile anche per Mix */}
+              <div>
+                <Label className="text-xs">Solvente</Label>
+                <AutocompleteInput
+                  value={form.solvente || ''}
+                  onChange={v => set('solvente', v)}
+                  suggestions={solventiDisponibili}
+                  placeholder="es. MeOH, ACN..."
+                />
+              </div>
               {(form.forma === 'Solution' || form.forma === 'Mix') && (
                 <div>
                   <Label className="text-xs">Volume mL</Label>
@@ -382,16 +453,41 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <Separator />
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fornitore e Lotto</div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label className="text-xs">Produttore</Label><Input value={form.produttore || ''} onChange={e => set('produttore', e.target.value)} /></div>
-              <div><Label className="text-xs">Lotto</Label><Input value={form.lotto || ''} onChange={e => set('lotto', e.target.value)} /></div>
-              <div><Label className="text-xs">Operatore Apertura</Label><Input value={form.operatore_apertura || ''} onChange={e => set('operatore_apertura', e.target.value)} /></div>
+              <div>
+                <Label className="text-xs">Produttore</Label>
+                <AutocompleteInput
+                  value={form.produttore || ''}
+                  onChange={v => set('produttore', v)}
+                  suggestions={produttoriDisponibili}
+                  placeholder="es. Sigma-Aldrich..."
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Lotto</Label>
+                <Input value={form.lotto || ''} onChange={e => set('lotto', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Operatore Apertura</Label>
+                <AutocompleteInput
+                  value={form.operatore_apertura || ''}
+                  onChange={v => set('operatore_apertura', v)}
+                  suggestions={operatoriDisponibili}
+                  placeholder="es. Mario Rossi..."
+                />
+              </div>
             </div>
 
             <Separator />
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label className="text-xs">Data Apertura</Label><Input type="date" value={form.data_apertura || ''} onChange={e => set('data_apertura', e.target.value)} /></div>
-              <div><Label className="text-xs">Scadenza Prodotto</Label><Input type="date" value={form.scadenza_prodotto || ''} onChange={e => set('scadenza_prodotto', e.target.value)} /></div>
+              <div>
+                <Label className="text-xs">Data Apertura</Label>
+                <Input type="date" value={form.data_apertura || ''} onChange={e => set('data_apertura', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Scadenza Prodotto</Label>
+                <Input type="date" value={form.scadenza_prodotto || ''} onChange={e => set('scadenza_prodotto', e.target.value)} />
+              </div>
             </div>
 
             <Separator />
@@ -412,36 +508,28 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Work Standard</Label><Input value={form.work_standard || ''} onChange={e => set('work_standard', e.target.value)} /></div>
-              <div><Label className="text-xs">Ubicazione</Label><Input value={form.ubicazione || ''} onChange={e => set('ubicazione', e.target.value)} /></div>
+              <div>
+                <Label className="text-xs">Work Standard</Label>
+                <Input value={form.work_standard || ''} onChange={e => set('work_standard', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Ubicazione</Label>
+                <AutocompleteInput
+                  value={form.ubicazione || ''}
+                  onChange={v => set('ubicazione', v)}
+                  suggestions={ubicazioniDisponibili}
+                  placeholder="es. Frigo A, Lab 2..."
+                />
+              </div>
 
               <div className="col-span-2">
                 <Label className="text-xs">Stoccaggio</Label>
-                {vociStoccaggio.length > 0 ? (
-                  <Select
-                    value={form.stoccaggio || '_none'}
-                    onValueChange={v => set('stoccaggio', v === '_none' ? '' : v)}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Seleziona posizione..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">— Nessuna —</SelectItem>
-                      {vociStoccaggio.map(v => (
-                        <SelectItem key={v} value={v}>{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={form.stoccaggio || ''}
-                    onChange={e => set('stoccaggio', e.target.value)}
-                    placeholder="es. Frigo 1 — Scaffale A"
-                  />
-                )}
-                {vociStoccaggio.length === 0 && (
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Aggiungi posizioni in Anagrafiche → Posizioni stoccaggio per abilitare la tendina.
-                  </p>
-                )}
+                <AutocompleteInput
+                  value={form.stoccaggio || ''}
+                  onChange={v => set('stoccaggio', v)}
+                  suggestions={vociStoccaggio}
+                  placeholder="es. Frigo 1 — Scaffale A"
+                />
               </div>
 
               <div className="col-span-1">
@@ -482,7 +570,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
               )}
             </div>
 
-            {/* FEAT-K: avviso date anomale */}
             {warningDate && (
               <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
                 <span className="text-base leading-none mt-0.5">⚠️</span>
@@ -506,7 +593,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         </DialogContent>
       </Dialog>
 
-      {/* MIX-SYNC: dialog di conferma propagazione a tutto il mix */}
+      {/* MIX-SYNC: dialog di conferma propagazione */}
       <Dialog open={confirmMixOpen} onOpenChange={v => !v && setConfirmMixOpen(false)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

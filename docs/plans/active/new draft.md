@@ -10,7 +10,7 @@
 
  ## importante
 
- lo stato rivalidato -attivo non funziona piu
+ 
 
  ## altri
   
