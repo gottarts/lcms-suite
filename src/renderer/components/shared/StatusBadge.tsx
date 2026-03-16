@@ -73,3 +73,44 @@ export function computeStato(composto: {
   if (scadenzaEstesa.getTime() - now.getTime() < thirtyDays) return 'rivalidato_in_scadenza'
   return 'rivalidato_attivo'
 }
+
+// ─── Campi incompleti ─────────────────────────────────────────────────────────
+// Restituisce la lista dei nomi leggibili dei campi mancanti.
+// Lista vuota = composto completo.
+export function getCampiMancanti(c: any): string[] {
+  const mancanti: string[] = []
+
+  const empty = (v: any) => v === null || v === undefined || String(v).trim() === ''
+
+  if (empty(c.nome))            mancanti.push('Nome')
+  if (empty(c.forma))           mancanti.push('Forma')
+  if (empty(c.lotto))           mancanti.push('Lotto')
+  if (empty(c.produttore))      mancanti.push('Produttore')
+  if (empty(c.classe))          mancanti.push('Classe')
+  if (empty(c.solvente))        mancanti.push('Solvente')
+  if (empty(c.ubicazione))      mancanti.push('Ubicazione')
+  if (empty(c.destinazione_uso))mancanti.push('Destinazione uso')
+  if (empty(c.data_apertura))   mancanti.push('Data apertura')
+  if (empty(c.fiala))           mancanti.push('Fiala')
+
+  // Concentrazione: obbligatoria a meno che forma=Neat E purezza presente
+  const isNeat = String(c.forma ?? '').toLowerCase() === 'neat'
+  const hasPurezza = !empty(c.purezza)
+  const hasConc = !empty(c.concentrazione)
+  if (!hasConc) {
+    if (!isNeat || !hasPurezza) {
+      mancanti.push('Concentrazione')
+    }
+  }
+
+  // Purezza: obbligatoria solo se forma=Neat E concentrazione assente
+  if (isNeat && !hasConc && !hasPurezza) {
+    mancanti.push('Purezza')
+  }
+
+  return mancanti
+}
+
+export function isIncompleto(c: any): boolean {
+  return getCampiMancanti(c).length > 0
+}

@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, useRef, useCallback } from 'react'
 import { DataTable, type Column } from '@/components/shared/DataTable'
-import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
+import { StatusBadge, computeStato, getCampiMancanti } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Eye, Copy, RotateCcw, XCircle } from 'lucide-react'
+import { MoreHorizontal, Eye, Copy, RotateCcw, XCircle, AlertTriangle } from 'lucide-react'
 
 interface CompostiTableProps {
   data: any[]
@@ -112,6 +112,9 @@ export const CompostiTable = memo(function CompostiTable({
             stato === 'rivalidato_attivo' ||
             stato === 'rivalidato_in_scadenza' ||
             stato === 'rivalidato_scaduto'
+          const campiMancanti = getCampiMancanti(row)
+          const incompleto = campiMancanti.length > 0
+
           return (
             <span className="flex items-center gap-2">
               <span>
@@ -155,6 +158,16 @@ export const CompostiTable = memo(function CompostiTable({
                     })
                   }
                 />
+              )}
+              {/* ── Segnale campi incompleti ────────────────────────────── */}
+              {incompleto && (
+                <span
+                  title={`Campi mancanti: ${campiMancanti.join(', ')}`}
+                  className="inline-flex items-center text-amber-500 shrink-0"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                </span>
               )}
             </span>
           )
