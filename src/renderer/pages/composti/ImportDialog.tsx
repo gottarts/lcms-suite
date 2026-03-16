@@ -400,11 +400,16 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     }
 
     setImportCount(count)
-    if (errori > 0) {
-      setErrorMsg(`Importati ${count} composti. ${errori} righe saltate per errore.`)
+    if (count === 0 && errori > 0) {
+      setErrorMsg(`Importazione fallita: ${errori} righe su ${errori} hanno generato un errore. Nessun composto aggiunto.`)
+      setStep('error')
+    } else {
+      if (errori > 0) {
+        setErrorMsg(`Importati ${count} composti. ${errori} righe saltate per errore.`)
+      }
+      setStep('done')
+      onSave()
     }
-    setStep('done')
-    onSave()
   }
 
   const mappedCols = csvHeaders

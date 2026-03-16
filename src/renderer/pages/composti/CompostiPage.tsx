@@ -77,6 +77,14 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
   formula:           false,
 }
 
+// ─── Tipo per la coda di dialog mix-scope ────────────────────────────────────
+interface MixScopeItem {
+  mixId: string
+  mixNome: string        // nome del primo composto del mix, usato per label
+  selectedIds: number[]  // ID selezionati che appartengono a questo mix
+  totalCount: number     // totale componenti del mix nel DB
+}
+
 // ─── MultiSelectDropdown (invariato) ─────────────────────────────────────────
 function MultiSelectDropdown({
   label,
@@ -185,9 +193,7 @@ export function CompostiPage() {
   const [filtroInScadenza, setFiltroInScadenza] = useState(false)
   const [mostraDismessi, setMostraDismessi] = useState(false)
   const [mostraDaAprire, setMostraDaAprire] = useState(true)
-  // Nuovo: nascondi scaduti
   const [nascondiScaduti, setNascondiScaduti] = useState(false)
-  // Filtri per colonna
   const [colFilters, setColFilters] = useState<Record<string, string>>({})
 
   // ─── Visibilità colonne (persistita in localStorage) ─────────────────────
@@ -262,6 +268,14 @@ export function CompostiPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkStoriaAction, setBulkStoriaAction] = useState<'Rivalidazione' | 'Dismissione' | null>(null)
 
+  // ─── Mix-scope: coda di dialog sequenziali per mix coinvolti ─────────────
+  // Usato sia per storia che per delete.
+  // pendingBulkOp contiene la funzione da eseguire dopo aver raccolto tutte le decisioni.
+  const [mixScopeQueue, setMixScopeQueue] = useState<MixScopeItem[]>([])
+  const [mixScopeIndex, setMixScopeIndex] = useState(0)
+  const [mixScopeDecisions, setMixScopeDecisions] = useState<Map<string, 'selected' | 'all'>>(new Map())
+  const [pendingBulkOp, setPendingBulkOp] = useState<((decisions: Map<string, 'selected' | 'all'>) => Promise<void>) | null>(null)
+
   const load = useCallback(() =>
     compostiApi.list().then(rows =>
       setComposti(rows.map((c: any) => ({
@@ -297,7 +311,6 @@ export function CompostiPage() {
   const filtered = useMemo(() => {
     let result = composti
 
-    // Ricerca globale
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase()
       result = result.filter(c =>
@@ -321,7 +334,6 @@ export function CompostiPage() {
       )
     }
 
-    // Filtri per colonna (in AND con ricerca globale)
     if (Object.keys(colFilters).length > 0) {
       result = result.filter(c =>
         Object.entries(colFilters).every(([key, val]) => {
@@ -331,7 +343,6 @@ export function CompostiPage() {
       )
     }
 
-    // Multi-select
     if (filtroStati.length > 0) result = result.filter(c => filtroStati.some(s => computeStato(c) === STATO_MAP[s]))
     if (filtroWorks.length > 0) result = result.filter(c => filtroWorks.includes(c.work_standard))
     if (filtroDestinazioni.length > 0) result = result.filter(c => filtroDestinazioni.includes(c.destinazione_uso))
@@ -341,7 +352,6 @@ export function CompostiPage() {
     if (!mostraDismessi) result = result.filter(c => computeStato(c) !== 'dismesso')
     if (!mostraDaAprire) result = result.filter(c => computeStato(c) !== 'da_aprire')
 
-    // Nascondi scaduti
     if (nascondiScaduti) {
       result = result.filter(c => {
         const s = computeStato(c)
@@ -360,6 +370,81 @@ export function CompostiPage() {
     attenzione: filtered.filter(c => { const s = computeStato(c); return s === 'scaduto' || s === 'rivalidato_scaduto' }).length,
   }), [filtered])
 
+  // ─── Costruisce la coda di mix coinvolti dagli ID selezionati ─────────────
+  const buildMixQueue = useCallback(async (ids: Set<number>): Promise<MixScopeItem[]> => {
+    // Raggruppa gli ID selezionati per mix_id
+    const mixMap = new Map<string, { selectedIds: number[]; nome: string }>()
+    for (const id of ids) {
+      const comp = composti.find((c: any) => c.id === id)
+      if (!comp?.mix_id) continue
+      if (!mixMap.has(comp.mix_id)) {
+        mixMap.set(comp.mix_id, { selectedIds: [], nome: comp.nome })
+      }
+      mixMap.get(comp.mix_id)!.selectedIds.push(id)
+    }
+
+    // Per ogni mix, recupera il totale componenti dal backend
+    const queue: MixScopeItem[] = []
+    for (const [mixId, { selectedIds: selIds, nome }] of mixMap.entries()) {
+      const totalCount = await window.electronAPI.invoke('composti:count-by-mix', mixId) as number
+      // Mostra il dialog solo se ci sono componenti del mix NON selezionati
+      // (se sono tutti selezionati, non ha senso chiedere — si applica a tutti)
+      if (selIds.length < totalCount) {
+        queue.push({ mixId, mixNome: nome, selectedIds: selIds, totalCount })
+      }
+    }
+    return queue
+  }, [composti])
+
+  // ─── Avvia il flusso bulk con eventuale coda mix-scope ───────────────────
+  const startBulkWithMixScope = useCallback(async (
+    ids: Set<number>,
+    op: (decisions: Map<string, 'selected' | 'all'>) => Promise<void>
+  ) => {
+    const queue = await buildMixQueue(ids)
+    if (queue.length === 0) {
+      // Nessun mix parzialmente selezionato → esegui direttamente
+      // tutti i mix coinvolti sono selezionati per intero, quindi propagate=true è corretto
+      await op(new Map())
+    } else {
+      setPendingBulkOp(() => op)
+      setMixScopeQueue(queue)
+      setMixScopeIndex(0)
+      setMixScopeDecisions(new Map())
+    }
+  }, [buildMixQueue])
+
+  // ─── Risposta utente al dialog mix-scope corrente ────────────────────────
+  const handleMixScopeDecision = useCallback(async (scope: 'selected' | 'all') => {
+    const current = mixScopeQueue[mixScopeIndex]
+    const newDecisions = new Map(mixScopeDecisions)
+    newDecisions.set(current.mixId, scope)
+
+    const nextIndex = mixScopeIndex + 1
+    if (nextIndex < mixScopeQueue.length) {
+      // Ci sono altri mix da chiedere
+      setMixScopeDecisions(newDecisions)
+      setMixScopeIndex(nextIndex)
+    } else {
+      // Fine coda → esegui l'operazione
+      setMixScopeQueue([])
+      setMixScopeIndex(0)
+      setMixScopeDecisions(new Map())
+      if (pendingBulkOp) {
+        await pendingBulkOp(newDecisions)
+        setPendingBulkOp(null)
+      }
+    }
+  }, [mixScopeQueue, mixScopeIndex, mixScopeDecisions, pendingBulkOp])
+
+  const handleMixScopeCancel = useCallback(() => {
+    setMixScopeQueue([])
+    setMixScopeIndex(0)
+    setMixScopeDecisions(new Map())
+    setPendingBulkOp(null)
+  }, [])
+
+  // ─── Delete singolo ───────────────────────────────────────────────────────
   const handleDelete = useCallback(async () => {
     if (deleteId !== null) {
       if (deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1) {
@@ -374,23 +459,95 @@ export function CompostiPage() {
     }
   }, [deleteId, deleteMixInfo, load])
 
+  // ─── Bulk delete ──────────────────────────────────────────────────────────
   const handleBulkDelete = useCallback(async () => {
-    for (const id of selectedIds) {
-      await compostiApi.delete(id)
-    }
-    setSelectedIds(new Set())
     setBulkDeleteOpen(false)
-    load()
-  }, [selectedIds, load])
 
-  const handleBulkStoria = useCallback(async (payload: any) => {
-    for (const id of selectedIds) {
-      await compostiApi.addStoria(id, payload)
+    const ids = selectedIds
+
+    const execDelete = async (decisions: Map<string, 'selected' | 'all'>) => {
+      // Composti senza mix_id → delete singolo
+      for (const id of ids) {
+        const comp = composti.find((c: any) => c.id === id)
+        if (!comp?.mix_id) {
+          await compostiApi.delete(id)
+        }
+      }
+
+      // Mix: raggruppa e applica la decisione
+      const processedMix = new Set<string>()
+      for (const id of ids) {
+        const comp = composti.find((c: any) => c.id === id)
+        if (!comp?.mix_id) continue
+        if (processedMix.has(comp.mix_id)) continue
+        processedMix.add(comp.mix_id)
+
+        const decision = decisions.get(comp.mix_id) ?? 'all'
+        if (decision === 'all') {
+          // Elimina tutto il mix per lotto
+          await window.electronAPI.invoke('composti:delete-by-lotto', comp.lotto)
+        } else {
+          // Elimina solo gli ID selezionati di questo mix
+          const mixSelected = [...ids].filter(sid => {
+            const sc = composti.find((c: any) => c.id === sid)
+            return sc?.mix_id === comp.mix_id
+          })
+          for (const sid of mixSelected) {
+            await compostiApi.delete(sid)
+          }
+        }
+      }
+
+      setSelectedIds(new Set())
+      load()
     }
-    setSelectedIds(new Set())
-    setBulkStoriaAction(null)
-    load()
-  }, [selectedIds, load])
+
+    await startBulkWithMixScope(ids, execDelete)
+  }, [selectedIds, composti, load, startBulkWithMixScope])
+
+  // ─── Bulk storia (Rivalidazione / Dismissione) ────────────────────────────
+  const handleBulkStoria = useCallback(async (payload: any) => {
+    const ids = selectedIds
+
+    const execStoria = async (decisions: Map<string, 'selected' | 'all'>) => {
+      const processedMix = new Set<string>()
+
+      for (const id of ids) {
+        const comp = composti.find((c: any) => c.id === id)
+        const mixId: string | null = comp?.mix_id ?? null
+
+        if (!mixId) {
+          // Composto singolo → chiama normalmente (propagate default true, ma non c'è mix)
+          await compostiApi.addStoria(id, payload)
+          continue
+        }
+
+        if (processedMix.has(mixId)) continue
+        processedMix.add(mixId)
+
+        const decision = decisions.get(mixId) ?? 'all'
+        if (decision === 'all') {
+          // Propaga a tutto il mix — una sola call, backend propaga
+          await compostiApi.addStoria(id, { ...payload, propagate: true })
+        } else {
+          // Solo gli ID selezionati di questo mix — propagate: false su ciascuno
+          const mixSelected = [...ids].filter(sid => {
+            const sc = composti.find((c: any) => c.id === sid)
+            return sc?.mix_id === mixId
+          })
+          for (const sid of mixSelected) {
+            await compostiApi.addStoria(sid, { ...payload, propagate: false })
+          }
+        }
+      }
+
+      setSelectedIds(new Set())
+      setBulkStoriaAction(null)
+      load()
+    }
+
+    await startBulkWithMixScope(ids, execStoria)
+  }, [selectedIds, composti, load, startBulkWithMixScope])
 
   const handleEdit = useCallback((composto: any) => {
     setEditComposto(composto)
@@ -476,6 +633,9 @@ export function CompostiPage() {
 
   const nSel = selectedIds.size
   const selLabel = `${nSel} compost${nSel === 1 ? 'o' : 'i'}`
+
+  // ─── Mix-scope dialog corrente ────────────────────────────────────────────
+  const currentMixScope = mixScopeQueue[mixScopeIndex] ?? null
 
   return (
     <div>
@@ -827,6 +987,22 @@ export function CompostiPage() {
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkDeleteOpen(false)}
       />
+
+      {/* ConfirmDialog mix-scope — appare in sequenza per ogni mix parzialmente selezionato */}
+      {currentMixScope && (
+        <ConfirmDialog
+          open={true}
+          title="Mix parzialmente selezionato"
+          message={`Hai selezionato ${currentMixScope.selectedIds.length} componente${currentMixScope.selectedIds.length > 1 ? 'i' : ''} del mix "${currentMixScope.mixNome}" (${currentMixScope.totalCount} totali). Vuoi applicare l'azione solo ai selezionati o a tutto il mix?`}
+          confirmLabel={`Tutto il mix (${currentMixScope.totalCount})`}
+          secondaryAction={{
+            label: `Solo i ${currentMixScope.selectedIds.length} selezionati`,
+            onClick: () => handleMixScopeDecision('selected'),
+          }}
+          onConfirm={() => handleMixScopeDecision('all')}
+          onCancel={handleMixScopeCancel}
+        />
+      )}
     </div>
   )
 }

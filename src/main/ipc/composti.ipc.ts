@@ -429,15 +429,19 @@ FROM composti c`
     batch_analitico?: string
     lotto_crm_valido?: string
     nuova_scadenza?: string
+    propagate?: boolean  // default true — se false, inserisce solo sul compostoId senza espandere al mix
   }) => {
     const db = getDb()
 
-    // Recupera mix_id del composto cliccato
+    // propagate è true per default; solo il bulk "solo i selezionati" passa false
+    const propagate = data.propagate !== false
+
     const comp = db.prepare('SELECT mix_id FROM composti WHERE id = ?').get(compostoId) as { mix_id: string | null } | undefined
     const mixId = comp?.mix_id ?? null
 
-    // Se è un mix, propaga la storia a tutti i componenti; altrimenti solo al singolo
-    const targets: number[] = mixId
+    // Se propagate=true e fa parte di un mix → inserisce su tutti i componenti
+    // Se propagate=false oppure composto singolo → inserisce solo su compostoId
+    const targets: number[] = (propagate && mixId)
       ? (db.prepare('SELECT id FROM composti WHERE mix_id = ?').all(mixId) as any[]).map((r: any) => r.id)
       : [compostoId]
 
@@ -459,16 +463,19 @@ FROM composti c`
         if (targetId === compostoId) firstId = result.lastInsertRowid
       }
 
-      // Dismissione: aggiorna data_dismissione su tutti i target
+      // Dismissione: aggiorna data_dismissione sui target effettivi
       if (data.tipo === 'Dismissione') {
-        if (mixId) {
+        if (propagate && mixId) {
           db.prepare(
             `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE mix_id = ?`
           ).run(data.data, mixId)
         } else {
-          db.prepare(
-            `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE id = ?`
-          ).run(data.data, compostoId)
+          // Solo i target selezionati (propagate=false o composto singolo)
+          for (const targetId of targets) {
+            db.prepare(
+              `UPDATE composti SET data_dismissione = ?, updated_at = datetime('now') WHERE id = ?`
+            ).run(data.data, targetId)
+          }
         }
       }
     })()

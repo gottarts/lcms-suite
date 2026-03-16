@@ -12,6 +12,10 @@ interface ConfirmDialogProps {
   variant?: 'danger' | 'default'
   onConfirm: () => void
   onCancel: () => void
+  secondaryAction?: {
+    label: string
+    onClick: () => void
+  }
 }
 
 export function ConfirmDialog({
@@ -22,6 +26,7 @@ export function ConfirmDialog({
   variant = 'default',
   onConfirm,
   onCancel,
+  secondaryAction,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={v => !v && onCancel()}>
@@ -32,6 +37,14 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onCancel}>Annulla</AlertDialogCancel>
+          {secondaryAction && (
+            <AlertDialogAction
+              onClick={secondaryAction.onClick}
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+            >
+              {secondaryAction.label}
+            </AlertDialogAction>
+          )}
           <AlertDialogAction
             onClick={onConfirm}
             className={cn(variant === 'danger' && 'bg-destructive text-destructive-foreground hover:bg-destructive/90')}
