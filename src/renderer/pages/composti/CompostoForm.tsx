@@ -436,15 +436,18 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                   placeholder="es. MeOH, ACN..."
                 />
               </div>
-              {(form.forma === 'Solution' || form.forma === 'Mix') && (
+              {/* PATCH: campo visibile per tutte le forme, label dinamica mL/mg */}
+              {form.forma && (
                 <div>
-                  <Label className="text-xs">Volume mL</Label>
+                  <Label className="text-xs">
+                    {form.forma === 'Neat' ? 'Quantità (mg)' : 'Volume (mL)'}
+                  </Label>
                   <Input
                     type="number"
                     step="any"
                     value={form.volume_ml || ''}
                     onChange={e => set('volume_ml', e.target.value)}
-                    placeholder="es. 1.2"
+                    placeholder={form.forma === 'Neat' ? 'es. 100' : 'es. 1.2'}
                   />
                 </div>
               )}

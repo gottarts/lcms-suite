@@ -16,10 +16,11 @@ interface StoriaDialogProps {
   onSaved: () => void
   onSavedBulk?: (payload: any) => Promise<void>
   isBulk?: boolean
+  bulkLottiDistinti?: number  // n. lotti distinti nella selezione — banner appare solo se > 1
 }
 
 export function StoriaDialog({
-  open, onOpenChange, compostoId, compostoNome, tipo, onSaved, onSavedBulk, isBulk,
+  open, onOpenChange, compostoId, compostoNome, tipo, onSaved, onSavedBulk, isBulk, bulkLottiDistinti,
 }: StoriaDialogProps) {
   const [data, setData] = useState(new Date().toISOString().split('T')[0])
   const [note, setNote] = useState('')
@@ -30,8 +31,11 @@ export function StoriaDialog({
   const [nuovaScadenza, setNuovaScadenza] = useState('')
 
   // In bulk rivalidazione, lotto CRM e nuova scadenza si specificano
-  // per-mix nel dialog mix-scope — qui vengono nascosti.
+  // per lotto nel dialog lotto-scope — qui vengono nascosti.
   const showLottoScadenza = tipo === 'Rivalidazione' && !isBulk
+
+  // Banner avviso: solo se bulk rivalidazione con più di un lotto distinto nella selezione
+  const showBulkWarning = isBulk && tipo === 'Rivalidazione' && (bulkLottiDistinti ?? 0) > 1
 
   useEffect(() => {
     if (!open) return
@@ -76,12 +80,21 @@ export function StoriaDialog({
         <DialogHeader>
           <DialogTitle className="font-heading">{tipo}</DialogTitle>
           {compostoNome && <p className="text-sm text-muted-foreground">{compostoNome}</p>}
-          {isBulk && tipo === 'Rivalidazione' && (
-            <p className="text-xs text-blue-600 mt-1">
-              Lotto CRM e nuova scadenza si specificano per ogni mix nel passo successivo.
-            </p>
-          )}
         </DialogHeader>
+
+        {/* Banner avviso lotti multipli — solo se più lotti distinti nella selezione */}
+        {showBulkWarning && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 space-y-1">
+            <p className="font-medium">⚠ Rivalidazione su lotti multipli ({bulkLottiDistinti} lotti)</p>
+            <p>
+              Data, N° Registro QC, Batch analitico e Note si applicano a <strong>tutti</strong> i lotti selezionati.
+              Compilali solo se la rivalidazione è stata effettuata con lo stesso QC per tutti i lotti.
+            </p>
+            <p className="text-amber-600">
+              Nel passo successivo potrai specificare Lotto CRM e nuova scadenza separatamente per ogni lotto.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-3">
           <div>
@@ -148,7 +161,7 @@ export function StoriaDialog({
               ) : isBulk ? (
                 <div className="rounded-md border border-dashed border-blue-200 bg-blue-50 px-3 py-2">
                   <p className="text-xs text-blue-600">
-                    Lotto CRM valido e nuova scadenza — da specificare per ogni mix nel passo successivo.
+                    Lotto CRM valido e nuova scadenza — da specificare per ogni lotto nel passo successivo.
                   </p>
                 </div>
               ) : null}

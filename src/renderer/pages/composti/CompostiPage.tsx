@@ -20,7 +20,6 @@ import { ExportDialog } from './ExportDialog'
 import { EtichetteDialog } from './EtichetteDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { formatDate } from '@/lib/utils'
 
 const STATO_MAP: Record<string, string> = {
   'Attivo':                  'attivo',
@@ -82,34 +81,41 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
   formula:           false,
 }
 
-// ─── Tipo per la coda di dialog mix-scope ────────────────────────────────────
+// ─── Tipi mix-scope (per decidere selected/all sui mix parziali) ──────────────
 interface MixScopeItem {
   mixId: string
   mixLotto: string
   selectedIds: number[]
   totalCount: number
-  firstCompostoId: number  // per caricare i lotti validi CRM
+  firstCompostoId: number
 }
 
-// ─── Tipo per la decisione mix-scope (esteso con dati per-mix) ───────────────
 interface MixScopeDecision {
   scope: 'selected' | 'all'
+}
+
+// ─── Tipi lotto-scope (per lotto CRM e nuova scadenza per-lotto) ─────────────
+// Usato solo per la Rivalidazione bulk.
+// Chiave: lotto (stringa). Raggruppa tutti gli ID selezionati con lo stesso lotto.
+interface LottoScopeItem {
+  lotto: string               // lotto del gruppo
+  ids: number[]               // tutti gli ID della selezione con questo lotto
+  firstCompostoId: number     // per caricare i lotti CRM validi da DB
+}
+
+interface LottoScopeDecision {
   lotto_crm_valido?: string
   nuova_scadenza?: string
 }
 
-// ─── Dialog dedicato per mix-scope rivalidazione ─────────────────────────────
-function MixRivalidaDialog({
+// ─── Dialog lotto-scope: chiede lotto CRM e nuova scadenza per ogni lotto ────
+function LottoRivalidaDialog({
   item,
-  isBulkRivalidazione,
-  onConfirmAll,
-  onConfirmSelected,
+  onConfirm,
   onCancel,
 }: {
-  item: MixScopeItem
-  isBulkRivalidazione: boolean
-  onConfirmAll: (extra: { lotto_crm_valido?: string; nuova_scadenza?: string }) => void
-  onConfirmSelected: (extra: { lotto_crm_valido?: string; nuova_scadenza?: string }) => void
+  item: LottoScopeItem
+  onConfirm: (decision: LottoScopeDecision) => void
   onCancel: () => void
 }) {
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
@@ -119,82 +125,133 @@ function MixRivalidaDialog({
   useEffect(() => {
     setLottoCrmValido('')
     setNuovaScadenza('')
-    if (isBulkRivalidazione && item.firstCompostoId) {
+    if (item.firstCompostoId) {
       window.electronAPI.invoke('composti:lotti-validi', item.firstCompostoId)
         .then((lotti: any) => setLottiValidi(lotti ?? []))
         .catch(() => setLottiValidi([]))
     }
-  }, [item.mixId, isBulkRivalidazione])
-
-  const extra = {
-    lotto_crm_valido: lottoCrmValido || undefined,
-    nuova_scadenza: nuovaScadenza || undefined,
-  }
+  }, [item.lotto])
 
   return (
     <Dialog open={true} onOpenChange={v => !v && onCancel()}>
-      <DialogContent className="max-w-md" onPointerDownOutside={e => e.preventDefault()} onEscapeKeyDown={onCancel}>
+      <DialogContent
+        className="max-w-md"
+        onPointerDownOutside={e => e.preventDefault()}
+        onEscapeKeyDown={onCancel}
+      >
         <DialogHeader>
-          <DialogTitle>Mix parzialmente selezionato</DialogTitle>
+          <DialogTitle>Rivalidazione — Lotto {item.lotto}</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Hai selezionato <strong>{item.selectedIds.length}</strong> di <strong>{item.totalCount}</strong> componenti
-            del mix lotto <strong>"{item.mixLotto}"</strong>.
+            Specifica il lotto CRM valido e la nuova scadenza per{' '}
+            <strong>{item.ids.length} compost{item.ids.length === 1 ? 'o' : 'i'}</strong>{' '}
+            con lotto <strong>"{item.lotto}"</strong>.
           </p>
         </DialogHeader>
 
-        {isBulkRivalidazione && (
-          <div className="space-y-3 py-1">
-            <div>
-              <Label className="text-xs">
-                Lotto CRM valido
-                {lottiValidi.length > 0 && (
-                  <span className="ml-1 text-muted-foreground font-normal">
-                    ({lottiValidi.length} disponibil{lottiValidi.length === 1 ? 'e' : 'i'})
-                  </span>
-                )}
-              </Label>
+        <div className="space-y-3 py-1">
+          <div>
+            <Label className="text-xs">
+              Lotto CRM valido
               {lottiValidi.length > 0 && (
-                <Select value={lottoCrmValido || '_manual'} onValueChange={v => setLottoCrmValido(v === '_manual' ? '' : v)}>
-                  <SelectTrigger><SelectValue placeholder="Seleziona lotto..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_manual">— Inserisci manualmente —</SelectItem>
-                    {lottiValidi.map((l: any) => (
-                      <SelectItem key={l.id} value={l.lotto || String(l.id)}>
-                        <span className="font-mono text-xs">
-                          {l.lotto || 'N/D'}
-                          {l.scadenza_prodotto && <span className="text-muted-foreground ml-2">scad. {l.scadenza_prodotto}</span>}
-                          {l.forma_commerciale && <span className="text-muted-foreground ml-1">· {l.forma_commerciale}</span>}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <span className="ml-1 text-muted-foreground font-normal">
+                  ({lottiValidi.length} disponibil{lottiValidi.length === 1 ? 'e' : 'i'})
+                </span>
               )}
-              {(lottiValidi.length === 0 || lottoCrmValido === '') && (
-                <Input
-                  className={lottiValidi.length > 0 ? 'mt-1' : ''}
-                  value={lottoCrmValido}
-                  onChange={e => setLottoCrmValido(e.target.value)}
-                  placeholder="es. FN0872121"
-                />
-              )}
-            </div>
-            <div>
-              <Label className="text-xs">Nuova data di scadenza</Label>
-              <Input type="date" value={nuovaScadenza} onChange={e => setNuovaScadenza(e.target.value)} />
-              <p className="text-xs text-muted-foreground mt-1">
-                Se compilata, determina lo stato Rivalidato per questo mix.
-              </p>
-            </div>
+            </Label>
+            {lottiValidi.length > 0 && (
+              <Select
+                value={lottoCrmValido || '_manual'}
+                onValueChange={v => setLottoCrmValido(v === '_manual' ? '' : v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Seleziona lotto..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_manual">— Inserisci manualmente —</SelectItem>
+                  {lottiValidi.map((l: any) => (
+                    <SelectItem key={l.id} value={l.lotto || String(l.id)}>
+                      <span className="font-mono text-xs">
+                        {l.lotto || 'N/D'}
+                        {l.scadenza_prodotto && (
+                          <span className="text-muted-foreground ml-2">scad. {l.scadenza_prodotto}</span>
+                        )}
+                        {l.forma_commerciale && (
+                          <span className="text-muted-foreground ml-1">· {l.forma_commerciale}</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {(lottiValidi.length === 0 || lottoCrmValido === '') && (
+              <Input
+                className={lottiValidi.length > 0 ? 'mt-1' : ''}
+                value={lottoCrmValido}
+                onChange={e => setLottoCrmValido(e.target.value)}
+                placeholder="es. FN0872121"
+              />
+            )}
           </div>
-        )}
+          <div>
+            <Label className="text-xs">Nuova data di scadenza</Label>
+            <Input
+              type="date"
+              value={nuovaScadenza}
+              onChange={e => setNuovaScadenza(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Se compilata, determina lo stato Rivalidato per questo lotto.
+            </p>
+          </div>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>Annulla</Button>
-          <Button variant="secondary" onClick={() => onConfirmSelected(extra)}>
+          <Button onClick={() => onConfirm({
+            lotto_crm_valido: lottoCrmValido || undefined,
+            nuova_scadenza: nuovaScadenza || undefined,
+          })}>
+            Conferma
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Dialog mix-scope (per decidere selected/all sui mix parziali) ────────────
+function MixScopeDialog({
+  item,
+  onConfirmAll,
+  onConfirmSelected,
+  onCancel,
+}: {
+  item: MixScopeItem
+  onConfirmAll: () => void
+  onConfirmSelected: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Dialog open={true} onOpenChange={v => !v && onCancel()}>
+      <DialogContent
+        className="max-w-md"
+        onPointerDownOutside={e => e.preventDefault()}
+        onEscapeKeyDown={onCancel}
+      >
+        <DialogHeader>
+          <DialogTitle>Mix parzialmente selezionato</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Hai selezionato <strong>{item.selectedIds.length}</strong> di{' '}
+            <strong>{item.totalCount}</strong> componenti del mix lotto{' '}
+            <strong>"{item.mixLotto}"</strong>.
+            Vuoi applicare l'azione solo ai selezionati o a tutti i componenti del mix?
+          </p>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Annulla</Button>
+          <Button variant="secondary" onClick={onConfirmSelected}>
             Solo i {item.selectedIds.length} selezionati
           </Button>
-          <Button onClick={() => onConfirmAll(extra)}>
+          <Button onClick={onConfirmAll}>
             Tutti i {item.totalCount} del mix
           </Button>
         </DialogFooter>
@@ -241,9 +298,14 @@ function MultiSelectDropdown({
       </button>
       {open && (
         <div className="absolute z-50 mt-1 min-w-[200px] rounded-md border bg-popover shadow-md p-1">
-          {options.length === 0 && <p className="px-2 py-1.5 text-sm text-muted-foreground">Nessuna opzione</p>}
+          {options.length === 0 && (
+            <p className="px-2 py-1.5 text-sm text-muted-foreground">Nessuna opzione</p>
+          )}
           {options.map(v => (
-            <label key={v} className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded select-none">
+            <label
+              key={v}
+              className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded select-none"
+            >
               <input type="checkbox" checked={selected.includes(v)} onChange={() => toggle(v)} className="rounded" />
               {renderLabel ? renderLabel(v) : v}
             </label>
@@ -251,7 +313,11 @@ function MultiSelectDropdown({
           {selected.length > 0 && (
             <>
               <div className="border-t my-1" />
-              <button type="button" className="w-full text-xs text-muted-foreground px-2 py-1 hover:text-foreground text-left" onClick={() => onChange([])}>
+              <button
+                type="button"
+                className="w-full text-xs text-muted-foreground px-2 py-1 hover:text-foreground text-left"
+                onClick={() => onChange([])}
+              >
                 Rimuovi filtro
               </button>
             </>
@@ -322,7 +388,10 @@ export function CompostiPage() {
     localStorage.removeItem('composti-col-visible')
   }, [])
 
-  const nascosteCount = useMemo(() => COL_DEFS.filter(d => colVisible[d.key] === false).length, [colVisible])
+  const nascosteCount = useMemo(
+    () => COL_DEFS.filter(d => colVisible[d.key] === false).length,
+    [colVisible]
+  )
 
   const handleColFilter = useCallback((key: string, value: string) => {
     setColFilters(prev => {
@@ -349,13 +418,22 @@ export function CompostiPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkStoriaAction, setBulkStoriaAction] = useState<'Rivalidazione' | 'Dismissione' | null>(null)
 
-  // ─── Mix-scope ────────────────────────────────────────────────────────────
+  // ─── Fase 1: mix-scope (selected/all per mix parziali) ───────────────────
   const [mixScopeQueue, setMixScopeQueue] = useState<MixScopeItem[]>([])
   const [mixScopeIndex, setMixScopeIndex] = useState(0)
-  // true quando il bulk in corso è una Rivalidazione (per mostrare lotto/scadenza per-mix)
-  const [mixScopeIsRivalidazione, setMixScopeIsRivalidazione] = useState(false)
-  const pendingBulkOpRef = useRef<((decisions: Map<string, MixScopeDecision>) => Promise<void>) | null>(null)
   const mixScopeDecisionsRef = useRef<Map<string, MixScopeDecision>>(new Map())
+
+  // ─── Fase 2: lotto-scope (lotto CRM + nuova scadenza per ogni lotto) ─────
+  // Solo per rivalidazione bulk. Parte dopo la fase mix-scope.
+  const [lottoScopeQueue, setLottoScopeQueue] = useState<LottoScopeItem[]>([])
+  const [lottoScopeIndex, setLottoScopeIndex] = useState(0)
+  const lottoScopeDecisionsRef = useRef<Map<string, LottoScopeDecision>>(new Map())
+
+  // Ref che tiene la funzione di esecuzione finale (execStoria/execDelete)
+  const pendingBulkOpRef = useRef<((
+    mixDecisions: Map<string, MixScopeDecision>,
+    lottoDecisions: Map<string, LottoScopeDecision>
+  ) => Promise<void>) | null>(null)
 
   const load = useCallback(() =>
     compostiApi.list().then(rows =>
@@ -412,7 +490,9 @@ export function CompostiPage() {
     }
     if (Object.keys(colFilters).length > 0) {
       result = result.filter(c =>
-        Object.entries(colFilters).every(([key, val]) => String(c[key] ?? '').toLowerCase().includes(val.toLowerCase()))
+        Object.entries(colFilters).every(([key, val]) =>
+          String(c[key] ?? '').toLowerCase().includes(val.toLowerCase())
+        )
       )
     }
     if (filtroStati.length > 0) result = result.filter(c => filtroStati.some(s => computeStato(c) === STATO_MAP[s]))
@@ -437,7 +517,7 @@ export function CompostiPage() {
     attenzione: filtered.filter(c => { const s = computeStato(c); return s === 'scaduto' || s === 'rivalidato_scaduto' }).length,
   }), [filtered])
 
-  // ─── buildMixQueue — ora include firstCompostoId ──────────────────────────
+  // ─── buildMixQueue: mix parzialmente selezionati ─────────────────────────
   const buildMixQueue = useCallback(async (ids: Set<number>): Promise<MixScopeItem[]> => {
     const mixMap = new Map<string, { selectedIds: number[]; lotto: string; firstId: number }>()
     for (const id of ids) {
@@ -458,54 +538,88 @@ export function CompostiPage() {
     return queue
   }, [composti])
 
-  // ─── startBulkWithMixScope — signature aggiornata con MixScopeDecision ───
-  const startBulkWithMixScope = useCallback(async (
+  // ─── buildLottoQueue: un item per ogni lotto distinto nella selezione ────
+  // Usato solo per la rivalidazione. Raggruppa per lotto — stesso lotto = stesso dialog.
+  const buildLottoQueue = useCallback((
     ids: Set<number>,
-    isRivalidazione: boolean,
-    op: (decisions: Map<string, MixScopeDecision>) => Promise<void>
-  ) => {
-    const queue = await buildMixQueue(ids)
-    if (queue.length === 0) {
-      await op(new Map())
-    } else {
-      pendingBulkOpRef.current = op
-      mixScopeDecisionsRef.current = new Map()
-      setMixScopeIsRivalidazione(isRivalidazione)
-      setMixScopeQueue(queue)
-      setMixScopeIndex(0)
+    compostiSnapshot: any[]
+  ): LottoScopeItem[] => {
+    const lottoMap = new Map<string, { ids: number[]; firstId: number }>()
+    for (const id of ids) {
+      const comp = compostiSnapshot.find((c: any) => c.id === id)
+      const lotto: string = comp?.lotto ?? `id:${id}`
+      if (!lottoMap.has(lotto)) {
+        lottoMap.set(lotto, { ids: [], firstId: id })
+      }
+      lottoMap.get(lotto)!.ids.push(id)
     }
-  }, [buildMixQueue])
+    return Array.from(lottoMap.entries()).map(([lotto, { ids: lottoIds, firstId }]) => ({
+      lotto,
+      ids: lottoIds,
+      firstCompostoId: firstId,
+    }))
+  }, [])
 
-  // ─── handleMixScopeDecision — ora riceve anche extra (lotto/scadenza) ─────
-  const handleMixScopeDecision = useCallback(async (
-    scope: 'selected' | 'all',
-    extra: { lotto_crm_valido?: string; nuova_scadenza?: string }
-  ) => {
+  // ─── cancelBulk: azzera tutto ─────────────────────────────────────────────
+  const cancelBulk = useCallback(() => {
+    setMixScopeQueue([])
+    setMixScopeIndex(0)
+    mixScopeDecisionsRef.current = new Map()
+    setLottoScopeQueue([])
+    setLottoScopeIndex(0)
+    lottoScopeDecisionsRef.current = new Map()
+    pendingBulkOpRef.current = null
+  }, [])
+
+  // ─── Fase mix-scope: decisione selected/all ───────────────────────────────
+  const handleMixScopeDecision = useCallback((scope: 'selected' | 'all') => {
     const current = mixScopeQueue[mixScopeIndex]
-    mixScopeDecisionsRef.current.set(current.mixId, { scope, ...extra })
+    mixScopeDecisionsRef.current.set(current.mixId, { scope })
 
     const nextIndex = mixScopeIndex + 1
     if (nextIndex < mixScopeQueue.length) {
       setMixScopeIndex(nextIndex)
     } else {
-      const decisions = new Map(mixScopeDecisionsRef.current)
-      const op = pendingBulkOpRef.current
+      // Fase mix-scope completata — avvia fase lotto-scope se presente
       setMixScopeQueue([])
       setMixScopeIndex(0)
-      setMixScopeIsRivalidazione(false)
-      pendingBulkOpRef.current = null
-      mixScopeDecisionsRef.current = new Map()
-      if (op) await op(decisions)
+      if (lottoScopeQueue.length > 0) {
+        setLottoScopeIndex(0)
+        // lottoScopeQueue è già impostato da handleBulkStoria
+      } else {
+        // Nessuna fase lotto (es. dismissione/delete) — esegui direttamente
+        const mixDecisions = new Map(mixScopeDecisionsRef.current)
+        const op = pendingBulkOpRef.current
+        mixScopeDecisionsRef.current = new Map()
+        pendingBulkOpRef.current = null
+        if (op) op(mixDecisions, new Map())
+      }
     }
-  }, [mixScopeQueue, mixScopeIndex])
+  }, [mixScopeQueue, mixScopeIndex, lottoScopeQueue])
 
-  const handleMixScopeCancel = useCallback(() => {
-    setMixScopeQueue([])
-    setMixScopeIndex(0)
-    setMixScopeIsRivalidazione(false)
-    pendingBulkOpRef.current = null
-    mixScopeDecisionsRef.current = new Map()
-  }, [])
+  // ─── Fase lotto-scope: decisione lotto CRM + nuova scadenza ──────────────
+  const handleLottoScopeDecision = useCallback((decision: LottoScopeDecision) => {
+    const current = lottoScopeQueue[lottoScopeIndex]
+    lottoScopeDecisionsRef.current.set(current.lotto, decision)
+
+    const nextIndex = lottoScopeIndex + 1
+    if (nextIndex < lottoScopeQueue.length) {
+      setLottoScopeIndex(nextIndex)
+    } else {
+      // Fase lotto-scope completata — esegui operazione finale
+      const mixDecisions = new Map(mixScopeDecisionsRef.current)
+      const lottoDecisions = new Map(lottoScopeDecisionsRef.current)
+      const op = pendingBulkOpRef.current
+
+      setLottoScopeQueue([])
+      setLottoScopeIndex(0)
+      mixScopeDecisionsRef.current = new Map()
+      lottoScopeDecisionsRef.current = new Map()
+      pendingBulkOpRef.current = null
+
+      if (op) op(mixDecisions, lottoDecisions)
+    }
+  }, [lottoScopeQueue, lottoScopeIndex])
 
   // ─── Delete singolo ───────────────────────────────────────────────────────
   const handleDelete = useCallback(async () => {
@@ -519,13 +633,16 @@ export function CompostiPage() {
     }
   }, [deleteId, deleteMixInfo, load])
 
-  // ─── Bulk delete ──────────────────────────────────────────────────────────
+  // ─── Bulk delete (solo fase mix-scope, nessuna fase lotto) ───────────────
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleteOpen(false)
     const ids = new Set(selectedIds)
     const compostiSnapshot = [...composti]
 
-    const execDelete = async (decisions: Map<string, MixScopeDecision>) => {
+    const execDelete = async (
+      mixDecisions: Map<string, MixScopeDecision>,
+      _lottoDecisions: Map<string, LottoScopeDecision>
+    ) => {
       for (const id of ids) {
         const comp = compostiSnapshot.find((c: any) => c.id === id)
         if (!comp?.mix_id) await compostiApi.delete(id)
@@ -536,55 +653,76 @@ export function CompostiPage() {
         if (!comp?.mix_id) continue
         if (processedMix.has(comp.mix_id)) continue
         processedMix.add(comp.mix_id)
-        const decision = decisions.get(comp.mix_id)
+        const decision = mixDecisions.get(comp.mix_id)
         if (!decision || decision.scope === 'all') {
           await window.electronAPI.invoke('composti:delete-by-mix-id', comp.mix_id)
         } else {
-          const mixSelected = [...ids].filter(sid => compostiSnapshot.find((c: any) => c.id === sid)?.mix_id === comp.mix_id)
+          const mixSelected = [...ids].filter(
+            sid => compostiSnapshot.find((c: any) => c.id === sid)?.mix_id === comp.mix_id
+          )
           for (const sid of mixSelected) await compostiApi.delete(sid)
         }
       }
       setSelectedIds(new Set()); load()
     }
 
-    await startBulkWithMixScope(ids, false, execDelete)
-  }, [selectedIds, composti, load, startBulkWithMixScope])
+    const mixQueue = await buildMixQueue(ids)
+    if (mixQueue.length === 0) {
+      await execDelete(new Map(), new Map())
+    } else {
+      pendingBulkOpRef.current = execDelete
+      mixScopeDecisionsRef.current = new Map()
+      setLottoScopeQueue([])  // nessuna fase lotto per il delete
+      setMixScopeQueue(mixQueue)
+      setMixScopeIndex(0)
+    }
+  }, [selectedIds, composti, load, buildMixQueue])
 
-  // ─── Bulk storia ──────────────────────────────────────────────────────────
+  // ─── Bulk storia (Rivalidazione / Dismissione) ────────────────────────────
   const handleBulkStoria = useCallback(async (payload: any) => {
     const ids = new Set(selectedIds)
     const compostiSnapshot = [...composti]
     const isRivalidazione = payload.tipo === 'Rivalidazione'
 
-    const execStoria = async (decisions: Map<string, MixScopeDecision>) => {
+    const execStoria = async (
+      mixDecisions: Map<string, MixScopeDecision>,
+      lottoDecisions: Map<string, LottoScopeDecision>
+    ) => {
       const processedMix = new Set<string>()
 
       for (const id of ids) {
         const comp = compostiSnapshot.find((c: any) => c.id === id)
         const mixId: string | null = comp?.mix_id ?? null
+        const lotto: string = comp?.lotto ?? `id:${id}`
+
+        // Payload arricchito con lotto/scadenza per-lotto (solo rivalidazione)
+        const lottoDecision = lottoDecisions.get(lotto)
+        const perLottoPayload = isRivalidazione ? {
+          ...payload,
+          lotto_crm_valido: lottoDecision?.lotto_crm_valido,
+          nuova_scadenza: lottoDecision?.nuova_scadenza,
+        } : payload
 
         if (!mixId) {
-          await compostiApi.addStoria(id, payload)
+          // Composto singolo
+          await compostiApi.addStoria(id, perLottoPayload)
           continue
         }
 
         if (processedMix.has(mixId)) continue
         processedMix.add(mixId)
 
-        const decision = decisions.get(mixId)
-        // Merge payload globale con i campi per-mix (lotto/scadenza)
-        const perMixPayload = {
-          ...payload,
-          lotto_crm_valido: decision?.lotto_crm_valido ?? payload.lotto_crm_valido,
-          nuova_scadenza: decision?.nuova_scadenza ?? payload.nuova_scadenza,
-        }
-
-        if (!decision || decision.scope === 'all') {
-          await compostiApi.addStoria(id, { ...perMixPayload, propagate: true })
+        const mixDecision = mixDecisions.get(mixId)
+        if (!mixDecision || mixDecision.scope === 'all') {
+          // Tutto il mix: una sola chiamata con propagate: true
+          await compostiApi.addStoria(id, { ...perLottoPayload, propagate: true })
         } else {
-          const mixSelected = [...ids].filter(sid => compostiSnapshot.find((c: any) => c.id === sid)?.mix_id === mixId)
+          // Solo i selezionati del mix
+          const mixSelected = [...ids].filter(
+            sid => compostiSnapshot.find((c: any) => c.id === sid)?.mix_id === mixId
+          )
           for (const sid of mixSelected) {
-            await compostiApi.addStoria(sid, { ...perMixPayload, propagate: false })
+            await compostiApi.addStoria(sid, { ...perLottoPayload, propagate: false })
           }
         }
       }
@@ -592,10 +730,34 @@ export function CompostiPage() {
       setSelectedIds(new Set()); setBulkStoriaAction(null); load()
     }
 
-    await startBulkWithMixScope(ids, isRivalidazione, execStoria)
-  }, [selectedIds, composti, load, startBulkWithMixScope])
+    const mixQueue = await buildMixQueue(ids)
+    const lottoQueue = isRivalidazione ? buildLottoQueue(ids, compostiSnapshot) : []
 
-  const handleEdit = useCallback((composto: any) => { setEditComposto(composto); setPanelId(null); setFormOpen(true) }, [])
+    if (mixQueue.length === 0 && lottoQueue.length === 0) {
+      // Nessun dialog: esegui subito
+      await execStoria(new Map(), new Map())
+    } else {
+      pendingBulkOpRef.current = execStoria
+      mixScopeDecisionsRef.current = new Map()
+      lottoScopeDecisionsRef.current = new Map()
+
+      if (mixQueue.length > 0) {
+        // Parte prima la fase mix-scope, poi quella lotto-scope
+        setLottoScopeQueue(lottoQueue)  // pre-carica per dopo
+        setLottoScopeIndex(0)
+        setMixScopeQueue(mixQueue)
+        setMixScopeIndex(0)
+      } else {
+        // Nessun mix parziale: vai diretto alla fase lotto-scope
+        setLottoScopeQueue(lottoQueue)
+        setLottoScopeIndex(0)
+      }
+    }
+  }, [selectedIds, composti, load, buildMixQueue, buildLottoQueue])
+
+  const handleEdit = useCallback((composto: any) => {
+    setEditComposto(composto); setPanelId(null); setFormOpen(true)
+  }, [])
 
   const handleNewLotto = useCallback(async (composto: any) => {
     if (composto.mix_id) {
@@ -644,7 +806,19 @@ export function CompostiPage() {
 
   const nSel = selectedIds.size
   const selLabel = `${nSel} compost${nSel === 1 ? 'o' : 'i'}`
+
   const currentMixScope = mixScopeQueue[mixScopeIndex] ?? null
+  const currentLottoScope = !currentMixScope ? (lottoScopeQueue[lottoScopeIndex] ?? null) : null
+
+  // Numero di lotti distinti nella selezione — per banner avviso StoriaDialog bulk
+  const bulkLottiDistinti = useMemo(() => {
+    const lotti = new Set<string>()
+    for (const id of selectedIds) {
+      const comp = composti.find((c: any) => c.id === id)
+      if (comp?.lotto) lotti.add(comp.lotto)
+    }
+    return lotti.size
+  }, [selectedIds, composti])
 
   return (
     <div>
@@ -666,15 +840,21 @@ export function CompostiPage() {
           <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
             <Download className="h-4 w-4 mr-1" /> Esporta
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setEtichetteOpen(true)}
-            title={nSel > 0 ? `Etichette per ${nSel} selezionati` : 'Etichette per tutti i visualizzati'}>
+          <Button
+            size="sm" variant="outline" onClick={() => setEtichetteOpen(true)}
+            title={nSel > 0 ? `Etichette per ${nSel} selezionati` : 'Etichette per tutti i visualizzati'}
+          >
             🏷️ Etichette{nSel > 0 && <span className="ml-1 text-xs text-primary font-medium">({nSel})</span>}
           </Button>
           <div className="w-px h-5 bg-border mx-0.5" />
           <div className="relative" ref={colMenuRef}>
             <Button size="sm" variant="outline" onClick={() => setColMenuOpen(v => !v)}>
               <Columns className="h-4 w-4 mr-1" /> Colonne
-              {nascosteCount > 0 && <Badge className="ml-1 h-4 px-1 text-xs py-0 bg-muted text-muted-foreground">{nascosteCount}</Badge>}
+              {nascosteCount > 0 && (
+                <Badge className="ml-1 h-4 px-1 text-xs py-0 bg-muted text-muted-foreground">
+                  {nascosteCount}
+                </Badge>
+              )}
             </Button>
             {colMenuOpen && (
               <div className="absolute right-0 z-50 mt-1 w-52 rounded-md border bg-popover shadow-md p-2">
@@ -700,7 +880,12 @@ export function CompostiPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative w-80">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={e => handleSearchChange(e.target.value)} placeholder="Cerca nome, lotto, metodo, accreditamento..." className="pl-9" />
+            <Input
+              value={search}
+              onChange={e => handleSearchChange(e.target.value)}
+              placeholder="Cerca nome, lotto, metodo, accreditamento..."
+              className="pl-9"
+            />
           </div>
           <div className="flex items-center gap-2 border-l pl-3 flex-wrap">
             <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -713,14 +898,55 @@ export function CompostiPage() {
 
         {hasFiltriAttivi && (
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {filtroStati.map(s => <Badge key={s} variant="secondary" className="flex items-center gap-1">Stato: {s}<button onClick={() => setFiltroStati(prev => prev.filter(x => x !== s))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
-            {filtroWorks.map(w => <Badge key={w} variant="secondary" className="flex items-center gap-1">Work: {w}<button onClick={() => setFiltroWorks(prev => prev.filter(x => x !== w))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
-            {filtroDestinazioni.map(d => <Badge key={d} variant="secondary" className="flex items-center gap-1">Dest.: {d}<button onClick={() => setFiltroDestinazioni(prev => prev.filter(x => x !== d))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
-            {filtroMetodi.map(id => <Badge key={id} variant="secondary" className="flex items-center gap-1">Metodo: {metodi.find(m => m.id === id)?.nome ?? id}<button onClick={() => setFiltroMetodi(prev => prev.filter(x => x !== id))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
-            {nascondiScaduti && <Badge variant="secondary" className="flex items-center gap-1">Scaduti esclusi<button onClick={() => setNascondiScaduti(false)} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>}
-            {soloIncompleti && <Badge variant="secondary" className="flex items-center gap-1 border-amber-300 bg-amber-50 text-amber-800">Solo incompleti<button onClick={() => setSoloIncompleti(false)} className="ml-1 hover:bg-amber-100 rounded px-0.5">×</button></Badge>}
-            {Object.entries(colFilters).map(([key, val]) => <Badge key={key} variant="secondary" className="flex items-center gap-1">{COL_DEFS.find(d => d.key === key)?.label ?? key}: "{val}"<button onClick={() => handleColFilter(key, '')} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
-            <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFiltroStati([]); setFiltroWorks([]); setFiltroDestinazioni([]); setFiltroMetodi([]); setNascondiScaduti(false); setSoloIncompleti(false); setColFilters({}) }}>
+            {filtroStati.map(s => (
+              <Badge key={s} variant="secondary" className="flex items-center gap-1">
+                Stato: {s}
+                <button onClick={() => setFiltroStati(prev => prev.filter(x => x !== s))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            ))}
+            {filtroWorks.map(w => (
+              <Badge key={w} variant="secondary" className="flex items-center gap-1">
+                Work: {w}
+                <button onClick={() => setFiltroWorks(prev => prev.filter(x => x !== w))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            ))}
+            {filtroDestinazioni.map(d => (
+              <Badge key={d} variant="secondary" className="flex items-center gap-1">
+                Dest.: {d}
+                <button onClick={() => setFiltroDestinazioni(prev => prev.filter(x => x !== d))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            ))}
+            {filtroMetodi.map(id => (
+              <Badge key={id} variant="secondary" className="flex items-center gap-1">
+                Metodo: {metodi.find(m => m.id === id)?.nome ?? id}
+                <button onClick={() => setFiltroMetodi(prev => prev.filter(x => x !== id))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            ))}
+            {nascondiScaduti && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Scaduti esclusi
+                <button onClick={() => setNascondiScaduti(false)} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            )}
+            {soloIncompleti && (
+              <Badge variant="secondary" className="flex items-center gap-1 border-amber-300 bg-amber-50 text-amber-800">
+                Solo incompleti
+                <button onClick={() => setSoloIncompleti(false)} className="ml-1 hover:bg-amber-100 rounded px-0.5">×</button>
+              </Badge>
+            )}
+            {Object.entries(colFilters).map(([key, val]) => (
+              <Badge key={key} variant="secondary" className="flex items-center gap-1">
+                {COL_DEFS.find(d => d.key === key)?.label ?? key}: "{val}"
+                <button onClick={() => handleColFilter(key, '')} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
+              </Badge>
+            ))}
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setFiltroStati([]); setFiltroWorks([]); setFiltroDestinazioni([])
+                setFiltroMetodi([]); setNascondiScaduti(false); setSoloIncompleti(false); setColFilters({})
+              }}
+            >
               Rimuovi tutti
             </button>
           </div>
@@ -728,30 +954,41 @@ export function CompostiPage() {
 
         <div className="flex items-center gap-4 mt-2">
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input type="checkbox" checked={mostraDismessi} onChange={e => setMostraDismessi(e.target.checked)} className="rounded" /> Mostra dismessi
+            <input type="checkbox" checked={mostraDismessi} onChange={e => setMostraDismessi(e.target.checked)} className="rounded" />
+            Mostra dismessi
           </label>
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input type="checkbox" checked={mostraDaAprire} onChange={e => setMostraDaAprire(e.target.checked)} className="rounded" /> Mostra da aprire
+            <input type="checkbox" checked={mostraDaAprire} onChange={e => setMostraDaAprire(e.target.checked)} className="rounded" />
+            Mostra da aprire
           </label>
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input type="checkbox" checked={nascondiScaduti} onChange={e => setNascondiScaduti(e.target.checked)} className="rounded" /> Escludi scaduti
+            <input type="checkbox" checked={nascondiScaduti} onChange={e => setNascondiScaduti(e.target.checked)} className="rounded" />
+            Escludi scaduti
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none text-amber-700">
-            <input type="checkbox" checked={soloIncompleti} onChange={e => setSoloIncompleti(e.target.checked)} className="rounded accent-amber-500" /> Solo incompleti
+            <input type="checkbox" checked={soloIncompleti} onChange={e => setSoloIncompleti(e.target.checked)} className="rounded accent-amber-500" />
+            Solo incompleti
           </label>
         </div>
       </div>
 
       <CompostiStats
         stats={stats}
-        onClickInScadenza={() => { if (filtroInScadenza) { setFiltroInScadenza(false) } else { setFiltroAttenzione(false); setFiltroStati([]); setFiltroInScadenza(true) } }}
-        onClickAttenzione={() => { if (filtroAttenzione) { setFiltroAttenzione(false) } else { setFiltroStati([]); setFiltroInScadenza(false); setFiltroAttenzione(true) } }}
+        onClickInScadenza={() => {
+          if (filtroInScadenza) { setFiltroInScadenza(false) }
+          else { setFiltroAttenzione(false); setFiltroStati([]); setFiltroInScadenza(true) }
+        }}
+        onClickAttenzione={() => {
+          if (filtroAttenzione) { setFiltroAttenzione(false) }
+          else { setFiltroStati([]); setFiltroInScadenza(false); setFiltroAttenzione(true) }
+        }}
       />
 
       {/* ─── Barra bulk actions ───────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-3 py-2 my-2 rounded-md bg-muted border text-sm min-h-[44px]">
         <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
-          <input type="checkbox" className="rounded"
+          <input
+            type="checkbox" className="rounded"
             checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
             onChange={e => setSelectedIds(e.target.checked ? new Set(filtered.map(c => c.id)) : new Set())}
           />
@@ -811,21 +1048,24 @@ export function CompostiPage() {
         tipo={storiaTarget?.tipo ?? ''} onSaved={() => { load(); setStoriaTarget(null) }}
       />
 
-      {/* StoriaDialog bulk — isBulk=true oscura lotto/scadenza */}
+      {/* StoriaDialog bulk — isBulk=true nasconde lotto/scadenza */}
       <StoriaDialog
         open={bulkStoriaAction !== null} onOpenChange={v => !v && setBulkStoriaAction(null)}
         compostoId={[...selectedIds][0] ?? null}
         compostoNome={`${selLabel} selezionat${nSel === 1 ? 'o' : 'i'}`}
         tipo={bulkStoriaAction ?? ''} onSaved={() => {}} onSavedBulk={handleBulkStoria}
         isBulk={true}
+        bulkLottiDistinti={bulkLottiDistinti}
       />
 
       {/* ConfirmDialog eliminazione singola */}
       <ConfirmDialog
         open={deleteId !== null} title="Elimina composto"
-        message={deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1
-          ? `Questo composto fa parte di un mix (lotto: ${deleteMixInfo.lotto}). Verranno eliminati ${deleteMixInfo.count} composti con tutti i dati correlati. Continuare?`
-          : 'Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?'}
+        message={
+          deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1
+            ? `Questo composto fa parte di un mix (lotto: ${deleteMixInfo.lotto}). Verranno eliminati ${deleteMixInfo.count} composti con tutti i dati correlati. Continuare?`
+            : 'Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?'
+        }
         confirmLabel="Elimina" variant="danger" onConfirm={handleDelete}
         onCancel={() => { setDeleteId(null); setDeleteMixInfo(null) }}
       />
@@ -838,27 +1078,23 @@ export function CompostiPage() {
         onConfirm={handleBulkDelete} onCancel={() => setBulkDeleteOpen(false)}
       />
 
-      {/* Dialog mix-scope — usa MixRivalidaDialog per rivalidazioni, ConfirmDialog per delete/dismiss */}
+      {/* Fase 1 — Dialog mix-scope (selected/all per mix parziali) */}
       {currentMixScope && (
-        mixScopeIsRivalidazione ? (
-          <MixRivalidaDialog
-            item={currentMixScope}
-            isBulkRivalidazione={true}
-            onConfirmAll={extra => handleMixScopeDecision('all', extra)}
-            onConfirmSelected={extra => handleMixScopeDecision('selected', extra)}
-            onCancel={handleMixScopeCancel}
-          />
-        ) : (
-          <ConfirmDialog
-            open={true}
-            title="Mix parzialmente selezionato"
-            message={`Hai selezionato ${currentMixScope.selectedIds.length} di ${currentMixScope.totalCount} componenti del mix lotto "${currentMixScope.mixLotto}". Vuoi applicare l'azione solo ai ${currentMixScope.selectedIds.length} selezionati o a tutti i ${currentMixScope.totalCount} componenti del mix?`}
-            confirmLabel={`Tutti i ${currentMixScope.totalCount} del mix`}
-            secondaryAction={{ label: `Solo i ${currentMixScope.selectedIds.length} selezionati`, onClick: () => handleMixScopeDecision('selected', {}) }}
-            onConfirm={() => handleMixScopeDecision('all', {})}
-            onCancel={handleMixScopeCancel}
-          />
-        )
+        <MixScopeDialog
+          item={currentMixScope}
+          onConfirmAll={() => handleMixScopeDecision('all')}
+          onConfirmSelected={() => handleMixScopeDecision('selected')}
+          onCancel={cancelBulk}
+        />
+      )}
+
+      {/* Fase 2 — Dialog lotto-scope (lotto CRM + nuova scadenza per ogni lotto) */}
+      {currentLottoScope && (
+        <LottoRivalidaDialog
+          item={currentLottoScope}
+          onConfirm={handleLottoScopeDecision}
+          onCancel={cancelBulk}
+        />
       )}
     </div>
   )
