@@ -10,9 +10,7 @@
 
  ## importante
 
- 
-adesso segnale non ha accreditamento tra i campi da segnalare. Forse perche ha il tasto altro...
-
+ lo stato rivalidato -attivo non funziona piu
 
  ## altri
   

@@ -15,6 +15,7 @@ import { formatDate } from '@/lib/utils'
 import { parseConcentrazione } from '@/lib/unita'
 import { PreparazioniTab } from './PreparazioniTab'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 // Helper: calcola stato visualizzato di una preparazione (non modifica il DB)
 function computeStatoPrep(prep: any): string {
@@ -49,6 +50,10 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState<string>(defaultTab ?? 'dettaglio')
 
+  // FIX: dialog conferma per i mix
+  const [mixConfirmOpen, setMixConfirmOpen] = useState(false)
+  const [pendingStoriaPayload, setPendingStoriaPayload] = useState<any>(null)
+
   // FEAT-metodi-campo: metodi associati al composto
   const [metodiAssociati, setMetodiAssociati] = useState<any[]>([])
 
@@ -65,7 +70,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
       setUltimaRivalidazione(null)
     }
 
-    // FEAT-metodi-campo: carica i nomi dei metodi associati
     if (c?.metodi_ids && c.metodi_ids.length > 0) {
       window.electronAPI.invoke('metodi:list').then((result: unknown) => {
         const tutti = result as any[]
@@ -102,13 +106,50 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
     setStoriaForm({ open: true, tipo })
   }
 
-  const handleStoriaSubmit = async () => {
+  // FIX: quando l'utente clicca Salva nel dialog storia, se il composto appartiene
+  // a un mix chiediamo prima se applicare a tutto il mix o solo a questo.
+  const handleStoriaConfirm = async () => {
     if (!compostoId) return
-    await window.electronAPI.invoke('composti:storia-add', compostoId, {
+    const payload = {
       tipo: storiaForm.tipo,
       ...storiaData,
-    })
+    }
     setStoriaForm({ open: false, tipo: '' })
+
+    if (composto?.mix_id) {
+      // È parte di un mix: mostra dialog di conferma
+      setPendingStoriaPayload(payload)
+      setMixConfirmOpen(true)
+    } else {
+      // Composto singolo: salva direttamente (propagate non serve)
+      await window.electronAPI.invoke('composti:storia-add', compostoId, payload)
+      load()
+      onRefreshList?.()
+    }
+  }
+
+  // L'utente sceglie "Solo questo componente" → propagate: false
+  const handleMixConfirmSelected = async () => {
+    if (!compostoId || !pendingStoriaPayload) return
+    setMixConfirmOpen(false)
+    await window.electronAPI.invoke('composti:storia-add', compostoId, {
+      ...pendingStoriaPayload,
+      propagate: false,
+    })
+    setPendingStoriaPayload(null)
+    load()
+    onRefreshList?.()
+  }
+
+  // L'utente sceglie "Tutto il mix" → propagate: true
+  const handleMixConfirmAll = async () => {
+    if (!compostoId || !pendingStoriaPayload) return
+    setMixConfirmOpen(false)
+    await window.electronAPI.invoke('composti:storia-add', compostoId, {
+      ...pendingStoriaPayload,
+      propagate: true,
+    })
+    setPendingStoriaPayload(null)
     load()
     onRefreshList?.()
   }
@@ -209,7 +250,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
             <Field label="Stoccaggio" value={composto.stoccaggio} />
             <Field label="Accreditamento CRM" value={composto.accreditamento_crm} />
 
-            {/* FEAT-metodi-campo: metodi associati in fondo al tab Dettaglio */}
             {metodiAssociati.length > 0 && (
               <>
                 <Separator />
@@ -276,7 +316,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                   )
                 }
 
-                // evt._type === 'storia'
                 const s = evt.data
                 const isRival = s.tipo === 'Rivalidazione'
                 const isDismiss = s.tipo === 'Dismissione'
@@ -307,7 +346,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
               <p className="text-sm text-muted-foreground">Nessun evento registrato.</p>
             )}
 
-            {/* Evento fisso apertura flacone in fondo */}
             {composto.data_apertura && (
               <div className="text-sm border-l-2 border-muted pl-3 py-1 opacity-60">
                 <div className="font-medium">
@@ -325,10 +363,16 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
         </Tabs>
       </div>
 
+      {/* Dialog storia */}
       <Dialog open={storiaForm.open} onOpenChange={v => !v && setStoriaForm({ open: false, tipo: '' })}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-heading">{storiaForm.tipo}</DialogTitle>
+            {composto?.mix_id && (
+              <p className="text-xs text-amber-600 mt-1">
+                Questo composto fa parte di un mix — ti verrà chiesto se applicare a tutti i componenti.
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-3">
 
@@ -423,10 +467,27 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setStoriaForm({ open: false, tipo: '' })}>Annulla</Button>
-            <Button onClick={handleStoriaSubmit}>Salva</Button>
+            <Button onClick={handleStoriaConfirm}>Salva</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* FIX: dialog mix-scope — appare DOPO la compilazione del form */}
+      <ConfirmDialog
+        open={mixConfirmOpen}
+        title={`${pendingStoriaPayload?.tipo ?? 'Azione'} — Mix parziale`}
+        message={`Questo composto fa parte del mix "${composto?.mix ?? composto?.lotto}". Vuoi applicare l'azione solo a questo componente o a tutti i componenti del mix?`}
+        confirmLabel="Tutto il mix"
+        secondaryAction={{
+          label: 'Solo questo',
+          onClick: handleMixConfirmSelected,
+        }}
+        onConfirm={handleMixConfirmAll}
+        onCancel={() => {
+          setMixConfirmOpen(false)
+          setPendingStoriaPayload(null)
+        }}
+      />
     </SlidePanel>
   )
 }

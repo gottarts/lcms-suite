@@ -9,14 +9,18 @@ import { StoriaDialog } from './StoriaDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato, isIncompleto } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
 import { Plus, Search, FlaskConical, Filter, Upload, Download, ChevronDown,
-         Copy, RotateCcw, Archive, Trash2, Eye, EyeOff, Columns } from 'lucide-react'
+         Copy, RotateCcw, Archive, Trash2, Columns } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
 import { ExportDialog } from './ExportDialog'
 import { EtichetteDialog } from './EtichetteDialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { formatDate } from '@/lib/utils'
 
 const STATO_MAP: Record<string, string> = {
   'Attivo':                  'attivo',
@@ -36,7 +40,6 @@ const DESTINAZIONI_USO = [
   'Standard Interno',
 ]
 
-// ─── Definizione colonne per il toggle visibilità ─────────────────────────────
 const COL_DEFS: { key: string; label: string }[] = [
   { key: 'nome',             label: 'Nome' },
   { key: 'codice_interno',   label: 'Codice' },
@@ -48,6 +51,7 @@ const COL_DEFS: { key: string; label: string }[] = [
   { key: 'solvente',         label: 'Solvente' },
   { key: 'ubicazione',       label: 'Ubicazione' },
   { key: 'stoccaggio',       label: 'Stoccaggio' },
+  { key: 'accreditamento_crm', label: 'Accreditamento' },
   { key: 'work_standard',    label: 'Work' },
   { key: 'stato',            label: 'Stato' },
   { key: 'destinazione_uso', label: 'Destinazione' },
@@ -68,6 +72,7 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
   solvente:          true,
   ubicazione:        true,
   stoccaggio:        false,
+  accreditamento_crm: false,
   work_standard:     true,
   stato:             true,
   destinazione_uso:  false,
@@ -80,18 +85,127 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
 // ─── Tipo per la coda di dialog mix-scope ────────────────────────────────────
 interface MixScopeItem {
   mixId: string
-  mixLotto: string       // lotto del mix, usato per label nel dialog
-  selectedIds: number[]  // ID selezionati che appartengono a questo mix
-  totalCount: number     // totale componenti del mix nel DB
+  mixLotto: string
+  selectedIds: number[]
+  totalCount: number
+  firstCompostoId: number  // per caricare i lotti validi CRM
 }
 
-// ─── MultiSelectDropdown (invariato) ─────────────────────────────────────────
+// ─── Tipo per la decisione mix-scope (esteso con dati per-mix) ───────────────
+interface MixScopeDecision {
+  scope: 'selected' | 'all'
+  lotto_crm_valido?: string
+  nuova_scadenza?: string
+}
+
+// ─── Dialog dedicato per mix-scope rivalidazione ─────────────────────────────
+function MixRivalidaDialog({
+  item,
+  isBulkRivalidazione,
+  onConfirmAll,
+  onConfirmSelected,
+  onCancel,
+}: {
+  item: MixScopeItem
+  isBulkRivalidazione: boolean
+  onConfirmAll: (extra: { lotto_crm_valido?: string; nuova_scadenza?: string }) => void
+  onConfirmSelected: (extra: { lotto_crm_valido?: string; nuova_scadenza?: string }) => void
+  onCancel: () => void
+}) {
+  const [lottiValidi, setLottiValidi] = useState<any[]>([])
+  const [lottoCrmValido, setLottoCrmValido] = useState('')
+  const [nuovaScadenza, setNuovaScadenza] = useState('')
+
+  useEffect(() => {
+    setLottoCrmValido('')
+    setNuovaScadenza('')
+    if (isBulkRivalidazione && item.firstCompostoId) {
+      window.electronAPI.invoke('composti:lotti-validi', item.firstCompostoId)
+        .then((lotti: any) => setLottiValidi(lotti ?? []))
+        .catch(() => setLottiValidi([]))
+    }
+  }, [item.mixId, isBulkRivalidazione])
+
+  const extra = {
+    lotto_crm_valido: lottoCrmValido || undefined,
+    nuova_scadenza: nuovaScadenza || undefined,
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={v => !v && onCancel()}>
+      <DialogContent className="max-w-md" onPointerDownOutside={e => e.preventDefault()} onEscapeKeyDown={onCancel}>
+        <DialogHeader>
+          <DialogTitle>Mix parzialmente selezionato</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Hai selezionato <strong>{item.selectedIds.length}</strong> di <strong>{item.totalCount}</strong> componenti
+            del mix lotto <strong>"{item.mixLotto}"</strong>.
+          </p>
+        </DialogHeader>
+
+        {isBulkRivalidazione && (
+          <div className="space-y-3 py-1">
+            <div>
+              <Label className="text-xs">
+                Lotto CRM valido
+                {lottiValidi.length > 0 && (
+                  <span className="ml-1 text-muted-foreground font-normal">
+                    ({lottiValidi.length} disponibil{lottiValidi.length === 1 ? 'e' : 'i'})
+                  </span>
+                )}
+              </Label>
+              {lottiValidi.length > 0 && (
+                <Select value={lottoCrmValido || '_manual'} onValueChange={v => setLottoCrmValido(v === '_manual' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="Seleziona lotto..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_manual">— Inserisci manualmente —</SelectItem>
+                    {lottiValidi.map((l: any) => (
+                      <SelectItem key={l.id} value={l.lotto || String(l.id)}>
+                        <span className="font-mono text-xs">
+                          {l.lotto || 'N/D'}
+                          {l.scadenza_prodotto && <span className="text-muted-foreground ml-2">scad. {l.scadenza_prodotto}</span>}
+                          {l.forma_commerciale && <span className="text-muted-foreground ml-1">· {l.forma_commerciale}</span>}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {(lottiValidi.length === 0 || lottoCrmValido === '') && (
+                <Input
+                  className={lottiValidi.length > 0 ? 'mt-1' : ''}
+                  value={lottoCrmValido}
+                  onChange={e => setLottoCrmValido(e.target.value)}
+                  placeholder="es. FN0872121"
+                />
+              )}
+            </div>
+            <div>
+              <Label className="text-xs">Nuova data di scadenza</Label>
+              <Input type="date" value={nuovaScadenza} onChange={e => setNuovaScadenza(e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                Se compilata, determina lo stato Rivalidato per questo mix.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Annulla</Button>
+          <Button variant="secondary" onClick={() => onConfirmSelected(extra)}>
+            Solo i {item.selectedIds.length} selezionati
+          </Button>
+          <Button onClick={() => onConfirmAll(extra)}>
+            Tutti i {item.totalCount} del mix
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── MultiSelectDropdown ─────────────────────────────────────────────────────
 function MultiSelectDropdown({
-  label,
-  options,
-  selected,
-  onChange,
-  renderLabel,
+  label, options, selected, onChange, renderLabel,
 }: {
   label: string
   options: string[]
@@ -104,9 +218,7 @@ function MultiSelectDropdown({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -124,38 +236,22 @@ function MultiSelectDropdown({
         className="flex items-center gap-1 h-8 px-3 text-sm rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
       >
         {label}
-        {selected.length > 0 && (
-          <Badge className="ml-1 h-4 px-1 text-xs py-0">{selected.length}</Badge>
-        )}
+        {selected.length > 0 && <Badge className="ml-1 h-4 px-1 text-xs py-0">{selected.length}</Badge>}
         <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
       </button>
       {open && (
         <div className="absolute z-50 mt-1 min-w-[200px] rounded-md border bg-popover shadow-md p-1">
-          {options.length === 0 && (
-            <p className="px-2 py-1.5 text-sm text-muted-foreground">Nessuna opzione</p>
-          )}
+          {options.length === 0 && <p className="px-2 py-1.5 text-sm text-muted-foreground">Nessuna opzione</p>}
           {options.map(v => (
-            <label
-              key={v}
-              className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded select-none"
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(v)}
-                onChange={() => toggle(v)}
-                className="rounded"
-              />
+            <label key={v} className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded select-none">
+              <input type="checkbox" checked={selected.includes(v)} onChange={() => toggle(v)} className="rounded" />
               {renderLabel ? renderLabel(v) : v}
             </label>
           ))}
           {selected.length > 0 && (
             <>
               <div className="border-t my-1" />
-              <button
-                type="button"
-                className="w-full text-xs text-muted-foreground px-2 py-1 hover:text-foreground text-left"
-                onClick={() => onChange([])}
-              >
+              <button type="button" className="w-full text-xs text-muted-foreground px-2 py-1 hover:text-foreground text-left" onClick={() => onChange([])}>
                 Rimuovi filtro
               </button>
             </>
@@ -184,7 +280,6 @@ export function CompostiPage() {
     debounceTimer.current = setTimeout(() => setDebouncedSearch(value), 500)
   }
 
-  // ─── Filtri ───────────────────────────────────────────────────────────────
   const [filtroStati, setFiltroStati] = useState<string[]>([])
   const [filtroWorks, setFiltroWorks] = useState<string[]>([])
   const [filtroDestinazioni, setFiltroDestinazioni] = useState<string[]>([])
@@ -197,23 +292,18 @@ export function CompostiPage() {
   const [soloIncompleti, setSoloIncompleti] = useState(false)
   const [colFilters, setColFilters] = useState<Record<string, string>>({})
 
-  // ─── Visibilità colonne (persistita in localStorage) ─────────────────────
   const [colVisible, setColVisible] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem('composti-col-visible')
       return saved ? { ...DEFAULT_COL_VISIBLE, ...JSON.parse(saved) } : DEFAULT_COL_VISIBLE
-    } catch {
-      return DEFAULT_COL_VISIBLE
-    }
+    } catch { return DEFAULT_COL_VISIBLE }
   })
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) {
-        setColMenuOpen(false)
-      }
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -232,24 +322,15 @@ export function CompostiPage() {
     localStorage.removeItem('composti-col-visible')
   }, [])
 
-  const nascosteCount = useMemo(
-    () => COL_DEFS.filter(d => colVisible[d.key] === false).length,
-    [colVisible]
-  )
+  const nascosteCount = useMemo(() => COL_DEFS.filter(d => colVisible[d.key] === false).length, [colVisible])
 
-  // ─── Handler filtri per colonna ───────────────────────────────────────────
   const handleColFilter = useCallback((key: string, value: string) => {
     setColFilters(prev => {
-      if (!value) {
-        const next = { ...prev }
-        delete next[key]
-        return next
-      }
+      if (!value) { const next = { ...prev }; delete next[key]; return next }
       return { ...prev, [key]: value }
     })
   }, [])
 
-  // ─── Dialogs / panel ─────────────────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false)
   const [editComposto, setEditComposto] = useState<any>(null)
   const [template, setTemplate] = useState<any>(null)
@@ -264,16 +345,17 @@ export function CompostiPage() {
   const [etichetteOpen, setEtichetteOpen] = useState(false)
   const [storiaTarget, setStoriaTarget] = useState<{ id: number; nome: string; tipo: 'Rivalidazione' | 'Dismissione' } | null>(null)
 
-  // ─── Bulk selection ───────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkStoriaAction, setBulkStoriaAction] = useState<'Rivalidazione' | 'Dismissione' | null>(null)
 
-  // ─── Mix-scope: coda di dialog sequenziali per mix coinvolti ─────────────
+  // ─── Mix-scope ────────────────────────────────────────────────────────────
   const [mixScopeQueue, setMixScopeQueue] = useState<MixScopeItem[]>([])
   const [mixScopeIndex, setMixScopeIndex] = useState(0)
-  const [mixScopeDecisions, setMixScopeDecisions] = useState<Map<string, 'selected' | 'all'>>(new Map())
-  const [pendingBulkOp, setPendingBulkOp] = useState<((decisions: Map<string, 'selected' | 'all'>) => Promise<void>) | null>(null)
+  // true quando il bulk in corso è una Rivalidazione (per mostrare lotto/scadenza per-mix)
+  const [mixScopeIsRivalidazione, setMixScopeIsRivalidazione] = useState(false)
+  const pendingBulkOpRef = useRef<((decisions: Map<string, MixScopeDecision>) => Promise<void>) | null>(null)
+  const mixScopeDecisionsRef = useRef<Map<string, MixScopeDecision>>(new Map())
 
   const load = useCallback(() =>
     compostiApi.list().then(rows =>
@@ -286,12 +368,8 @@ export function CompostiPage() {
   const loadMetodi = useCallback(() =>
     window.electronAPI.invoke('metodi:list').then(setMetodi), [])
 
-  useEffect(() => {
-    load()
-    loadMetodi()
-  }, [load, loadMetodi])
+  useEffect(() => { load(); loadMetodi() }, [load, loadMetodi])
 
-  // Reset selezione al cambio di qualsiasi filtro o ricerca
   useEffect(() => {
     setSelectedIds(new Set())
   }, [debouncedSearch, filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi,
@@ -310,7 +388,6 @@ export function CompostiPage() {
 
   const filtered = useMemo(() => {
     let result = composti
-
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase()
       result = result.filter(c =>
@@ -333,16 +410,11 @@ export function CompostiPage() {
         c.metodi_ids?.some((id: string) => metodiNomeMap[id]?.includes(q))
       )
     }
-
     if (Object.keys(colFilters).length > 0) {
       result = result.filter(c =>
-        Object.entries(colFilters).every(([key, val]) => {
-          const cellVal = String(c[key] ?? '').toLowerCase()
-          return cellVal.includes(val.toLowerCase())
-        })
+        Object.entries(colFilters).every(([key, val]) => String(c[key] ?? '').toLowerCase().includes(val.toLowerCase()))
       )
     }
-
     if (filtroStati.length > 0) result = result.filter(c => filtroStati.some(s => computeStato(c) === STATO_MAP[s]))
     if (filtroWorks.length > 0) result = result.filter(c => filtroWorks.includes(c.work_standard))
     if (filtroDestinazioni.length > 0) result = result.filter(c => filtroDestinazioni.includes(c.destinazione_uso))
@@ -351,14 +423,8 @@ export function CompostiPage() {
     if (filtroAttenzione) result = result.filter(c => { const s = computeStato(c); return s === 'scaduto' || s === 'rivalidato_scaduto' })
     if (!mostraDismessi) result = result.filter(c => computeStato(c) !== 'dismesso')
     if (!mostraDaAprire) result = result.filter(c => computeStato(c) !== 'da_aprire')
-    if (nascondiScaduti) {
-      result = result.filter(c => {
-        const s = computeStato(c)
-        return s !== 'scaduto' && s !== 'rivalidato_scaduto'
-      })
-    }
+    if (nascondiScaduti) result = result.filter(c => { const s = computeStato(c); return s !== 'scaduto' && s !== 'rivalidato_scaduto' })
     if (soloIncompleti) result = result.filter(c => isIncompleto(c))
-
     return result
   }, [composti, metodiNomeMap, debouncedSearch, colFilters,
       filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi,
@@ -371,70 +437,74 @@ export function CompostiPage() {
     attenzione: filtered.filter(c => { const s = computeStato(c); return s === 'scaduto' || s === 'rivalidato_scaduto' }).length,
   }), [filtered])
 
-  // ─── Costruisce la coda di mix coinvolti dagli ID selezionati ─────────────
+  // ─── buildMixQueue — ora include firstCompostoId ──────────────────────────
   const buildMixQueue = useCallback(async (ids: Set<number>): Promise<MixScopeItem[]> => {
-    const mixMap = new Map<string, { selectedIds: number[]; lotto: string }>()
+    const mixMap = new Map<string, { selectedIds: number[]; lotto: string; firstId: number }>()
     for (const id of ids) {
       const comp = composti.find((c: any) => c.id === id)
       if (!comp?.mix_id) continue
       if (!mixMap.has(comp.mix_id)) {
-        mixMap.set(comp.mix_id, { selectedIds: [], lotto: comp.lotto ?? comp.mix_id })
+        mixMap.set(comp.mix_id, { selectedIds: [], lotto: comp.lotto ?? comp.mix_id, firstId: id })
       }
       mixMap.get(comp.mix_id)!.selectedIds.push(id)
     }
-
     const queue: MixScopeItem[] = []
-    for (const [mixId, { selectedIds: selIds, lotto }] of mixMap.entries()) {
+    for (const [mixId, { selectedIds: selIds, lotto, firstId }] of mixMap.entries()) {
       const totalCount = await window.electronAPI.invoke('composti:count-by-mix', mixId) as number
       if (selIds.length < totalCount) {
-        queue.push({ mixId, mixLotto: lotto, selectedIds: selIds, totalCount })
+        queue.push({ mixId, mixLotto: lotto, selectedIds: selIds, totalCount, firstCompostoId: firstId })
       }
     }
     return queue
   }, [composti])
 
-  // ─── Avvia il flusso bulk con eventuale coda mix-scope ───────────────────
+  // ─── startBulkWithMixScope — signature aggiornata con MixScopeDecision ───
   const startBulkWithMixScope = useCallback(async (
     ids: Set<number>,
-    op: (decisions: Map<string, 'selected' | 'all'>) => Promise<void>
+    isRivalidazione: boolean,
+    op: (decisions: Map<string, MixScopeDecision>) => Promise<void>
   ) => {
     const queue = await buildMixQueue(ids)
     if (queue.length === 0) {
       await op(new Map())
     } else {
-      setPendingBulkOp(() => op)
+      pendingBulkOpRef.current = op
+      mixScopeDecisionsRef.current = new Map()
+      setMixScopeIsRivalidazione(isRivalidazione)
       setMixScopeQueue(queue)
       setMixScopeIndex(0)
-      setMixScopeDecisions(new Map())
     }
   }, [buildMixQueue])
 
-  // ─── Risposta utente al dialog mix-scope corrente ────────────────────────
-  const handleMixScopeDecision = useCallback(async (scope: 'selected' | 'all') => {
+  // ─── handleMixScopeDecision — ora riceve anche extra (lotto/scadenza) ─────
+  const handleMixScopeDecision = useCallback(async (
+    scope: 'selected' | 'all',
+    extra: { lotto_crm_valido?: string; nuova_scadenza?: string }
+  ) => {
     const current = mixScopeQueue[mixScopeIndex]
-    const newDecisions = new Map(mixScopeDecisions)
-    newDecisions.set(current.mixId, scope)
+    mixScopeDecisionsRef.current.set(current.mixId, { scope, ...extra })
 
     const nextIndex = mixScopeIndex + 1
     if (nextIndex < mixScopeQueue.length) {
-      setMixScopeDecisions(newDecisions)
       setMixScopeIndex(nextIndex)
     } else {
+      const decisions = new Map(mixScopeDecisionsRef.current)
+      const op = pendingBulkOpRef.current
       setMixScopeQueue([])
       setMixScopeIndex(0)
-      setMixScopeDecisions(new Map())
-      if (pendingBulkOp) {
-        await pendingBulkOp(newDecisions)
-        setPendingBulkOp(null)
-      }
+      setMixScopeIsRivalidazione(false)
+      pendingBulkOpRef.current = null
+      mixScopeDecisionsRef.current = new Map()
+      if (op) await op(decisions)
     }
-  }, [mixScopeQueue, mixScopeIndex, mixScopeDecisions, pendingBulkOp])
+  }, [mixScopeQueue, mixScopeIndex])
 
   const handleMixScopeCancel = useCallback(() => {
     setMixScopeQueue([])
     setMixScopeIndex(0)
-    setMixScopeDecisions(new Map())
-    setPendingBulkOp(null)
+    setMixScopeIsRivalidazione(false)
+    pendingBulkOpRef.current = null
+    mixScopeDecisionsRef.current = new Map()
   }, [])
 
   // ─── Delete singolo ───────────────────────────────────────────────────────
@@ -445,64 +515,52 @@ export function CompostiPage() {
       } else {
         await compostiApi.delete(deleteId)
       }
-      setDeleteId(null)
-      setDeleteMixInfo(null)
-      setPanelId(null)
-      load()
+      setDeleteId(null); setDeleteMixInfo(null); setPanelId(null); load()
     }
   }, [deleteId, deleteMixInfo, load])
 
   // ─── Bulk delete ──────────────────────────────────────────────────────────
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleteOpen(false)
+    const ids = new Set(selectedIds)
+    const compostiSnapshot = [...composti]
 
-    const ids = selectedIds
-
-    const execDelete = async (decisions: Map<string, 'selected' | 'all'>) => {
+    const execDelete = async (decisions: Map<string, MixScopeDecision>) => {
       for (const id of ids) {
-        const comp = composti.find((c: any) => c.id === id)
-        if (!comp?.mix_id) {
-          await compostiApi.delete(id)
-        }
+        const comp = compostiSnapshot.find((c: any) => c.id === id)
+        if (!comp?.mix_id) await compostiApi.delete(id)
       }
-
       const processedMix = new Set<string>()
       for (const id of ids) {
-        const comp = composti.find((c: any) => c.id === id)
+        const comp = compostiSnapshot.find((c: any) => c.id === id)
         if (!comp?.mix_id) continue
         if (processedMix.has(comp.mix_id)) continue
         processedMix.add(comp.mix_id)
-
-        const decision = decisions.get(comp.mix_id) ?? 'all'
-        if (decision === 'all') {
+        const decision = decisions.get(comp.mix_id)
+        if (!decision || decision.scope === 'all') {
           await window.electronAPI.invoke('composti:delete-by-mix-id', comp.mix_id)
         } else {
-          const mixSelected = [...ids].filter(sid => {
-            const sc = composti.find((c: any) => c.id === sid)
-            return sc?.mix_id === comp.mix_id
-          })
-          for (const sid of mixSelected) {
-            await compostiApi.delete(sid)
-          }
+          const mixSelected = [...ids].filter(sid => compostiSnapshot.find((c: any) => c.id === sid)?.mix_id === comp.mix_id)
+          for (const sid of mixSelected) await compostiApi.delete(sid)
         }
       }
-
-      setSelectedIds(new Set())
-      load()
+      setSelectedIds(new Set()); load()
     }
 
-    await startBulkWithMixScope(ids, execDelete)
+    await startBulkWithMixScope(ids, false, execDelete)
   }, [selectedIds, composti, load, startBulkWithMixScope])
 
-  // ─── Bulk storia (Rivalidazione / Dismissione) ────────────────────────────
+  // ─── Bulk storia ──────────────────────────────────────────────────────────
   const handleBulkStoria = useCallback(async (payload: any) => {
-    const ids = selectedIds
+    const ids = new Set(selectedIds)
+    const compostiSnapshot = [...composti]
+    const isRivalidazione = payload.tipo === 'Rivalidazione'
 
-    const execStoria = async (decisions: Map<string, 'selected' | 'all'>) => {
+    const execStoria = async (decisions: Map<string, MixScopeDecision>) => {
       const processedMix = new Set<string>()
 
       for (const id of ids) {
-        const comp = composti.find((c: any) => c.id === id)
+        const comp = compostiSnapshot.find((c: any) => c.id === id)
         const mixId: string | null = comp?.mix_id ?? null
 
         if (!mixId) {
@@ -513,40 +571,36 @@ export function CompostiPage() {
         if (processedMix.has(mixId)) continue
         processedMix.add(mixId)
 
-        const decision = decisions.get(mixId) ?? 'all'
-        if (decision === 'all') {
-          await compostiApi.addStoria(id, { ...payload, propagate: true })
+        const decision = decisions.get(mixId)
+        // Merge payload globale con i campi per-mix (lotto/scadenza)
+        const perMixPayload = {
+          ...payload,
+          lotto_crm_valido: decision?.lotto_crm_valido ?? payload.lotto_crm_valido,
+          nuova_scadenza: decision?.nuova_scadenza ?? payload.nuova_scadenza,
+        }
+
+        if (!decision || decision.scope === 'all') {
+          await compostiApi.addStoria(id, { ...perMixPayload, propagate: true })
         } else {
-          const mixSelected = [...ids].filter(sid => {
-            const sc = composti.find((c: any) => c.id === sid)
-            return sc?.mix_id === mixId
-          })
+          const mixSelected = [...ids].filter(sid => compostiSnapshot.find((c: any) => c.id === sid)?.mix_id === mixId)
           for (const sid of mixSelected) {
-            await compostiApi.addStoria(sid, { ...payload, propagate: false })
+            await compostiApi.addStoria(sid, { ...perMixPayload, propagate: false })
           }
         }
       }
 
-      setSelectedIds(new Set())
-      setBulkStoriaAction(null)
-      load()
+      setSelectedIds(new Set()); setBulkStoriaAction(null); load()
     }
 
-    await startBulkWithMixScope(ids, execStoria)
+    await startBulkWithMixScope(ids, isRivalidazione, execStoria)
   }, [selectedIds, composti, load, startBulkWithMixScope])
 
-  const handleEdit = useCallback((composto: any) => {
-    setEditComposto(composto)
-    setPanelId(null)
-    setFormOpen(true)
-  }, [])
+  const handleEdit = useCallback((composto: any) => { setEditComposto(composto); setPanelId(null); setFormOpen(true) }, [])
 
   const handleNewLotto = useCallback(async (composto: any) => {
     if (composto.mix_id) {
       try {
-        const componenti = await window.electronAPI.invoke(
-          'composti:list-by-mix', composto.mix_id
-        ) as any[]
+        const componenti = await window.electronAPI.invoke('composti:list-by-mix', composto.mix_id) as any[]
         const template = {
           forma_commerciale: composto.forma_commerciale || composto.mix || '',
           concentrazione: composto.concentrazione ? String(composto.concentrazione) : '',
@@ -561,57 +615,28 @@ export function CompostiPage() {
           codice_interno: composto.codice_interno || '',
           fiala: composto.fiala || '1',
           volume_ml: composto.volume_ml ? String(composto.volume_ml) : '',
-          lotto: '',
-          data_apertura: '',
-          scadenza_prodotto: '',
-          operatore_apertura: '',
+          lotto: '', data_apertura: '', scadenza_prodotto: '', operatore_apertura: '',
           produttore: composto.produttore || '',
           _nomi: componenti.map((c: any) => c.nome),
           _metodi_ids: composto.metodi_ids || [],
         }
-        setMixTemplate(template)
-        setMixOpen(true)
-        setPanelId(null)
-      } catch (err) {
-        console.error('Errore caricamento componenti mix:', err)
-      }
+        setMixTemplate(template); setMixOpen(true); setPanelId(null)
+      } catch (err) { console.error('Errore caricamento componenti mix:', err) }
       return
     }
-    setTemplate(composto)
-    setEditComposto(null)
-    setPanelId(null)
-    setFormOpen(true)
+    setTemplate(composto); setEditComposto(null); setPanelId(null); setFormOpen(true)
   }, [])
 
-  // ─── Handler stabili per CompostiTable (memo) ────────────────────────────
-  const handleRowClick = useCallback((row: any) => {
-    setPanelTab('dettaglio')
-    setPanelId(row.id)
-  }, [])
-
-  const handleRivalida = useCallback((row: any) =>
-    setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Rivalidazione' }), [])
-
-  const handleDismetti = useCallback((row: any) =>
-    setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Dismissione' }), [])
-
-  const handleOpenStorico = useCallback((row: any) => {
-    setPanelTab('storico')
-    setPanelId(row.id)
-  }, [])
-
-  const handleOpenPreparazioni = useCallback((row: any) => {
-    setPanelTab('preparazioni')
-    setPanelId(row.id)
-  }, [])
-
+  const handleRowClick = useCallback((row: any) => { setPanelTab('dettaglio'); setPanelId(row.id) }, [])
+  const handleRivalida = useCallback((row: any) => setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Rivalidazione' }), [])
+  const handleDismetti = useCallback((row: any) => setStoriaTarget({ id: row.id, nome: row.nome, tipo: 'Dismissione' }), [])
+  const handleOpenStorico = useCallback((row: any) => { setPanelTab('storico'); setPanelId(row.id) }, [])
+  const handleOpenPreparazioni = useCallback((row: any) => { setPanelTab('preparazioni'); setPanelId(row.id) }, [])
   const handleRequestDelete = useCallback(async (id: number) => {
     setPanelId(null)
     const info = await window.electronAPI.invoke('composti:count-by-lotto', id)
-    setDeleteMixInfo(info)
-    setDeleteId(id)
+    setDeleteMixInfo(info); setDeleteId(id)
   }, [])
-  // ─────────────────────────────────────────────────────────────────────────
 
   const hasFiltriAttivi = filtroStati.length > 0 || filtroWorks.length > 0 ||
     filtroDestinazioni.length > 0 || filtroMetodi.length > 0 ||
@@ -619,88 +644,49 @@ export function CompostiPage() {
 
   const nSel = selectedIds.size
   const selLabel = `${nSel} compost${nSel === 1 ? 'o' : 'i'}`
-
-  // ─── Mix-scope dialog corrente ────────────────────────────────────────────
   const currentMixScope = mixScopeQueue[mixScopeIndex] ?? null
 
   return (
     <div>
-      {/* ─── Toolbar principale ────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-
-        {/* Contatore */}
         <span className="text-sm text-muted-foreground shrink-0">
           Visualizzati: {filtered.length} / Totali: {composti.length}
         </span>
-
         <div className="flex items-center gap-2 flex-wrap ml-auto">
-
-          {/* Gruppo 1 — Aggiungi */}
           <Button size="sm" onClick={() => { setEditComposto(null); setTemplate(null); setFormOpen(true) }}>
             <Plus className="h-4 w-4 mr-1" /> Nuovo composto
           </Button>
           <Button size="sm" variant="outline" onClick={() => { setMixTemplate(null); setMixOpen(true) }}>
             <FlaskConical className="h-4 w-4 mr-1" /> Aggiungi Mix
           </Button>
-
           <div className="w-px h-5 bg-border mx-0.5" />
-
-          {/* Gruppo 2 — Import / Export */}
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-4 w-4 mr-1" /> Importa
           </Button>
           <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
             <Download className="h-4 w-4 mr-1" /> Esporta
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setEtichetteOpen(true)}
-            title={nSel > 0 ? `Etichette per ${nSel} selezionati` : 'Etichette per tutti i visualizzati'}
-          >
+          <Button size="sm" variant="outline" onClick={() => setEtichetteOpen(true)}
+            title={nSel > 0 ? `Etichette per ${nSel} selezionati` : 'Etichette per tutti i visualizzati'}>
             🏷️ Etichette{nSel > 0 && <span className="ml-1 text-xs text-primary font-medium">({nSel})</span>}
           </Button>
-
           <div className="w-px h-5 bg-border mx-0.5" />
-
-          {/* Gruppo 3 — Colonne */}
           <div className="relative" ref={colMenuRef}>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setColMenuOpen(v => !v)}
-            >
-              <Columns className="h-4 w-4 mr-1" />
-              Colonne
-              {nascosteCount > 0 && (
-                <Badge className="ml-1 h-4 px-1 text-xs py-0 bg-muted text-muted-foreground">
-                  {nascosteCount}
-                </Badge>
-              )}
+            <Button size="sm" variant="outline" onClick={() => setColMenuOpen(v => !v)}>
+              <Columns className="h-4 w-4 mr-1" /> Colonne
+              {nascosteCount > 0 && <Badge className="ml-1 h-4 px-1 text-xs py-0 bg-muted text-muted-foreground">{nascosteCount}</Badge>}
             </Button>
             {colMenuOpen && (
               <div className="absolute right-0 z-50 mt-1 w-52 rounded-md border bg-popover shadow-md p-2">
-                <div className="text-xs font-medium text-muted-foreground px-1 mb-2">
-                  Colonne visibili
-                </div>
+                <div className="text-xs font-medium text-muted-foreground px-1 mb-2">Colonne visibili</div>
                 {COL_DEFS.map(({ key, label }) => (
-                  <label
-                    key={key}
-                    className="flex items-center gap-2 px-1 py-1 text-sm cursor-pointer hover:bg-accent rounded select-none"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={colVisible[key] !== false}
-                      onChange={e => handleColVisibleChange(key, e.target.checked)}
-                    />
+                  <label key={key} className="flex items-center gap-2 px-1 py-1 text-sm cursor-pointer hover:bg-accent rounded select-none">
+                    <input type="checkbox" checked={colVisible[key] !== false} onChange={e => handleColVisibleChange(key, e.target.checked)} />
                     {label}
                   </label>
                 ))}
                 <div className="border-t mt-2 pt-2">
-                  <button
-                    className="w-full text-xs text-muted-foreground px-1 py-1 hover:text-foreground text-left"
-                    onClick={resetColVisible}
-                  >
+                  <button className="w-full text-xs text-muted-foreground px-1 py-1 hover:text-foreground text-left" onClick={resetColVisible}>
                     Ripristina default
                   </button>
                 </div>
@@ -712,18 +698,10 @@ export function CompostiPage() {
 
       <div className="mb-4">
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Ricerca globale */}
           <div className="relative w-80">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={e => handleSearchChange(e.target.value)}
-              placeholder="Cerca nome, lotto, metodo, accreditamento..."
-              className="pl-9"
-            />
+            <Input value={search} onChange={e => handleSearchChange(e.target.value)} placeholder="Cerca nome, lotto, metodo, accreditamento..." className="pl-9" />
           </div>
-
-          {/* Multi-select filtri */}
           <div className="flex items-center gap-2 border-l pl-3 flex-wrap">
             <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <MultiSelectDropdown label="Stato" options={Object.keys(STATO_MAP)} selected={filtroStati} onChange={setFiltroStati} />
@@ -733,63 +711,16 @@ export function CompostiPage() {
           </div>
         </div>
 
-        {/* Badge filtri attivi */}
         {hasFiltriAttivi && (
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {filtroStati.map(s => (
-              <Badge key={s} variant="secondary" className="flex items-center gap-1">
-                Stato: {s}
-                <button onClick={() => setFiltroStati(prev => prev.filter(x => x !== s))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
-              </Badge>
-            ))}
-            {filtroWorks.map(w => (
-              <Badge key={w} variant="secondary" className="flex items-center gap-1">
-                Work: {w}
-                <button onClick={() => setFiltroWorks(prev => prev.filter(x => x !== w))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
-              </Badge>
-            ))}
-            {filtroDestinazioni.map(d => (
-              <Badge key={d} variant="secondary" className="flex items-center gap-1">
-                Dest.: {d}
-                <button onClick={() => setFiltroDestinazioni(prev => prev.filter(x => x !== d))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
-              </Badge>
-            ))}
-            {filtroMetodi.map(id => (
-              <Badge key={id} variant="secondary" className="flex items-center gap-1">
-                Metodo: {metodi.find(m => m.id === id)?.nome ?? id}
-                <button onClick={() => setFiltroMetodi(prev => prev.filter(x => x !== id))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
-              </Badge>
-            ))}
-            {nascondiScaduti && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Scaduti esclusi
-                <button onClick={() => setNascondiScaduti(false)} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
-              </Badge>
-            )}
-            {soloIncompleti && (
-              <Badge variant="secondary" className="flex items-center gap-1 border-amber-300 bg-amber-50 text-amber-800">
-                Solo incompleti
-                <button onClick={() => setSoloIncompleti(false)} className="ml-1 hover:bg-amber-100 rounded px-0.5">×</button>
-              </Badge>
-            )}
-            {Object.entries(colFilters).map(([key, val]) => (
-              <Badge key={key} variant="secondary" className="flex items-center gap-1">
-                {COL_DEFS.find(d => d.key === key)?.label ?? key}: "{val}"
-                <button onClick={() => handleColFilter(key, '')} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
-              </Badge>
-            ))}
-            <button
-              className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setFiltroStati([])
-                setFiltroWorks([])
-                setFiltroDestinazioni([])
-                setFiltroMetodi([])
-                setNascondiScaduti(false)
-                setSoloIncompleti(false)
-                setColFilters({})
-              }}
-            >
+            {filtroStati.map(s => <Badge key={s} variant="secondary" className="flex items-center gap-1">Stato: {s}<button onClick={() => setFiltroStati(prev => prev.filter(x => x !== s))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
+            {filtroWorks.map(w => <Badge key={w} variant="secondary" className="flex items-center gap-1">Work: {w}<button onClick={() => setFiltroWorks(prev => prev.filter(x => x !== w))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
+            {filtroDestinazioni.map(d => <Badge key={d} variant="secondary" className="flex items-center gap-1">Dest.: {d}<button onClick={() => setFiltroDestinazioni(prev => prev.filter(x => x !== d))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
+            {filtroMetodi.map(id => <Badge key={id} variant="secondary" className="flex items-center gap-1">Metodo: {metodi.find(m => m.id === id)?.nome ?? id}<button onClick={() => setFiltroMetodi(prev => prev.filter(x => x !== id))} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
+            {nascondiScaduti && <Badge variant="secondary" className="flex items-center gap-1">Scaduti esclusi<button onClick={() => setNascondiScaduti(false)} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>}
+            {soloIncompleti && <Badge variant="secondary" className="flex items-center gap-1 border-amber-300 bg-amber-50 text-amber-800">Solo incompleti<button onClick={() => setSoloIncompleti(false)} className="ml-1 hover:bg-amber-100 rounded px-0.5">×</button></Badge>}
+            {Object.entries(colFilters).map(([key, val]) => <Badge key={key} variant="secondary" className="flex items-center gap-1">{COL_DEFS.find(d => d.key === key)?.label ?? key}: "{val}"<button onClick={() => handleColFilter(key, '')} className="ml-1 hover:bg-muted rounded px-0.5">×</button></Badge>)}
+            <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFiltroStati([]); setFiltroWorks([]); setFiltroDestinazioni([]); setFiltroMetodi([]); setNascondiScaduti(false); setSoloIncompleti(false); setColFilters({}) }}>
               Rimuovi tutti
             </button>
           </div>
@@ -797,30 +728,16 @@ export function CompostiPage() {
 
         <div className="flex items-center gap-4 mt-2">
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input type="checkbox" checked={mostraDismessi} onChange={e => setMostraDismessi(e.target.checked)} className="rounded" />
-            Mostra dismessi
+            <input type="checkbox" checked={mostraDismessi} onChange={e => setMostraDismessi(e.target.checked)} className="rounded" /> Mostra dismessi
           </label>
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input type="checkbox" checked={mostraDaAprire} onChange={e => setMostraDaAprire(e.target.checked)} className="rounded" />
-            Mostra da aprire
+            <input type="checkbox" checked={mostraDaAprire} onChange={e => setMostraDaAprire(e.target.checked)} className="rounded" /> Mostra da aprire
           </label>
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={nascondiScaduti}
-              onChange={e => setNascondiScaduti(e.target.checked)}
-              className="rounded"
-            />
-            Escludi scaduti
+            <input type="checkbox" checked={nascondiScaduti} onChange={e => setNascondiScaduti(e.target.checked)} className="rounded" /> Escludi scaduti
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none text-amber-700">
-            <input
-              type="checkbox"
-              checked={soloIncompleti}
-              onChange={e => setSoloIncompleti(e.target.checked)}
-              className="rounded accent-amber-500"
-            />
-            Solo incompleti
+            <input type="checkbox" checked={soloIncompleti} onChange={e => setSoloIncompleti(e.target.checked)} className="rounded accent-amber-500" /> Solo incompleti
           </label>
         </div>
       </div>
@@ -831,179 +748,117 @@ export function CompostiPage() {
         onClickAttenzione={() => { if (filtroAttenzione) { setFiltroAttenzione(false) } else { setFiltroStati([]); setFiltroInScadenza(false); setFiltroAttenzione(true) } }}
       />
 
-      {/* ─── Barra bulk actions ────────────────────────────────────────────── */}
+      {/* ─── Barra bulk actions ───────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-3 py-2 my-2 rounded-md bg-muted border text-sm min-h-[44px]">
         <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
-          <input
-            type="checkbox"
-            className="rounded"
+          <input type="checkbox" className="rounded"
             checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
-            onChange={e =>
-              setSelectedIds(e.target.checked ? new Set(filtered.map(c => c.id)) : new Set())
-            }
+            onChange={e => setSelectedIds(e.target.checked ? new Set(filtered.map(c => c.id)) : new Set())}
           />
           <span className="text-muted-foreground text-xs">
-            {nSel > 0
-              ? `${selLabel} selezionat${nSel === 1 ? 'o' : 'i'}`
-              : `Seleziona tutti (${filtered.length})`}
+            {nSel > 0 ? `${selLabel} selezionat${nSel === 1 ? 'o' : 'i'}` : `Seleziona tutti (${filtered.length})`}
           </span>
         </label>
-
         {nSel > 0 && (
           <>
             <div className="border-l h-4 mx-1 shrink-0" />
             <div className="flex items-center gap-1.5 flex-wrap">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => {
-                  const first = composti.find(c => selectedIds.has(c.id))
-                  if (first) handleNewLotto(first)
-                }}
-              >
+              <Button size="sm" variant="outline" className="h-7 text-xs"
+                onClick={() => { const first = composti.find(c => selectedIds.has(c.id)); if (first) handleNewLotto(first) }}>
                 <Copy className="h-3 w-3 mr-1" /> Nuovo lotto
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => setBulkStoriaAction('Rivalidazione')}
-              >
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setBulkStoriaAction('Rivalidazione')}>
                 <RotateCcw className="h-3 w-3 mr-1" /> Rivalidazione
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => setBulkStoriaAction('Dismissione')}
-              >
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setBulkStoriaAction('Dismissione')}>
                 <Archive className="h-3 w-3 mr-1" /> Dismetti
               </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="h-7 text-xs"
-                onClick={() => setBulkDeleteOpen(true)}
-              >
+              <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => setBulkDeleteOpen(true)}>
                 <Trash2 className="h-3 w-3 mr-1" /> Cancella
               </Button>
             </div>
-            <button
-              className="ml-auto text-xs text-muted-foreground hover:text-foreground shrink-0"
-              onClick={() => setSelectedIds(new Set())}
-            >
+            <button className="ml-auto text-xs text-muted-foreground hover:text-foreground shrink-0" onClick={() => setSelectedIds(new Set())}>
               Deseleziona
             </button>
           </>
         )}
       </div>
-      {/* ─────────────────────────────────────────────────────────────────────── */}
 
       <CompostiTable
-        data={filtered}
-        onRowClick={handleRowClick}
-        onNewLotto={handleNewLotto}
-        onRivalida={handleRivalida}
-        onDismetti={handleDismetti}
-        onRefresh={load}
-        onOpenStorico={handleOpenStorico}
-        onOpenPreparazioni={handleOpenPreparazioni}
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        colVisible={colVisible}
-        colFilters={colFilters}
-        onColFilter={handleColFilter}
+        data={filtered} onRowClick={handleRowClick} onNewLotto={handleNewLotto}
+        onRivalida={handleRivalida} onDismetti={handleDismetti} onRefresh={load}
+        onOpenStorico={handleOpenStorico} onOpenPreparazioni={handleOpenPreparazioni}
+        selectedIds={selectedIds} onSelectionChange={setSelectedIds}
+        colVisible={colVisible} colFilters={colFilters} onColFilter={handleColFilter}
       />
 
-      <CompostoForm
-        open={formOpen}
-        onClose={() => { setFormOpen(false); setTemplate(null) }}
-        composto={editComposto}
-        template={template}
-        onSave={() => { load(); setTemplate(null) }}
-      />
-      <MixPesticidiForm
-        open={mixOpen}
-        onClose={() => { setMixOpen(false); setMixTemplate(null) }}
-        onSave={load}
-        mixTemplate={mixTemplate}
-      />
+      <CompostoForm open={formOpen} onClose={() => { setFormOpen(false); setTemplate(null) }} composto={editComposto} template={template} onSave={() => { load(); setTemplate(null) }} />
+      <MixPesticidiForm open={mixOpen} onClose={() => { setMixOpen(false); setMixTemplate(null) }} onSave={load} mixTemplate={mixTemplate} />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onSave={load} />
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} filteredIds={filtered.map((c: any) => c.id)} selectedIds={nSel > 0 ? [...selectedIds] : []} />
       <EtichetteDialog open={etichetteOpen} onClose={() => setEtichetteOpen(false)} filteredIds={nSel > 0 ? [...selectedIds] : filtered.map((c: any) => c.id)} />
       <CompostoPanel
-        key={panelId ?? 'none'}
-        compostoId={panelId}
+        key={panelId ?? 'none'} compostoId={panelId}
         onClose={() => { setPanelId(null); setPanelTab('dettaglio') }}
-        onEdit={handleEdit}
-        onDelete={handleRequestDelete}
-        onNewLotto={handleNewLotto}
-        onRefreshList={load}
-        defaultTab={panelTab}
+        onEdit={handleEdit} onDelete={handleRequestDelete} onNewLotto={handleNewLotto}
+        onRefreshList={load} defaultTab={panelTab}
       />
 
       {/* StoriaDialog singolo */}
       <StoriaDialog
-        open={storiaTarget !== null}
-        onOpenChange={v => !v && setStoriaTarget(null)}
-        compostoId={storiaTarget?.id ?? null}
-        compostoNome={storiaTarget?.nome}
-        tipo={storiaTarget?.tipo ?? ''}
-        onSaved={() => { load(); setStoriaTarget(null) }}
+        open={storiaTarget !== null} onOpenChange={v => !v && setStoriaTarget(null)}
+        compostoId={storiaTarget?.id ?? null} compostoNome={storiaTarget?.nome}
+        tipo={storiaTarget?.tipo ?? ''} onSaved={() => { load(); setStoriaTarget(null) }}
       />
 
-      {/* StoriaDialog bulk */}
+      {/* StoriaDialog bulk — isBulk=true oscura lotto/scadenza */}
       <StoriaDialog
-        open={bulkStoriaAction !== null}
-        onOpenChange={v => !v && setBulkStoriaAction(null)}
+        open={bulkStoriaAction !== null} onOpenChange={v => !v && setBulkStoriaAction(null)}
         compostoId={[...selectedIds][0] ?? null}
         compostoNome={`${selLabel} selezionat${nSel === 1 ? 'o' : 'i'}`}
-        tipo={bulkStoriaAction ?? ''}
-        onSaved={() => {}}
-        onSavedBulk={handleBulkStoria}
+        tipo={bulkStoriaAction ?? ''} onSaved={() => {}} onSavedBulk={handleBulkStoria}
+        isBulk={true}
       />
 
       {/* ConfirmDialog eliminazione singola */}
       <ConfirmDialog
-        open={deleteId !== null}
-        title="Elimina composto"
-        message={
-          deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1
-            ? `Questo composto fa parte di un mix (lotto: ${deleteMixInfo.lotto}). Verranno eliminati ${deleteMixInfo.count} composti con tutti i dati correlati. Continuare?`
-            : 'Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?'
-        }
-        confirmLabel="Elimina"
-        variant="danger"
-        onConfirm={handleDelete}
+        open={deleteId !== null} title="Elimina composto"
+        message={deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1
+          ? `Questo composto fa parte di un mix (lotto: ${deleteMixInfo.lotto}). Verranno eliminati ${deleteMixInfo.count} composti con tutti i dati correlati. Continuare?`
+          : 'Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?'}
+        confirmLabel="Elimina" variant="danger" onConfirm={handleDelete}
         onCancel={() => { setDeleteId(null); setDeleteMixInfo(null) }}
       />
 
       {/* ConfirmDialog eliminazione bulk */}
       <ConfirmDialog
-        open={bulkDeleteOpen}
-        title="Elimina composti selezionati"
+        open={bulkDeleteOpen} title="Elimina composti selezionati"
         message={`Stai per eliminare ${selLabel} e tutti i dati correlati (preparazioni, storia, associazioni metodi). L'operazione non è reversibile.`}
-        confirmLabel={`Elimina ${selLabel}`}
-        variant="danger"
-        onConfirm={handleBulkDelete}
-        onCancel={() => setBulkDeleteOpen(false)}
+        confirmLabel={`Elimina ${selLabel}`} variant="danger"
+        onConfirm={handleBulkDelete} onCancel={() => setBulkDeleteOpen(false)}
       />
 
-      {/* ConfirmDialog mix-scope — appare in sequenza per ogni mix parzialmente selezionato */}
+      {/* Dialog mix-scope — usa MixRivalidaDialog per rivalidazioni, ConfirmDialog per delete/dismiss */}
       {currentMixScope && (
-        <ConfirmDialog
-          open={true}
-          title="Mix parzialmente selezionato"
-          message={`Hai selezionato ${currentMixScope.selectedIds.length} di ${currentMixScope.totalCount} componenti del mix lotto "${currentMixScope.mixLotto}". Vuoi applicare l'azione solo ai ${currentMixScope.selectedIds.length} selezionati o a tutti i ${currentMixScope.totalCount} componenti del mix?`}
-          confirmLabel={`Tutti i ${currentMixScope.totalCount} del mix`}
-          secondaryAction={{
-            label: `Solo i ${currentMixScope.selectedIds.length} selezionati`,
-            onClick: () => handleMixScopeDecision('selected'),
-          }}
-          onConfirm={() => handleMixScopeDecision('all')}
-          onCancel={handleMixScopeCancel}
-        />
+        mixScopeIsRivalidazione ? (
+          <MixRivalidaDialog
+            item={currentMixScope}
+            isBulkRivalidazione={true}
+            onConfirmAll={extra => handleMixScopeDecision('all', extra)}
+            onConfirmSelected={extra => handleMixScopeDecision('selected', extra)}
+            onCancel={handleMixScopeCancel}
+          />
+        ) : (
+          <ConfirmDialog
+            open={true}
+            title="Mix parzialmente selezionato"
+            message={`Hai selezionato ${currentMixScope.selectedIds.length} di ${currentMixScope.totalCount} componenti del mix lotto "${currentMixScope.mixLotto}". Vuoi applicare l'azione solo ai ${currentMixScope.selectedIds.length} selezionati o a tutti i ${currentMixScope.totalCount} componenti del mix?`}
+            confirmLabel={`Tutti i ${currentMixScope.totalCount} del mix`}
+            secondaryAction={{ label: `Solo i ${currentMixScope.selectedIds.length} selezionati`, onClick: () => handleMixScopeDecision('selected', {}) }}
+            onConfirm={() => handleMixScopeDecision('all', {})}
+            onCancel={handleMixScopeCancel}
+          />
+        )
       )}
     </div>
   )

@@ -233,6 +233,13 @@ export const CompostiTable = memo(function CompostiTable({
         render: (v) => v || '—',
       },
       {
+        key: 'accreditamento_crm',
+        label: 'Accreditamento',
+        filterValue: colFilters?.['accreditamento_crm'] ?? '',
+        onFilterChange: onColFilter ? (v) => onColFilter('accreditamento_crm', v) : undefined,
+        render: (v) => v || '—',
+      },
+      {
         key: 'work_standard',
         label: 'Work',
         filterValue: colFilters?.['work_standard'] ?? '',

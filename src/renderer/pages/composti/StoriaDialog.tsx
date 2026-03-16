@@ -15,9 +15,12 @@ interface StoriaDialogProps {
   tipo: 'Rivalidazione' | 'Dismissione' | ''
   onSaved: () => void
   onSavedBulk?: (payload: any) => Promise<void>
+  isBulk?: boolean
 }
 
-export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tipo, onSaved, onSavedBulk }: StoriaDialogProps) {
+export function StoriaDialog({
+  open, onOpenChange, compostoId, compostoNome, tipo, onSaved, onSavedBulk, isBulk,
+}: StoriaDialogProps) {
   const [data, setData] = useState(new Date().toISOString().split('T')[0])
   const [note, setNote] = useState('')
   const [nRegistroQc, setNRegistroQc] = useState('')
@@ -26,23 +29,24 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
   const [lottiValidi, setLottiValidi] = useState<any[]>([])
   const [nuovaScadenza, setNuovaScadenza] = useState('')
 
-  useEffect(() => {
-    if (open && compostoId) {
-      setData(new Date().toISOString().split('T')[0])
-      setNote('')
-      setNRegistroQc('')
-      setBatchAnalitico('')
-      setLottoCrmValido('')
-      setNuovaScadenza('')
+  // In bulk rivalidazione, lotto CRM e nuova scadenza si specificano
+  // per-mix nel dialog mix-scope — qui vengono nascosti.
+  const showLottoScadenza = tipo === 'Rivalidazione' && !isBulk
 
-      if (tipo === 'Rivalidazione') {
-        window.electronAPI.invoke('composti:lotti-validi', compostoId)
-          .then(lotti => setLottiValidi(lotti as any[]))
-      } else {
-        setLottiValidi([])
-      }
+  useEffect(() => {
+    if (!open) return
+    setData(new Date().toISOString().split('T')[0])
+    setNote('')
+    setNRegistroQc('')
+    setBatchAnalitico('')
+    setLottoCrmValido('')
+    setNuovaScadenza('')
+    setLottiValidi([])
+    if (showLottoScadenza && compostoId) {
+      window.electronAPI.invoke('composti:lotti-validi', compostoId)
+        .then(lotti => setLottiValidi(lotti as any[]))
     }
-  }, [open, compostoId, tipo])
+  }, [open, compostoId, tipo, isBulk])
 
   const handleConfirm = async () => {
     if (!tipo) return
@@ -52,15 +56,13 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
       note: note || undefined,
       n_registro_qc: nRegistroQc || undefined,
       batch_analitico: batchAnalitico || undefined,
-      lotto_crm_valido: lottoCrmValido || undefined,
-      nuova_scadenza: nuovaScadenza || undefined,
+      lotto_crm_valido: showLottoScadenza ? (lottoCrmValido || undefined) : undefined,
+      nuova_scadenza: showLottoScadenza ? (nuovaScadenza || undefined) : undefined,
     }
     if (onSavedBulk) {
-      // Modalità bulk: delega al parent che itera su tutti gli ID selezionati
       await onSavedBulk(payload)
       onOpenChange(false)
     } else {
-      // Modalità singolo (comportamento originale)
       if (!compostoId) return
       await compostiApi.addStoria(compostoId, payload)
       onOpenChange(false)
@@ -73,8 +75,11 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="font-heading">{tipo}</DialogTitle>
-          {compostoNome && (
-            <p className="text-sm text-muted-foreground">{compostoNome}</p>
+          {compostoNome && <p className="text-sm text-muted-foreground">{compostoNome}</p>}
+          {isBulk && tipo === 'Rivalidazione' && (
+            <p className="text-xs text-blue-600 mt-1">
+              Lotto CRM e nuova scadenza si specificano per ogni mix nel passo successivo.
+            </p>
           )}
         </DialogHeader>
 
@@ -94,53 +99,59 @@ export function StoriaDialog({ open, onOpenChange, compostoId, compostoNome, tip
                 <Label className="text-xs">Batch analitico</Label>
                 <Input value={batchAnalitico} onChange={e => setBatchAnalitico(e.target.value)} placeholder="es. B2024-03-15" />
               </div>
-              <div>
-                <Label className="text-xs">
-                  Lotto CRM valido
-                  {lottiValidi.length > 0 && (
-                    <span className="ml-1 text-muted-foreground font-normal">
-                      ({lottiValidi.length} disponibil{lottiValidi.length === 1 ? 'e' : 'i'})
-                    </span>
-                  )}
-                </Label>
-                {lottiValidi.length > 0 && (
-                  <Select value={lottoCrmValido || '_manual'} onValueChange={v => setLottoCrmValido(v === '_manual' ? '' : v)}>
-                    <SelectTrigger><SelectValue placeholder="Seleziona lotto..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_manual">— Inserisci manualmente —</SelectItem>
-                      {lottiValidi.map((l: any) => (
-                        <SelectItem key={l.id} value={l.lotto || String(l.id)}>
-                          <span className="font-mono text-xs">
-                            {l.lotto || 'N/D'}
-                            {l.scadenza_prodotto && <span className="text-muted-foreground ml-2">scad. {l.scadenza_prodotto}</span>}
-                            {l.forma_commerciale && <span className="text-muted-foreground ml-1">· {l.forma_commerciale}</span>}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                {(lottiValidi.length === 0 || lottoCrmValido === '') && (
-                  <Input
-                    className={lottiValidi.length > 0 ? 'mt-1' : ''}
-                    value={lottoCrmValido}
-                    onChange={e => setLottoCrmValido(e.target.value)}
-                    placeholder="es. FN0872121"
-                  />
-                )}
-              </div>
 
-              <div>
-                <Label className="text-xs">Nuova data di scadenza</Label>
-                <Input
-                  type="date"
-                  value={nuovaScadenza}
-                  onChange={e => setNuovaScadenza(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Se compilato, aggiorna la scadenza del composto e compare nello storico.
-                </p>
-              </div>
+              {showLottoScadenza ? (
+                <>
+                  <div>
+                    <Label className="text-xs">
+                      Lotto CRM valido
+                      {lottiValidi.length > 0 && (
+                        <span className="ml-1 text-muted-foreground font-normal">
+                          ({lottiValidi.length} disponibil{lottiValidi.length === 1 ? 'e' : 'i'})
+                        </span>
+                      )}
+                    </Label>
+                    {lottiValidi.length > 0 && (
+                      <Select value={lottoCrmValido || '_manual'} onValueChange={v => setLottoCrmValido(v === '_manual' ? '' : v)}>
+                        <SelectTrigger><SelectValue placeholder="Seleziona lotto..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_manual">— Inserisci manualmente —</SelectItem>
+                          {lottiValidi.map((l: any) => (
+                            <SelectItem key={l.id} value={l.lotto || String(l.id)}>
+                              <span className="font-mono text-xs">
+                                {l.lotto || 'N/D'}
+                                {l.scadenza_prodotto && <span className="text-muted-foreground ml-2">scad. {l.scadenza_prodotto}</span>}
+                                {l.forma_commerciale && <span className="text-muted-foreground ml-1">· {l.forma_commerciale}</span>}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {(lottiValidi.length === 0 || lottoCrmValido === '') && (
+                      <Input
+                        className={lottiValidi.length > 0 ? 'mt-1' : ''}
+                        value={lottoCrmValido}
+                        onChange={e => setLottoCrmValido(e.target.value)}
+                        placeholder="es. FN0872121"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs">Nuova data di scadenza</Label>
+                    <Input type="date" value={nuovaScadenza} onChange={e => setNuovaScadenza(e.target.value)} />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Se compilato, aggiorna la scadenza del composto e compare nello storico.
+                    </p>
+                  </div>
+                </>
+              ) : isBulk ? (
+                <div className="rounded-md border border-dashed border-blue-200 bg-blue-50 px-3 py-2">
+                  <p className="text-xs text-blue-600">
+                    Lotto CRM valido e nuova scadenza — da specificare per ogni mix nel passo successivo.
+                  </p>
+                </div>
+              ) : null}
             </>
           )}
 

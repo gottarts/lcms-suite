@@ -1,7 +1,7 @@
 import {
-  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
-} from '@/components/ui/alert-dialog'
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 interface ConfirmDialogProps {
@@ -29,30 +29,43 @@ export function ConfirmDialog({
   secondaryAction,
 }: ConfirmDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={v => !v && onCancel()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{message}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel}>Annulla</AlertDialogCancel>
+    // FIX: Dialog invece di AlertDialog.
+    // AlertDialog di Radix chiama onOpenChange(false) su ogni click di
+    // AlertDialogAction — questo triggera onCancel() (via !v && onCancel())
+    // DOPO il click su "Tutti del mix" o "Solo i selezionati", azzerando
+    // pendingBulkOpRef e la coda mix-scope prima che execStoria girasse.
+    // Con Dialog standard i bottoni non chiudono il dialog automaticamente:
+    // la chiusura è controllata solo da onConfirm/onCancel/secondaryAction.
+    <Dialog open={open} onOpenChange={v => !v && onCancel()}>
+      <DialogContent
+        className="max-w-lg"
+        onPointerDownOutside={e => e.preventDefault()}
+        onEscapeKeyDown={onCancel}
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{message}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Annulla
+          </Button>
           {secondaryAction && (
-            <AlertDialogAction
+            <Button
+              variant="secondary"
               onClick={secondaryAction.onClick}
-              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
             >
               {secondaryAction.label}
-            </AlertDialogAction>
+            </Button>
           )}
-          <AlertDialogAction
-            onClick={onConfirm}
+          <Button
             className={cn(variant === 'danger' && 'bg-destructive text-destructive-foreground hover:bg-destructive/90')}
+            onClick={onConfirm}
           >
             {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
