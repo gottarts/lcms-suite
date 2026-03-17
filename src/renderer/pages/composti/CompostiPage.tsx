@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatusBadge, computeStato, isIncompleto } from '@/components/shared/StatusBadge'
 import { CompostiStats } from './CompostiStats'
 import { Plus, Search, FlaskConical, Filter, Upload, Download, ChevronDown,
-         Copy, RotateCcw, Archive, Trash2, Columns } from 'lucide-react'
+         Copy, RotateCcw, Archive, Trash2, Columns, GripVertical } from 'lucide-react'
 import { ImportDialog } from './ImportDialog'
 import { ExportDialog } from './ExportDialog'
 import { EtichetteDialog } from './EtichetteDialog'
@@ -364,8 +364,28 @@ export function CompostiPage() {
       return saved ? { ...DEFAULT_COL_VISIBLE, ...JSON.parse(saved) } : DEFAULT_COL_VISIBLE
     } catch { return DEFAULT_COL_VISIBLE }
   })
+
+  const DEFAULT_COL_ORDER = COL_DEFS.map(d => d.key)
+  const [colOrder, setColOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('composti-col-order')
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved)
+        const extra = DEFAULT_COL_ORDER.filter(k => !parsed.includes(k))
+        return [...parsed.filter(k => DEFAULT_COL_ORDER.includes(k)), ...extra]
+      }
+    } catch {}
+    return DEFAULT_COL_ORDER
+  })
+
+  const handleColReorder = useCallback((newOrder: string[]) => {
+    setColOrder(newOrder)
+    localStorage.setItem('composti-col-order', JSON.stringify(newOrder))
+  }, [])
+
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
+  const dragKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -386,7 +406,9 @@ export function CompostiPage() {
   const resetColVisible = useCallback(() => {
     setColVisible(DEFAULT_COL_VISIBLE)
     localStorage.removeItem('composti-col-visible')
-  }, [])
+    setColOrder(DEFAULT_COL_ORDER)
+    localStorage.removeItem('composti-col-order')
+  }, [DEFAULT_COL_ORDER])
 
   const nascosteCount = useMemo(
     () => COL_DEFS.filter(d => colVisible[d.key] === false).length,
@@ -857,16 +879,50 @@ export function CompostiPage() {
               )}
             </Button>
             {colMenuOpen && (
-              <div className="absolute right-0 z-50 mt-1 w-52 rounded-md border bg-popover shadow-md p-2">
-                <div className="text-xs font-medium text-muted-foreground px-1 mb-2">Colonne visibili</div>
-                {COL_DEFS.map(({ key, label }) => (
-                  <label key={key} className="flex items-center gap-2 px-1 py-1 text-sm cursor-pointer hover:bg-accent rounded select-none">
-                    <input type="checkbox" checked={colVisible[key] !== false} onChange={e => handleColVisibleChange(key, e.target.checked)} />
-                    {label}
-                  </label>
-                ))}
+              <div className="absolute right-0 z-50 mt-1 w-56 rounded-md border bg-popover shadow-md p-2">
+                <div className="text-xs font-medium text-muted-foreground px-1 mb-1">
+                  Colonne visibili — trascina per riordinare
+                </div>
+                {colOrder.map((key) => {
+                  const def = COL_DEFS.find(d => d.key === key)
+                  if (!def) return null
+                  return (
+                    <div
+                      key={key}
+                      draggable
+                      onDragStart={() => { dragKeyRef.current = key }}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => {
+                        const from = dragKeyRef.current
+                        if (!from || from === key) return
+                        const next = [...colOrder]
+                        const fromIdx = next.indexOf(from)
+                        const toIdx = next.indexOf(key)
+                        next.splice(fromIdx, 1)
+                        next.splice(toIdx, 0, from)
+                        handleColReorder(next)
+                        dragKeyRef.current = null
+                      }}
+                      onDragEnd={() => { dragKeyRef.current = null }}
+                      className="flex items-center gap-2 px-1 py-1 text-sm rounded hover:bg-accent cursor-default select-none group"
+                    >
+                      <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab active:cursor-grabbing" />
+                      <label className="flex items-center gap-2 flex-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={colVisible[key] !== false}
+                          onChange={e => handleColVisibleChange(key, e.target.checked)}
+                        />
+                        {def.label}
+                      </label>
+                    </div>
+                  )
+                })}
                 <div className="border-t mt-2 pt-2">
-                  <button className="w-full text-xs text-muted-foreground px-1 py-1 hover:text-foreground text-left" onClick={resetColVisible}>
+                  <button
+                    className="w-full text-xs text-muted-foreground px-1 py-1 hover:text-foreground text-left"
+                    onClick={resetColVisible}
+                  >
                     Ripristina default
                   </button>
                 </div>
@@ -1026,7 +1082,8 @@ export function CompostiPage() {
         onRivalida={handleRivalida} onDismetti={handleDismetti} onRefresh={load}
         onOpenStorico={handleOpenStorico} onOpenPreparazioni={handleOpenPreparazioni}
         selectedIds={selectedIds} onSelectionChange={setSelectedIds}
-        colVisible={colVisible} colFilters={colFilters} onColFilter={handleColFilter}
+        colVisible={colVisible} colOrder={colOrder}
+        colFilters={colFilters} onColFilter={handleColFilter}
       />
 
       <CompostoForm open={formOpen} onClose={() => { setFormOpen(false); setTemplate(null) }} composto={editComposto} template={template} onSave={() => { load(); setTemplate(null) }} />
