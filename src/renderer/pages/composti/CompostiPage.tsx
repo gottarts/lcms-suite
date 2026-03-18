@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { data, useLocation } from 'react-router-dom'
 import { compostiApi } from '@/lib/api'
 import { CompostiTable } from './CompostiTable'
 import { CompostoForm } from './CompostoForm'
@@ -44,6 +44,9 @@ const COL_DEFS: { key: string; label: string }[] = [
   { key: 'codice_interno',   label: 'Codice' },
   { key: 'classe',           label: 'Classe' },
   { key: 'forma',            label: 'Forma' },
+  { key: 'data_apertura',    label: 'Apertura' },
+  { key: 'concentrazione',   label: 'Concentrazione' },
+  { key: 'purezza',          label: 'Purezza' },
   { key: 'produttore',       label: 'Produttore' },
   { key: 'lotto',            label: 'Lotto' },
   { key: 'scadenza_prodotto',label: 'Scadenza' },
@@ -65,6 +68,9 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
   codice_interno:    true,
   classe:            true,
   forma:             true,
+  data_apertura:      false,
+  concentrazione:    false,
+  purezza:           false,
   produttore:        true,
   lotto:             true,
   scadenza_prodotto: true,

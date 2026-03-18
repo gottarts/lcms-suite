@@ -6,7 +6,8 @@
 
 
 
-questione ordine delle tabelle.
+ manca data di apertura , concentrazione e purezza dalle colonne selezionabili
+ 
 
 
  ## importante
