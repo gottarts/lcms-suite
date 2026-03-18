@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { preparazioniApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,8 @@ import { parseConcentrazione, UNITA_CONCENTRAZIONE, UNITA_DEFAULT } from '@/lib/
 import { PrepCalcTool } from './PrepCalcTool'
 // ET-4: import della funzione di generazione etichetta preparazione
 import { generaEtichettaPreparazione } from './EtichetteDialog'
+import { AutocompleteInput } from '@/components/shared/AutocompleteInput'
+
 
 interface PreparazioniTabProps {
   compostoId: number
@@ -27,7 +29,7 @@ interface PreparazioniTabProps {
 const EMPTY_FORM = {
   forma: '', stato: 'Attiva', concentrazione: '', unita_conc: UNITA_DEFAULT, solvente: '',
   flacone: '', operatore: '', data_prep: '', scadenza: '',
-  posizione: '', note: '',
+  ubicazione: '', stoccaggio: '', note: '',
   massa_pesata: '', purezza_usata: '', densita_solvente: null,
   modalita_aggiunta: '', concentrazione_reale: null, concentrazione_target: null,
 }
@@ -64,6 +66,25 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
   const [dismissDate, setDismissDate] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [filtroStato, setFiltroStato] = useState<'tutte' | 'attive' | 'scadute'>('attive')
+  const [suggestSolvente, setSuggestSolvente] = useState<string[]>([])
+  const [suggestOperatore, setSuggestOperatore] = useState<string[]>([])
+  const [suggestUbicazione, setSuggestUbicazione] = useState<string[]>([])
+  const [suggestStoccaggio, setSuggestStoccaggio] = useState<string[]>([])
+
+  useEffect(() => {
+    window.electronAPI.invoke('anagrafiche:list').then((result: unknown) => {
+      const anagrafiche = result as any[]
+      const get = (nome: string) =>
+        anagrafiche.find((a: any) =>
+          a.nome.toLowerCase() === nome.toLowerCase()
+        )?.voci?.map((v: any) => v.valore) ?? []
+
+      setSuggestSolvente(get('solventi'))
+      setSuggestOperatore(get('operatori'))
+      setSuggestUbicazione(get('ubicazioni'))
+      setSuggestStoccaggio(get('posizioni stoccaggio'))
+    })
+  }, [])
 
   const openNew = () => {
     setEditPrep(null)
@@ -78,7 +99,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
       concentrazione: p.concentrazione || '', unita_conc: p.unita_conc || UNITA_DEFAULT, solvente: p.solvente || '',
       flacone: p.flacone || '', operatore: p.operatore || '',
       data_prep: p.data_prep || '', scadenza: p.scadenza || '',
-      posizione: p.posizione || '', note: p.note || '',
+      ubicazione: p.ubicazione || '', stoccaggio: p.stoccaggio || '', note: p.note || '',
       massa_pesata: p.massa_pesata || '', purezza_usata: p.purezza_usata || '',
       densita_solvente: p.densita_solvente ?? null,
       modalita_aggiunta: p.modalita_aggiunta || '',
@@ -100,7 +121,8 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
       operatore: form.operatore || null,
       data_prep: form.data_prep || null,
       scadenza: form.scadenza || null,
-      posizione: form.posizione || null,
+      ubicazione: form.ubicazione || null,
+      stoccaggio: form.stoccaggio || null,
       note: form.note || null,
       massa_pesata: form.massa_pesata ? Number(form.massa_pesata) : null,
       purezza_usata: form.purezza_usata ? Number(form.purezza_usata) : null,
@@ -226,7 +248,8 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
               <Field label="Operatore" value={p.operatore} />
               <Field label="Data Prep." value={formatDate(p.data_prep)} />
               <Field label="Scadenza" value={formatDate(p.scadenza)} className={expiring ? 'text-amber-600 font-semibold' : undefined} />
-              <Field label="Posizione" value={p.posizione} className="col-span-2" />
+              <Field label="Ubicazione" value={p.ubicazione} className="col-span-2" />
+              <Field label="Stoccaggio" value={p.stoccaggio} className="col-span-2" />
               {p.note && <Field label="Note" value={p.note} className="col-span-2" />}
               {isDismessa && p.data_dismissione && (
                 <Field label="Data dismissione" value={formatDate(p.data_dismissione)} className="col-span-2 text-destructive" />
@@ -286,23 +309,74 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Concentrazione</Label><Input value={form.concentrazione} onChange={e => setForm(f => ({ ...f, concentrazione: e.target.value }))} /></div>
-              <div><Label className="text-xs">Unità</Label><Select value={form.unita_conc || UNITA_DEFAULT} onValueChange={v => setForm(f => ({ ...f, unita_conc: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {UNITA_CONCENTRAZIONE.map(u => (
-                    <SelectItem key={u} value={u}>{u}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select></div>
-              <div><Label className="text-xs">Volume soluzione (mL)</Label><Input value={form.flacone} onChange={e => setForm(f => ({ ...f, flacone: e.target.value }))} placeholder="es. 1.5" /></div>
-              <div><Label className="text-xs">Solvente</Label><Input value={form.solvente} onChange={e => setForm(f => ({ ...f, solvente: e.target.value }))} /></div>
-              <div><Label className="text-xs">Operatore</Label><Input value={form.operatore} onChange={e => setForm(f => ({ ...f, operatore: e.target.value }))} /></div>
-              <div><Label className="text-xs">Data Preparazione</Label><Input type="date" value={form.data_prep} onChange={e => setForm(f => ({ ...f, data_prep: e.target.value }))} /></div>
-              <div><Label className="text-xs">Scadenza</Label><Input type="date" value={form.scadenza} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value }))} /></div>
+              <div>
+                <Label className="text-xs">Concentrazione</Label>
+                <Input value={form.concentrazione} onChange={e => setForm(f => ({ ...f, concentrazione: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">Unità</Label>
+                <Select value={form.unita_conc || UNITA_DEFAULT} onValueChange={v => setForm(f => ({ ...f, unita_conc: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {UNITA_CONCENTRAZIONE.map(u => (
+                      <SelectItem key={u} value={u}>{u}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Volume soluzione (mL)</Label>
+                <Input value={form.flacone} onChange={e => setForm(f => ({ ...f, flacone: e.target.value }))} placeholder="es. 1.5" />
+              </div>
+              <div>
+                <Label className="text-xs">Solvente</Label>
+                <AutocompleteInput
+                  value={form.solvente}
+                  onChange={v => setForm(f => ({ ...f, solvente: v }))}
+                  suggestions={suggestSolvente}
+                  placeholder="es. MeOH"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Operatore</Label>
+                <AutocompleteInput
+                  value={form.operatore}
+                  onChange={v => setForm(f => ({ ...f, operatore: v }))}
+                  suggestions={suggestOperatore}
+                  placeholder="es. Mario Rossi"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Data Preparazione</Label>
+                <Input type="date" value={form.data_prep} onChange={e => setForm(f => ({ ...f, data_prep: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">Scadenza</Label>
+                <Input type="date" value={form.scadenza} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value }))} />
+              </div>
             </div>
-            <div><Label className="text-xs">Posizione</Label><Input value={form.posizione} onChange={e => setForm(f => ({ ...f, posizione: e.target.value }))} placeholder="es. Freezer -20C, Box 3" /></div>
-            <div><Label className="text-xs">Note</Label><Textarea value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} rows={2} /></div>
+            <div>
+              <Label className="text-xs">Ubicazione</Label>
+              <AutocompleteInput
+                value={form.ubicazione}
+                onChange={v => setForm(f => ({ ...f, ubicazione: v }))}
+                suggestions={suggestUbicazione}
+                placeholder="es. Frigo 1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Stoccaggio</Label>
+              <AutocompleteInput
+                value={form.stoccaggio}
+                onChange={v => setForm(f => ({ ...f, stoccaggio: v }))}
+                suggestions={suggestStoccaggio}
+                placeholder="es. -20°C"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Note</Label>
+              <Textarea value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} rows={2} />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setFormOpen(false)}>Annulla</Button>

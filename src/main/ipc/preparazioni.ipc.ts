@@ -20,7 +20,8 @@ export function registerPreparazioniIpc(): void {
       data_prep: data.data_prep ?? null,
       scadenza: data.scadenza ?? null,
       operatore: data.operatore ?? null,
-      posizione: data.posizione ?? null,
+      ubicazione: data.ubicazione ?? null,
+      stoccaggio: data.stoccaggio ?? null,
       note: data.note ?? null,
       massa_pesata: data.massa_pesata ?? null,
       purezza_usata: data.purezza_usata ?? null,
@@ -32,12 +33,12 @@ export function registerPreparazioniIpc(): void {
     const result = getDb().prepare(
       `INSERT INTO preparazioni (
          composto_id, forma, stato, flacone, concentrazione, unita_conc, solvente,
-         data_prep, scadenza, operatore, posizione, note,
+         data_prep, scadenza, operatore, ubicazione, stoccaggio, note,
          massa_pesata, purezza_usata, densita_solvente, modalita_aggiunta,
          concentrazione_reale, concentrazione_target
        ) VALUES (
          @composto_id, @forma, @stato, @flacone, @concentrazione, @unita_conc, @solvente,
-         @data_prep, @scadenza, @operatore, @posizione, @note,
+         @data_prep, @scadenza, @operatore, @ubicazione, @stoccaggio, @note,
          @massa_pesata, @purezza_usata, @densita_solvente, @modalita_aggiunta,
          @concentrazione_reale, @concentrazione_target
        )`
@@ -57,7 +58,8 @@ export function registerPreparazioniIpc(): void {
       data_prep: data.data_prep ?? null,
       scadenza: data.scadenza ?? null,
       operatore: data.operatore ?? null,
-      posizione: data.posizione ?? null,
+      ubicazione: data.ubicazione ?? null,
+      stoccaggio: data.stoccaggio ?? null,
       note: data.note ?? null,
       massa_pesata: data.massa_pesata ?? null,
       purezza_usata: data.purezza_usata ?? null,
@@ -70,7 +72,7 @@ export function registerPreparazioniIpc(): void {
       `UPDATE preparazioni SET
          forma=@forma, stato=@stato, flacone=@flacone, concentrazione=@concentrazione,
          unita_conc=@unita_conc, solvente=@solvente, data_prep=@data_prep, scadenza=@scadenza,
-         operatore=@operatore, posizione=@posizione, note=@note,
+         operatore=@operatore, ubicazione=@ubicazione, stoccaggio=@stoccaggio, note=@note,
          massa_pesata=@massa_pesata, purezza_usata=@purezza_usata, densita_solvente=@densita_solvente,
          modalita_aggiunta=@modalita_aggiunta, concentrazione_reale=@concentrazione_reale,
          concentrazione_target=@concentrazione_target
