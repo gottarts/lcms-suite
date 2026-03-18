@@ -361,7 +361,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
                 value={form.ubicazione}
                 onChange={v => setForm(f => ({ ...f, ubicazione: v }))}
                 suggestions={suggestUbicazione}
-                placeholder="es. Frigo 1"
+                placeholder="es. Stanza B123"
               />
             </div>
             <div>
@@ -370,7 +370,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
                 value={form.stoccaggio}
                 onChange={v => setForm(f => ({ ...f, stoccaggio: v }))}
                 suggestions={suggestStoccaggio}
-                placeholder="es. -20°C"
+                placeholder="es. Congelatore -20°C"
               />
             </div>
             <div>

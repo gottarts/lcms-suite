@@ -4,9 +4,12 @@
 
 
 
+ pesante:
+ bisogna partire con gli schemi di preparazione delle soluzioni work. le work sono soluzioni preprate dalle solution, dalle mix e dai neat/preparati. Sarebbe bello avere nel metodo lo schema calibrazione. 
+ Mi piacerebbe farequalcosa con excalidraw che ti metto in chat
 
 
- manca data di apertura , concentrazione e purezza dalle colonne selezionabili
+ 
  
 
 
@@ -17,8 +20,7 @@
 
 
 
-rivedere rivalidazione lotti uguali e nomi uguali
-nuovo lotto non considera differenze tra solution e neat
+
  ## altri
   
  
