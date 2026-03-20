@@ -332,9 +332,6 @@ export function GrigliaAnalitiCrm({
                 </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
                   {nomi.map(n => {
-                    const analitoN = analiti.find(x => x.nome === n)
-                    const allRem   = !!analitoN && analitoN.sngIds.length > 0
-                                     && analitoN.sngIds.every(id => removedCon.has(id))
                     const mixItem  = mixItemByNome.get(n)
                     const concLabel = mixItem?.cv ? ` · ${mixItem.cv} mg/L` : ''
                     return (
@@ -342,8 +339,6 @@ export function GrigliaAnalitiCrm({
                         fontSize:9, fontFamily:'IBM Plex Mono, monospace',
                         background:C.mix.chip, color:C.mix.text,
                         borderRadius:2, padding:'1px 4px',
-                        opacity: allRem ? 0.3 : 1,
-                        textDecoration: allRem ? 'line-through' : undefined,
                       }}>{n}{concLabel}</span>
                     )
                   })}
@@ -375,7 +370,6 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
   const [volFin,      setVolFin]     = useState('')
   const [solv,        setSolv]       = useState('MeOH')
   const [validita,    setValidita]   = useState('')
-  const [op,          setOp]         = useState('')
   const [customMode,  setCustomMode] = useState(false)
   // Map id → valore inserito dall'utente
   const [customVals,  setCustomVals] = useState<Map<string,string>>(new Map())
@@ -429,7 +423,7 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
       volFin: parseFloat(volFin) || 0,
       solv: solv.trim(),
       validitaMesi: validita ? parseInt(validita) : null,
-      op: op.trim(),
+      op: '',
       srcs,
       vols,
     })
@@ -570,12 +564,6 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
               style={inputStyle} />
           </div>
         </div>
-        <div style={{ marginBottom:10 }}>
-          <label style={labelStyle}>Operatore</label>
-          <input style={inputStyle} placeholder="es. Mario Rossi"
-            value={op} onChange={e => setOp(e.target.value)} />
-        </div>
-
         {/* Preview calcoli */}
         {srcs.length > 0 && parseFloat(volFin) > 0 && (
           <div style={{

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { metodiApi, strumentiApi } from '@/lib/api'
 import { MetodoCard } from './MetodoCard'
 import { MetodoForm } from './MetodoForm'
@@ -11,6 +12,7 @@ import { Plus, Search } from 'lucide-react'
 import SchemaCalibrazione from './SchemaCalibrazione'
 
 export function MetodiPage() {
+  const location = useLocation()
   const [metodi, setMetodi] = useState<any[]>([])
   const [strumenti, setStrumenti] = useState<any[]>([])
   const [search, setSearch] = useState('')
@@ -20,6 +22,14 @@ export function MetodiPage() {
   const [drawerId, setDrawerId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [schemaMetodoId, setSchemaMetodoId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const state = location.state as { schemaMetodoId?: string } | null
+    if (state?.schemaMetodoId) {
+      setSchemaMetodoId(state.schemaMetodoId)
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
 
   const load = async () => {
     const [m, s] = await Promise.all([metodiApi.list(), strumentiApi.list()])

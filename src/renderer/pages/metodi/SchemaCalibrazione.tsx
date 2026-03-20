@@ -231,12 +231,6 @@ function ColonneWork({
                       {w.validitaMesi ? `valida ${w.validitaMesi} mesi` : 'al momento'}
                     </span>
 
-                    {w.op && (
-                      <div style={{ fontSize:10, color:C.page.t2, marginTop:2,
-                                    fontFamily:'IBM Plex Mono, monospace' }}>
-                        Op: {w.op}
-                      </div>
-                    )}
 
                     {/* Chips sorgenti */}
                     <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>

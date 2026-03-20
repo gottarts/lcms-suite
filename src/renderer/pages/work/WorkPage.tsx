@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { workApi } from '@/lib/api'
 import { WorkDrawer } from './WorkDrawer'
 import { WorkForm } from './WorkForm'
@@ -10,6 +11,7 @@ import { Plus, Search, FlaskConical } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 export function WorkPage() {
+  const navigate = useNavigate()
   const [works, setWorks] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
@@ -87,6 +89,8 @@ export function WorkPage() {
               key={w.id}
               work={w}
               onClick={() => setDrawerId(w.id)}
+              onPrepara={() => setDrawerId(w.id)}
+              onGoSchema={w.primo_metodo_id ? () => navigate('/metodi', { state: { schemaMetodoId: w.primo_metodo_id } }) : undefined}
             />
           ))}
         </div>
@@ -128,7 +132,7 @@ const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
   non_preparata:{ label: 'Non preparata',className: 'text-muted-foreground' },
 }
 
-function WorkCard({ work, onClick }: { work: any; onClick: () => void }) {
+function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void }) {
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
   const statoLab = work.stato_lab as string | null | undefined
@@ -193,6 +197,21 @@ function WorkCard({ work, onClick }: { work: any; onClick: () => void }) {
           <div className="col-span-2 truncate">Op: {work.operatore}</div>
         )}
       </div>
+      {(onPrepara || onGoSchema) && (
+        <div className="flex gap-1 mt-2 pt-2 border-t border-border/50" onClick={e => e.stopPropagation()}>
+          {onPrepara && work.validita_mesi && (
+            <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 flex-1" onClick={onPrepara}>
+              <FlaskConical className="h-3 w-3 mr-1" />
+              {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}
+            </Button>
+          )}
+          {onGoSchema && (
+            <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 flex-1" onClick={onGoSchema}>
+              Schema ↗
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

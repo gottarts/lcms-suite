@@ -1,20 +1,25 @@
-# prossimi feat (cancellare quado passa al plan):
+# prossimi feat:
 
 
 
  
 
- pesante:
- bisogna partire con gli schemi di preparazione delle soluzioni work. le work sono soluzioni preprate dalle solution, dalle mix e dai neat/preparati. Sarebbe bello avere nel metodo lo schema calibrazione. 
- Mi piacerebbe farequalcosa con excalidraw che ti metto in chat
+Problemi attuali:
+card crm mix in schema calibrazione cancella i nomi dei composti di cui si elimina un signolo comìncomitante... non ha senso e devi eliminare tutte le formattazioni nella card crm mix. non hanno senso in quanto il mix deve essere solo riportato.
 
 
- 
+ Nella card work dello schema non serve Operatore che invece e necessaria nella card work in workpage (si deve segnare solo data preparazione work e operatore per quelle tracciate)
+
+ nella card delle work in workpage inserire allinterno il pulsante prepara work (uguale a quello della sidebar a destra). In piu inserire il pulsante collegameto allo schema work.
+
+
  
 
 
  ## importante
 
+
+ bisognera creare un archivio di schemi calibrazione. In piu bisognera differenziare tra scehmi per destinazione d'uso (le stesse di db composti) cioe se e uno schema per taratura, qc, taratura+qc o IS. Magari con scelta con menu a tendina. Quando si salva lo schema deve poer essere richiamabile (Magari da metodi) se uno schema va in disuso deve essere archiviabile e consultabile ma congelato.
 
 
 

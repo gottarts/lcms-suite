@@ -30,6 +30,7 @@ export function registerWorkIpc(): void {
       SELECT w.*,
         (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti,
         (SELECT COUNT(*) FROM work_metodi WHERE work_id = w.id)      AS n_metodi,
+        (SELECT metodo_id FROM work_metodi WHERE work_id = w.id LIMIT 1) AS primo_metodo_id,
         (SELECT wp.id        FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
         (SELECT wp.data_prep FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
         (SELECT wp.note      FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
