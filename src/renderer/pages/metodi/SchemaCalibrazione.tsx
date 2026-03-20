@@ -641,8 +641,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={{
-      position:'fixed', inset:0, background:C.page.bg,
-      display:'flex', flexDirection:'column', zIndex:50,
+      position:'relative', background:C.page.bg,
+      display:'flex', flexDirection:'column', height:'100%', minHeight:0,
       fontFamily:'Lato, sans-serif',
     }}>
       {/* ── Header ── */}
@@ -670,11 +670,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
               {l.label}
             </div>
           ))}
-          <button onClick={onClose} style={{
-            padding:'5px 14px', borderRadius:5, border:`1px solid ${C.page.brd}`,
-            background:C.page.sur, cursor:'pointer', fontSize:12,
-            fontWeight:700, color:C.page.t2, marginLeft:8,
-          }}>✕ Chiudi</button>
         </div>
       </div>
 
@@ -761,6 +756,12 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                          fontFamily:'IBM Plex Mono, monospace' }}>
             {selSrcs.size} sorgent{selSrcs.size === 1 ? 'e' : 'i'} selezionat{selSrcs.size === 1 ? 'a' : 'e'}
           </span>
+          <button onClick={onClose} style={{
+            padding:'7px 14px', borderRadius:6, border:`1px solid ${C.page.brd}`,
+            background:C.page.sur, cursor:'pointer', fontSize:13,
+            fontWeight:700, color:C.page.t2,
+          }}>← Chiudi schema</button>
+          <div style={{ width:1, height:20, background:C.page.brd }} />
           <button
             onClick={() => setModalOpen(true)}
             disabled={selSrcs.size === 0 || hasCon}

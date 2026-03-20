@@ -6,19 +6,17 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { metodiApi, compostiApi } from '@/lib/api'
-import SchemaCalibrazione from './SchemaCalibrazione'
-
 interface MetodoDrawerProps {
   metodoId: string | null
   onClose: () => void
   onEdit: (metodo: any) => void
   onDelete: (id: string) => void
+  onOpenSchema: (id: string) => void
 }
 
-export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDrawerProps) {
+export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema }: MetodoDrawerProps) {
   const [metodo, setMetodo] = useState<any>(null)
   const [composti, setComposti] = useState<any[]>([])
-  const [schemaOpen, setSchemaOpen] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -88,7 +86,7 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
           <Button size="sm" variant="outline" className="text-destructive" onClick={() => onDelete(metodo.id)}>
             <Trash2 className="h-3.5 w-3.5 mr-1" /> Elimina
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setSchemaOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => { onClose(); onOpenSchema(String(metodo.id)) }}>
             Schema calibrazione
           </Button>
         </div>
@@ -150,13 +148,6 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete }: MetodoDraw
         )}
       </div>
     </SlidePanel>
-    {schemaOpen && metodo && (
-      <SchemaCalibrazione
-        metodoId={String(metodo.id)}
-        metodoNome={metodo.nome}
-        onClose={() => setSchemaOpen(false)}
-      />
-    )}
     </>
   )
 }

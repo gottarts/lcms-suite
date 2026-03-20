@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Plus, Search } from 'lucide-react'
+import SchemaCalibrazione from './SchemaCalibrazione'
 
 export function MetodiPage() {
   const [metodi, setMetodi] = useState<any[]>([])
@@ -18,6 +19,7 @@ export function MetodiPage() {
   const [editMetodo, setEditMetodo] = useState<any>(null)
   const [drawerId, setDrawerId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [schemaMetodoId, setSchemaMetodoId] = useState<string | null>(null)
 
   const load = async () => {
     const [m, s] = await Promise.all([metodiApi.list(), strumentiApi.list()])
@@ -54,6 +56,16 @@ export function MetodiPage() {
     setEditMetodo(metodo)
     setDrawerId(null)
     setFormOpen(true)
+  }
+
+  if (schemaMetodoId) {
+    return (
+      <SchemaCalibrazione
+        metodoId={schemaMetodoId}
+        metodoNome={metodi.find(m => m.id === schemaMetodoId)?.nome ?? ''}
+        onClose={() => setSchemaMetodoId(null)}
+      />
+    )
   }
 
   return (
@@ -114,6 +126,7 @@ export function MetodiPage() {
         onClose={() => setDrawerId(null)}
         onEdit={handleEdit}
         onDelete={id => { setDrawerId(null); setDeleteId(id) }}
+        onOpenSchema={id => { setDrawerId(null); setSchemaMetodoId(id) }}
       />
 
       <ConfirmDialog
