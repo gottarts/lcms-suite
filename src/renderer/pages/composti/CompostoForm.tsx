@@ -35,6 +35,10 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
   const [confirmMixOpen, setConfirmMixOpen] = useState(false)
   const [mixCount, setMixCount] = useState(0)
 
+  // Gestione concentrazione per-componente vs tutto il mix
+  const [concChanged, setConcChanged] = useState(false)
+  const [concScope, setConcScope] = useState<'solo' | 'tutti'>('tutti')
+
   // FEAT-metodi-campo
   const [metodi, setMetodi] = useState<any[]>([])
   const [metodiInput, setMetodiInput] = useState('')
@@ -42,7 +46,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
   const [metodiDropdownOpen, setMetodiDropdownOpen] = useState(false)
   const [metodiToast, setMetodiToast] = useState('')
 
-  // TASK A-3: suggerimenti autocomplete (classe, produttore, solvente, ubicazione)
+  // TASK A-3: suggerimenti autocomplete
   const [classiDisponibili, setClassiDisponibili] = useState<string[]>([])
   const [produttoriDisponibili, setProduttoriDisponibili] = useState<string[]>([])
   const [solventiDisponibili, setSolventiDisponibili] = useState<string[]>([])
@@ -90,10 +94,11 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
     setWarningDate(false)
     setMetodiInput('')
     setMetodiToast('')
+    setConcChanged(false)
+    setConcScope('tutti')
   }, [composto, template, open])
 
   useEffect(() => {
-    // Carica anagrafiche una sola volta e ne estrae le voci per ogni campo
     window.electronAPI.invoke('anagrafiche:list').then((anagrafiche: any[]) => {
       const voci = (nomeMatch: string) => {
         const found = anagrafiche.find((a: any) => a.nome.toLowerCase().includes(nomeMatch))
@@ -101,15 +106,12 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
       }
       setVociStoccaggio(voci('stoccaggio') || voci('posizioni'))
 
-      // Suggerimenti per i campi autocomplete — dall'anagrafica (già popolata dal sync)
-      // con fallback ai valori distinti nel DB composti (union dei due)
       const classiAnagrafica: string[] = voci('classi') || voci('classe')
       const produttoriAnagrafica: string[] = voci('produttori') || voci('fornitori')
       const solventiAnagrafica: string[] = voci('solventi')
       const ubicazioniAnagrafica: string[] = voci('ubicazioni') || voci('stanze')
       const operatoriAnagrafica: string[] = voci('operatori')
 
-      // Merge con i valori distinti dal DB composti (deduplica, case-insensitive)
       const merge = (fromAnagrafica: string[], campo: string) =>
         window.electronAPI.invoke('composti:distinct-values', campo)
           .then((fromDb: unknown) => {
@@ -186,7 +188,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
 
   // --- Fine gestione Metodi ---
 
-  const doSave = async () => {
+  const doSave = async (scopeToUse: 'solo' | 'tutti') => {
     setSaving(true)
     try {
       const data = { ...form }
@@ -198,13 +200,43 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         if (k !== 'nome' && k !== 'arpa' && k !== 'metodi_ids' && data[k] === '') data[k] = null
       }
 
-      if (isEdit) {
-        await compostiApi.update(composto.id, data)
+      if (isEdit && form.mix_id && mixCount > 1 && concChanged && scopeToUse === 'solo') {
+        // Strategia per "solo questo componente":
+        // 1. Mando al backend il payload con la concentrazione ORIGINALE
+        //    così la propagazione agli altri non cambia la loro concentrazione.
+        // 2. Poi faccio un secondo update su questo solo componente,
+        //    rimuovendo mix_id dal payload per bloccare la propagazione.
+
+        const nuovaConc = data.concentrazione
+        const nuovaUnita = data.unita_conc
+
+        // Passo 1: aggiorna tutto il mix con concentrazione originale
+        const dataConConcOriginale = {
+          ...data,
+          concentrazione: composto.concentrazione ?? null,
+          unita_conc: composto.unita_conc ?? UNITA_DEFAULT,
+        }
+        await compostiApi.update(composto.id, dataConConcOriginale)
+
+        // Passo 2: aggiorna solo questo componente con la nuova concentrazione,
+        // togliendo mix_id per impedire che il backend propague di nuovo
+        await compostiApi.update(composto.id, {
+          ...dataConConcOriginale,
+          concentrazione: nuovaConc,
+          unita_conc: nuovaUnita,
+          mix_id: null,
+          mix: null,
+        })
+
       } else {
-        await compostiApi.create(data)
+        // Caso normale: salva tutto (con propagazione se è un mix)
+        if (isEdit) {
+          await compostiApi.update(composto.id, data)
+        } else {
+          await compostiApi.create(data)
+        }
       }
 
-      // TASK B-3: sync automatico anagrafiche dopo il salvataggio
       await syncAnagrafiche({
         classe:             form.classe,
         produttore:         form.produttore,
@@ -238,16 +270,25 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
     setWarningDate(false)
 
     if (isEdit && form.mix_id && mixCount > 1) {
+      // Rileva se concentrazione o unità sono cambiate
+      const originalConc = String(composto.concentrazione ?? '')
+      const originalUnita = composto.unita_conc ?? UNITA_DEFAULT
+      const newConc = String(form.concentrazione ?? '')
+      const newUnita = form.unita_conc ?? UNITA_DEFAULT
+      const isChanged = originalConc !== newConc || originalUnita !== newUnita
+
+      setConcChanged(isChanged)
+      setConcScope('tutti') // default
       setConfirmMixOpen(true)
       return
     }
 
-    await doSave()
+    await doSave('tutti')
   }
 
   const handleConfirmMix = async () => {
     setConfirmMixOpen(false)
-    await doSave()
+    await doSave(concScope)
   }
 
   return (
@@ -267,7 +308,9 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                 <span className="text-base leading-none mt-0.5">ℹ️</span>
                 <p>
                   Questo composto fa parte del mix <strong>{form.mix}</strong> ({mixCount} componenti).
-                  Il salvataggio aggiornerà tutti i campi comuni a tutti i componenti del mix.
+                  Al salvataggio potrai scegliere se propagare le modifiche a tutto il mix.
+                  <br />
+                  <span className="text-xs opacity-75">Il nome rimane sempre specifico per questo componente.</span>
                 </p>
               </div>
             )}
@@ -357,7 +400,12 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Identificazione</div>
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <Label className="text-xs">Nome *</Label>
+                <Label className="text-xs">
+                  Nome *
+                  {isEdit && form.mix_id && mixCount > 1 && (
+                    <span className="ml-2 font-normal text-blue-600 normal-case">(solo questo componente)</span>
+                  )}
+                </Label>
                 <Input value={form.nome || ''} onChange={e => set('nome', e.target.value)} />
               </div>
               <div>
@@ -369,7 +417,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                 <Input value={form.formula || ''} onChange={e => set('formula', e.target.value)} />
               </div>
 
-              {/* TASK A-3: classe libera con autocomplete */}
               <div>
                 <Label className="text-xs">Classe</Label>
                 <AutocompleteInput
@@ -413,7 +460,12 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                 <Input type="number" step="0.1" value={form.purezza || ''} onChange={e => set('purezza', e.target.value)} />
               </div>
               <div>
-                <Label className="text-xs">Concentrazione</Label>
+                <Label className="text-xs">
+                  Concentrazione
+                  {isEdit && form.mix_id && mixCount > 1 && (
+                    <span className="ml-2 font-normal text-orange-600 normal-case">(sceglierai al salvataggio)</span>
+                  )}
+                </Label>
                 <Input type="number" step="0.01" value={form.concentrazione || ''} onChange={e => set('concentrazione', e.target.value)} />
               </div>
               <div>
@@ -436,7 +488,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                   placeholder="es. MeOH, ACN..."
                 />
               </div>
-              {/* PATCH: campo visibile per tutte le forme, label dinamica mL/mg */}
               {form.forma && (
                 <div>
                   <Label className="text-xs">
@@ -596,7 +647,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         </DialogContent>
       </Dialog>
 
-      {/* MIX-SYNC: dialog di conferma propagazione */}
+      {/* Dialog di conferma per i mix */}
       <Dialog open={confirmMixOpen} onOpenChange={v => !v && setConfirmMixOpen(false)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -604,17 +655,59 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
           </DialogHeader>
           <div className="space-y-3 text-sm">
             <p>
-              Questo composto fa parte del mix <strong>{form.mix}</strong> che contiene <strong>{mixCount} componenti</strong>.
+              Questo composto fa parte del mix <strong>{form.mix}</strong> ({mixCount} componenti).
             </p>
             <p className="text-muted-foreground">
-              Tutti i campi comuni (lotto, date, concentrazione, destinazione, work standard, ubicazione, metodi e altri) verranno aggiornati su tutti i componenti del mix. Solo il nome del singolo composto rimarrà invariato.
+              Lotto, date, metodi e gli altri campi comuni verranno aggiornati su tutti i componenti del mix.
+              Il nome rimane sempre specifico per ogni componente.
             </p>
-            <p className="font-medium">Vuoi procedere?</p>
+
+            {/* Sezione concentrazione — mostrata solo se è cambiata */}
+            {concChanged && (
+              <div className="rounded-md border border-orange-200 bg-orange-50 p-3 space-y-2">
+                <p className="font-medium text-orange-800 text-xs uppercase tracking-wide">
+                  Concentrazione modificata
+                </p>
+                <p className="text-xs text-orange-700">
+                  Hai cambiato la concentrazione (o l'unità). Come vuoi applicarla?
+                </p>
+                <div className="space-y-2 pt-1">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="concScope"
+                      value="solo"
+                      checked={concScope === 'solo'}
+                      onChange={() => setConcScope('solo')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <span className="text-xs font-medium text-orange-900">Solo questo componente</span>
+                      <p className="text-xs text-orange-700 opacity-80">Gli altri componenti del mix mantengono la loro concentrazione attuale.</p>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="concScope"
+                      value="tutti"
+                      checked={concScope === 'tutti'}
+                      onChange={() => setConcScope('tutti')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <span className="text-xs font-medium text-orange-900">Tutti i {mixCount} componenti del mix</span>
+                      <p className="text-xs text-orange-700 opacity-80">La stessa concentrazione verrà applicata a tutti.</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmMixOpen(false)}>Annulla</Button>
             <Button onClick={handleConfirmMix} disabled={saving}>
-              {saving ? 'Salvando...' : `Aggiorna tutti i ${mixCount} componenti`}
+              {saving ? 'Salvando...' : 'Salva'}
             </Button>
           </DialogFooter>
         </DialogContent>

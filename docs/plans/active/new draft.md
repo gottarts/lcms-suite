@@ -2,7 +2,7 @@
 
 
 
-
+ modifica mix deve permettere di modificare anche il singolo componente--> fatto ma non salva
 
  pesante:
  bisogna partire con gli schemi di preparazione delle soluzioni work. le work sono soluzioni preprate dalle solution, dalle mix e dai neat/preparati. Sarebbe bello avere nel metodo lo schema calibrazione. 
