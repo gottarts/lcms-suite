@@ -429,7 +429,6 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
               work.conc ? `${work.conc} mg/L` : (work.concVariabile ? 'variabile' : null),
               work.volFin ? `${work.volFin} mL` : null,
               work.solv || null,
-              work.op ? `Op: ${work.op}` : null,
             ].filter(Boolean).map((kv, i) => (
               <span key={i} style={{ fontSize:11, color:C.page.t2,
                                      fontFamily:'IBM Plex Mono, monospace' }}>{kv}</span>
@@ -654,7 +653,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       if (m.has(mixId)) { m.delete(mixId) }
       else {
         const crm = crmItems.find(c => c.mix_id === mixId)
-        m.set(mixId, { id: mixId, nome: mixId, cv: crm?.cv ?? 0, tipo: 'mix' })
+        m.set(mixId, { id: mixId, nome: crm?.mix ?? mixId, cv: crm?.cv ?? 0, tipo: 'mix' })
       }
       return m
     })
@@ -700,7 +699,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
 
     let dbId: number | undefined
     try {
-      const result = await salvaWorkNelDb(work, metodoId)
+      const result = await salvaWorkNelDb(work, metodoId, crmItems)
       if (result) dbId = result
     } catch (e) {
       console.error('Errore salvataggio Work nel DB:', e)

@@ -384,7 +384,7 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
   // Reset quando il modal si apre
   useEffect(() => {
     if (open) {
-      setNome(''); setVolFin(''); setSolv('MeOH'); setValidita(''); setOp('')
+      setNome(''); setVolFin(''); setSolv('MeOH'); setValidita('')
       setCustomMode(false); setCustomVals(new Map()); setValUnico('')
       setTimeout(() => nomeRef.current?.focus(), 80)
     }

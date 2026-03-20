@@ -209,8 +209,51 @@ export function getCompsFromWork(
 // ─────────────────────────────────────────────────────────────────────────────
 export async function salvaWorkNelDb(
   w: WorkInSchema,
-  metodoId: string
+  metodoId: string,
+  crmItems: CrmItem[]
 ): Promise<number | null> {
+  if (!w.validitaMesi) return null   // "al momento" → non salvare nel DB
+
+  // Risolvi gli ingredienti: per i mix usa l'id numerico del primo composto del mix
+  const ingredienti = w.vols.flatMap((ing, i) => {
+    const src = w.srcs[i]
+    if (!src) return []
+    if (src.tipo === 'work') {
+      return [{
+        source_type:        'work' as const,
+        source_id:          (src as any).dbId ?? 0,
+        volume_prelievo_ml: ing.vol,
+        fattore_diluizione: ing.dilFactor ?? null,
+        conc_target_mgL:    ing.concTarget ?? null,
+        modo_calcolo:       ing.modo,
+      }]
+    }
+    if (src.tipo === 'mix') {
+      // Trova tutti i composti del mix e inserisci uno per ciascuno
+      const comps = crmItems.filter(c => c.mix_id === src.id)
+      if (comps.length === 0) return []
+      return comps.map(c => ({
+        source_type:        'crm' as const,
+        source_id:          c.id,
+        volume_prelievo_ml: ing.vol,
+        fattore_diluizione: ing.dilFactor ?? null,
+        conc_target_mgL:    ing.concTarget ?? null,
+        modo_calcolo:       ing.modo,
+      }))
+    }
+    // tipo === 'sng'
+    const srcId = parseInt(src.id ?? '0')
+    if (!srcId) return []
+    return [{
+      source_type:        'crm' as const,
+      source_id:          srcId,
+      volume_prelievo_ml: ing.vol,
+      fattore_diluizione: ing.dilFactor ?? null,
+      conc_target_mgL:    ing.concTarget ?? null,
+      modo_calcolo:       ing.modo,
+    }]
+  })
+
   const payload = {
     nome:           w.nome,
     concentrazione: w.concVariabile ? null : w.conc,
@@ -223,16 +266,7 @@ export async function salvaWorkNelDb(
     note:           null,
     livello:        0,
     metodi_ids:     [metodoId],
-    ingredienti:    w.vols.map((ing, i) => ({
-      source_type:        w.srcs[i]?.tipo === 'work' ? 'work' : 'crm',
-      source_id:          w.srcs[i]?.tipo === 'work'
-                            ? ((w.srcs[i] as any).dbId ?? 0)
-                            : parseInt(w.srcs[i]?.id ?? '0'),
-      volume_prelievo_ml: ing.vol,
-      fattore_diluizione: ing.dilFactor ?? null,
-      conc_target_mgL:    ing.concTarget ?? null,
-      modo_calcolo:       ing.modo,
-    })),
+    ingredienti,
   }
 
   const result: any = await (window as any).electronAPI.invoke('work:create', payload)

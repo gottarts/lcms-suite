@@ -104,7 +104,7 @@ export const workApi = {
     api.invoke('work:delete', id) as Promise<{ ok: boolean }>,
   listByMetodo: (metodoId: string) =>
     api.invoke('work:list-by-metodo', metodoId) as Promise<any[]>,
-  prepara: (data: { work_id: number; data_prep: string; note?: string | null }) =>
+  prepara: (data: { work_id: number; data_prep: string; note?: string | null; operatore?: string | null }) =>
     api.invoke('work:prepara', data) as Promise<any>,
   preparazioniList: (workId: number) =>
     api.invoke('work:preparazioni-list', workId) as Promise<any[]>,

@@ -31,9 +31,10 @@ export function registerWorkIpc(): void {
         (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti,
         (SELECT COUNT(*) FROM work_metodi WHERE work_id = w.id)      AS n_metodi,
         (SELECT metodo_id FROM work_metodi WHERE work_id = w.id LIMIT 1) AS primo_metodo_id,
-        (SELECT wp.id        FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
-        (SELECT wp.data_prep FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
-        (SELECT wp.note      FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
+        (SELECT wp.id         FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
+        (SELECT wp.data_prep  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
+        (SELECT wp.note       FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
+        (SELECT wp.operatore  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_operatore,
         (SELECT wp.created_at FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_created_at
       FROM work w
       ORDER BY w.created_at DESC
@@ -45,9 +46,10 @@ export function registerWorkIpc(): void {
         work_id: w.id,
         data_prep: w._up_data_prep,
         note: w._up_note,
+        operatore: w._up_operatore,
         created_at: w._up_created_at,
       } : null
-      const { _up_id, _up_data_prep, _up_note, _up_created_at, ...rest } = w
+      const { _up_id, _up_data_prep, _up_note, _up_operatore, _up_created_at, ...rest } = w
       return {
         ...rest,
         ultima_preparazione: ultimaPrep,
@@ -269,12 +271,13 @@ export function registerWorkIpc(): void {
     work_id: number
     data_prep: string
     note?: string | null
+    operatore?: string | null
   }) => {
     const db = getDb()
     const result = db.prepare(`
-      INSERT INTO work_preparazioni (work_id, data_prep, note)
-      VALUES (?, ?, ?)
-    `).run(data.work_id, data.data_prep, data.note ?? null)
+      INSERT INTO work_preparazioni (work_id, data_prep, note, operatore)
+      VALUES (?, ?, ?, ?)
+    `).run(data.work_id, data.data_prep, data.note ?? null, data.operatore ?? null)
     return db.prepare('SELECT * FROM work_preparazioni WHERE id = ?').get(result.lastInsertRowid)
   })
 

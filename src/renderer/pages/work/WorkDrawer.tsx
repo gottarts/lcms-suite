@@ -35,7 +35,9 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
   const [prepForm, setPrepForm] = useState(false)
   const [prepData, setPrepData] = useState('')
   const [prepNote, setPrepNote] = useState('')
+  const [prepOp,   setPrepOp]   = useState('')
   const [saving, setSaving] = useState(false)
+  const [compSearch, setCompSearch] = useState('')
 
   const reload = (id: number) => workApi.get(id).then(setWork)
 
@@ -47,6 +49,8 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
       setPrepForm(false)
       setPrepData(new Date().toISOString().slice(0, 10))
       setPrepNote('')
+      setPrepOp('')
+      setCompSearch('')
     } else {
       setWork(null)
     }
@@ -60,12 +64,13 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
   }
 
   const handlePrepara = async () => {
-    if (!workId || !prepData) return
+    if (!workId || !prepData || !prepOp.trim()) return
     setSaving(true)
-    await workApi.prepara({ work_id: workId, data_prep: prepData, note: prepNote || null })
+    await workApi.prepara({ work_id: workId, data_prep: prepData, note: prepNote || null, operatore: prepOp.trim() })
     await reload(workId)
     setPrepForm(false)
     setPrepNote('')
+    setPrepOp('')
     if (storicoOpen) await loadStorico()
     setSaving(false)
   }
@@ -155,6 +160,9 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                     Scade il: {formatDate(scadenzaDate(work.ultima_preparazione.data_prep, work.validita_mesi))}
                   </div>
                 )}
+                {work.ultima_preparazione.operatore && (
+                  <div className="text-xs text-muted-foreground">Op: {work.ultima_preparazione.operatore}</div>
+                )}
                 {work.ultima_preparazione.note && (
                   <div className="text-xs text-muted-foreground italic">{work.ultima_preparazione.note}</div>
                 )}
@@ -176,6 +184,16 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                     className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground w-12 shrink-0">Operatore *</label>
+                  <input
+                    type="text"
+                    value={prepOp}
+                    onChange={e => setPrepOp(e.target.value)}
+                    placeholder="es. V.G."
+                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
                 <div className="flex items-start gap-2">
                   <label className="text-xs text-muted-foreground w-12 shrink-0 pt-1.5">Note</label>
                   <Textarea
@@ -187,7 +205,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handlePrepara} disabled={saving || !prepData}>
+                  <Button size="sm" onClick={handlePrepara} disabled={saving || !prepData || !prepOp.trim()}>
                     {saving ? 'Salvo...' : 'Registra'}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setPrepForm(false)}>Annulla</Button>
@@ -218,8 +236,8 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
               <div className="space-y-1">
                 {storico.map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between text-xs text-muted-foreground border-b pb-1 last:border-0">
-                    <span>{formatDate(p.data_prep)}</span>
-                    {p.note && <span className="italic truncate max-w-[200px]">{p.note}</span>}
+                    <span>{formatDate(p.data_prep)}{p.operatore ? ` · ${p.operatore}` : ''}</span>
+                    {p.note && <span className="italic truncate max-w-[160px]">{p.note}</span>}
                   </div>
                 ))}
               </div>
@@ -258,29 +276,60 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
           </>
         )}
 
-        {/* Ingredienti / Sorgenti */}
-        {work.ingredienti && work.ingredienti.length > 0 && (
-          <>
-            <Separator />
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Sorgenti ({work.ingredienti.length})
-            </div>
-            <div className="space-y-2">
-              {work.ingredienti.map((ing: any, i: number) => (
-                <div key={i} className="rounded-md border p-2 text-xs">
-                  <div className="font-medium">
-                    {ing.source_type === 'crm' ? '🧪 CRM' : '⚗️ Work'} — {ing.source_nome ?? `ID ${ing.source_id}`}
+        {/* Composizione */}
+        {work.ingredienti && work.ingredienti.length > 0 && (() => {
+          const filtered = compSearch
+            ? work.ingredienti.filter((ing: any) =>
+                (ing.source_nome ?? '').toLowerCase().includes(compSearch.toLowerCase())
+              )
+            : work.ingredienti
+          return (
+            <>
+              <Separator />
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Composizione ({work.ingredienti.length})
+              </div>
+              <input
+                placeholder="Filtra composti..."
+                value={compSearch}
+                onChange={e => setCompSearch(e.target.value)}
+                style={{
+                  width: '100%', padding: '6px 9px',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: 5, fontSize: 12,
+                  fontFamily: 'Lato, sans-serif',
+                  outline: 'none',
+                  background: 'hsl(var(--background))',
+                  color: 'hsl(var(--foreground))',
+                }}
+              />
+              {filtered.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  {compSearch ? 'Nessun composto corrisponde al filtro' : 'Nessun composto trovato'}
+                </p>
+              ) : filtered.map((ing: any, i: number) => (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '5px 8px', borderBottom: '1px solid rgba(0,0,0,.04)', fontSize: 11,
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{ing.source_nome ?? `ID ${ing.source_id}`}</div>
+                    <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
+                      {ing.source_type === 'work' ? `↳ Work` : 'CRM'}
+                    </div>
                   </div>
-                  <div className="text-muted-foreground mt-0.5">
-                    {ing.volume_prelievo_ml != null && `Prelievo: ${ing.volume_prelievo_ml} mL`}
-                    {ing.conc_target_mgL != null && ` · Target: ${ing.conc_target_mgL} mg/L`}
-                    {ing.fattore_diluizione != null && ` · Diluizione: ÷${ing.fattore_diluizione}`}
+                  <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fontWeight: 500, color: 'hsl(var(--muted-foreground))' }}>
+                    {ing.conc_target_mgL != null
+                      ? `${ing.conc_target_mgL} mg/L`
+                      : ing.fattore_diluizione != null
+                        ? `÷${ing.fattore_diluizione}`
+                        : '—'}
                   </div>
                 </div>
               ))}
-            </div>
-          </>
-        )}
+            </>
+          )
+        })()}
 
         {/* Metodi associati */}
         {work.metodi && work.metodi.length > 0 && (

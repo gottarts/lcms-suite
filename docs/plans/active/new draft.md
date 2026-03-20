@@ -4,13 +4,11 @@
 
  
 
-Problemi attuali:
-card crm mix in schema calibrazione cancella i nomi dei composti di cui si elimina un signolo comìncomitante... non ha senso e devi eliminare tutte le formattazioni nella card crm mix. non hanno senso in quanto il mix deve essere solo riportato.
 
 
  Nella card work dello schema non serve Operatore che invece e necessaria nella card work in workpage (si deve segnare solo data preparazione work e operatore per quelle tracciate)
 
- nella card delle work in workpage inserire allinterno il pulsante prepara work (uguale a quello della sidebar a destra). In piu inserire il pulsante collegameto allo schema work.
+
 
 
  

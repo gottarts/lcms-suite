@@ -218,6 +218,7 @@ export interface WorkPreparazione {
   work_id: number
   data_prep: string   // YYYY-MM-DD
   note: string | null
+  operatore: string | null
   created_at: string
 }
 
