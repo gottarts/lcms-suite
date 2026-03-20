@@ -210,6 +210,41 @@ export interface ElectronAPI {
   importLegacyJson: (jsonPath: string) => Promise<{ ok: boolean; error?: string; counts?: Record<string, number> }>
 }
 
+// ── Work ──
+export interface Work {
+  id: number
+  nome: string
+  concentrazione: number | null
+  conc_variabile: number        // 0 = omogenea, 1 = variabile
+  unita_conc: string
+  volume_ml: number | null
+  solvente: string | null
+  validita_mesi: number | null  // NULL = "al momento" (non tracciata)
+  operatore: string | null
+  note: string | null
+  livello: number               // 0 = Work, 1+ = Intermedia
+  created_at: string
+  // Joined/computed
+  n_ingredienti?: number
+  n_metodi?: number
+  ingredienti?: WorkIngrediente[]
+  metodi_ids?: string[]
+}
+
+export interface WorkIngrediente {
+  id: number
+  work_id: number
+  source_type: 'crm' | 'work'
+  source_id: number
+  volume_prelievo_ml: number | null
+  fattore_diluizione: number | null
+  conc_target_mgL: number | null
+  modo_calcolo: 'conc' | 'dil' | null
+  // Joined
+  source_nome?: string
+}
+
+
 declare global {
   interface Window {
     electronAPI: ElectronAPI

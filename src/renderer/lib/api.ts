@@ -91,6 +91,21 @@ export const anagraficheApi = {
     api.invoke('anagrafiche:merge-voci', sourceId, destId, campoDB) as Promise<{ ok: boolean }>,
 }
 
+export const workApi = {
+  list: () =>
+    api.invoke('work:list') as Promise<any[]>,
+  get: (id: number) =>
+    api.invoke('work:get', id) as Promise<any>,
+  create: (data: Record<string, unknown>) =>
+    api.invoke('work:create', data) as Promise<any>,
+  update: (id: number, data: Record<string, unknown>) =>
+    api.invoke('work:update', id, data) as Promise<any>,
+  delete: (id: number) =>
+    api.invoke('work:delete', id) as Promise<{ ok: boolean }>,
+  listByMetodo: (metodoId: string) =>
+    api.invoke('work:list-by-metodo', metodoId) as Promise<any[]>,
+}
+
 export const queryApi = {
   snapshot: (request: { strumento_id: string; metodo_id?: string; data: string }) =>
     api.invoke('query:snapshot', request) as Promise<any>,

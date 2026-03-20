@@ -1,0 +1,220 @@
+import { ipcMain } from 'electron'
+import { getDb } from '../db'
+
+export function registerWorkIpc(): void {
+
+  // ── LIST: tutte le work, con conteggio ingredienti e metodi ──────────────
+  ipcMain.handle('work:list', () => {
+    const db = getDb()
+    const works = db.prepare(`
+      SELECT w.*,
+        (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti,
+        (SELECT COUNT(*) FROM work_metodi WHERE work_id = w.id)      AS n_metodi
+      FROM work w
+      ORDER BY w.created_at DESC
+    `).all() as any[]
+    return works
+  })
+
+  // ── GET: singola work con ingredienti e metodi ────────────────────────────
+  ipcMain.handle('work:get', (_, id: number) => {
+    const db = getDb()
+    const work = db.prepare('SELECT * FROM work WHERE id = ?').get(id) as any
+    if (!work) return null
+
+    work.ingredienti = db.prepare(`
+      SELECT wi.*,
+        CASE
+          WHEN wi.source_type = 'crm'  THEN (SELECT nome FROM composti WHERE id = wi.source_id)
+          WHEN wi.source_type = 'work' THEN (SELECT nome FROM work    WHERE id = wi.source_id)
+        END AS source_nome
+      FROM work_ingredienti wi
+      WHERE wi.work_id = ?
+    `).all(id)
+
+    work.metodi_ids = db.prepare(
+      'SELECT metodo_id FROM work_metodi WHERE work_id = ?'
+    ).all(id).map((r: any) => r.metodo_id)
+
+    return work
+  })
+
+  // ── CREATE ────────────────────────────────────────────────────────────────
+  ipcMain.handle('work:create', (_, data: {
+    nome: string
+    concentrazione?: number | null
+    conc_variabile?: boolean
+    unita_conc?: string
+    volume_ml?: number | null
+    solvente?: string | null
+    validita_mesi?: number | null
+    operatore?: string | null
+    note?: string | null
+    livello?: number
+    ingredienti?: Array<{
+      source_type: 'crm' | 'work'
+      source_id: number
+      volume_prelievo_ml?: number | null
+      fattore_diluizione?: number | null
+      conc_target_mgL?: number | null
+      modo_calcolo?: 'conc' | 'dil' | null
+    }>
+    metodi_ids?: string[]
+  }) => {
+    const db = getDb()
+    const ingredienti = data.ingredienti || []
+    const metodiIds  = data.metodi_ids  || []
+
+    const insertWork = db.prepare(`
+      INSERT INTO work (nome, concentrazione, conc_variabile, unita_conc,
+        volume_ml, solvente, validita_mesi, operatore, note, livello)
+      VALUES (@nome, @concentrazione, @conc_variabile, @unita_conc,
+        @volume_ml, @solvente, @validita_mesi, @operatore, @note, @livello)
+    `)
+    const insertIngr = db.prepare(`
+      INSERT INTO work_ingredienti
+        (work_id, source_type, source_id, volume_prelievo_ml,
+         fattore_diluizione, conc_target_mgL, modo_calcolo)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    const insertLink = db.prepare(
+      'INSERT INTO work_metodi (work_id, metodo_id) VALUES (?, ?)'
+    )
+
+    let newId: number | bigint = 0
+    db.transaction(() => {
+      const result = insertWork.run({
+        nome:           data.nome,
+        concentrazione: data.concentrazione ?? null,
+        conc_variabile: data.conc_variabile ? 1 : 0,
+        unita_conc:     data.unita_conc     ?? 'mg/L',
+        volume_ml:      data.volume_ml      ?? null,
+        solvente:       data.solvente       ?? null,
+        validita_mesi:  data.validita_mesi  ?? null,
+        operatore:      data.operatore      ?? null,
+        note:           data.note           ?? null,
+        livello:        data.livello        ?? 0,
+      })
+      newId = result.lastInsertRowid
+      for (const ing of ingredienti) {
+        insertIngr.run(
+          newId, ing.source_type, ing.source_id,
+          ing.volume_prelievo_ml  ?? null,
+          ing.fattore_diluizione  ?? null,
+          ing.conc_target_mgL     ?? null,
+          ing.modo_calcolo        ?? null
+        )
+      }
+      for (const mid of metodiIds) {
+        insertLink.run(newId, mid)
+      }
+    })()
+
+    return db.prepare('SELECT * FROM work WHERE id = ?').get(newId)
+  })
+
+  // ── UPDATE ────────────────────────────────────────────────────────────────
+  ipcMain.handle('work:update', (_, id: number, data: {
+    nome?: string
+    concentrazione?: number | null
+    conc_variabile?: boolean
+    unita_conc?: string
+    volume_ml?: number | null
+    solvente?: string | null
+    validita_mesi?: number | null
+    operatore?: string | null
+    note?: string | null
+    ingredienti?: Array<{
+      source_type: 'crm' | 'work'
+      source_id: number
+      volume_prelievo_ml?: number | null
+      fattore_diluizione?: number | null
+      conc_target_mgL?: number | null
+      modo_calcolo?: 'conc' | 'dil' | null
+    }>
+    metodi_ids?: string[]
+  }) => {
+    const db = getDb()
+    const current = db.prepare('SELECT * FROM work WHERE id = ?').get(id) as any
+    if (!current) return null
+
+    const ingredienti = data.ingredienti
+    const metodiIds   = data.metodi_ids
+
+    const updateWork = db.prepare(`
+      UPDATE work SET
+        nome           = @nome,
+        concentrazione = @concentrazione,
+        conc_variabile = @conc_variabile,
+        unita_conc     = @unita_conc,
+        volume_ml      = @volume_ml,
+        solvente       = @solvente,
+        validita_mesi  = @validita_mesi,
+        operatore      = @operatore,
+        note           = @note
+      WHERE id = @id
+    `)
+    const deleteIngr = db.prepare('DELETE FROM work_ingredienti WHERE work_id = ?')
+    const insertIngr = db.prepare(`
+      INSERT INTO work_ingredienti
+        (work_id, source_type, source_id, volume_prelievo_ml,
+         fattore_diluizione, conc_target_mgL, modo_calcolo)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    const deleteLinks = db.prepare('DELETE FROM work_metodi WHERE work_id = ?')
+    const insertLink  = db.prepare(
+      'INSERT INTO work_metodi (work_id, metodo_id) VALUES (?, ?)'
+    )
+
+    db.transaction(() => {
+      updateWork.run({
+        id,
+        nome:           data.nome           ?? current.nome,
+        concentrazione: data.concentrazione !== undefined ? data.concentrazione : current.concentrazione,
+        conc_variabile: data.conc_variabile !== undefined ? (data.conc_variabile ? 1 : 0) : current.conc_variabile,
+        unita_conc:     data.unita_conc     ?? current.unita_conc,
+        volume_ml:      data.volume_ml      !== undefined ? data.volume_ml      : current.volume_ml,
+        solvente:       data.solvente       !== undefined ? data.solvente       : current.solvente,
+        validita_mesi:  data.validita_mesi  !== undefined ? data.validita_mesi  : current.validita_mesi,
+        operatore:      data.operatore      !== undefined ? data.operatore      : current.operatore,
+        note:           data.note           !== undefined ? data.note           : current.note,
+      })
+      if (ingredienti !== undefined) {
+        deleteIngr.run(id)
+        for (const ing of ingredienti) {
+          insertIngr.run(
+            id, ing.source_type, ing.source_id,
+            ing.volume_prelievo_ml  ?? null,
+            ing.fattore_diluizione  ?? null,
+            ing.conc_target_mgL     ?? null,
+            ing.modo_calcolo        ?? null
+          )
+        }
+      }
+      if (metodiIds !== undefined) {
+        deleteLinks.run(id)
+        for (const mid of metodiIds) {
+          insertLink.run(id, mid)
+        }
+      }
+    })()
+
+    return db.prepare('SELECT * FROM work WHERE id = ?').get(id)
+  })
+
+  // ── DELETE ────────────────────────────────────────────────────────────────
+  ipcMain.handle('work:delete', (_, id: number) => {
+    getDb().prepare('DELETE FROM work WHERE id = ?').run(id)
+    return { ok: true }
+  })
+
+  // ── LIST per metodo ───────────────────────────────────────────────────────
+  ipcMain.handle('work:list-by-metodo', (_, metodoId: string) => {
+    return getDb().prepare(`
+      SELECT w.* FROM work w
+      JOIN work_metodi wm ON wm.work_id = w.id
+      WHERE wm.metodo_id = ?
+      ORDER BY w.created_at DESC
+    `).all(metodoId)
+  })
+}
