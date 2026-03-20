@@ -1,5 +1,25 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db'
+import type { StatoLab, WorkPreparazione } from '../../shared/types'
+
+// Calcola lo stato laboratorio in base all'ultima preparazione e alla validità
+function calcolaStatoLab(
+  ultimaPrep: WorkPreparazione | null | undefined,
+  validita_mesi: number | null
+): StatoLab | null {
+  if (!validita_mesi) return null           // "al momento" — nessun badge
+  if (!ultimaPrep) return 'non_preparata'
+
+  const dataPrepMs  = new Date(ultimaPrep.data_prep).getTime()
+  const oggi        = Date.now()
+  const validitaMs  = validita_mesi * 30.44 * 24 * 60 * 60 * 1000
+  const scadenzaMs  = dataPrepMs + validitaMs
+  const sogliaMs    = validitaMs * 0.2     // 20% del periodo = "in scadenza"
+
+  if (oggi > scadenzaMs) return 'scaduta'
+  if (oggi > scadenzaMs - sogliaMs) return 'in_scadenza'
+  return 'attiva'
+}
 
 export function registerWorkIpc(): void {
 
@@ -9,11 +29,30 @@ export function registerWorkIpc(): void {
     const works = db.prepare(`
       SELECT w.*,
         (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti,
-        (SELECT COUNT(*) FROM work_metodi WHERE work_id = w.id)      AS n_metodi
+        (SELECT COUNT(*) FROM work_metodi WHERE work_id = w.id)      AS n_metodi,
+        (SELECT wp.id        FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
+        (SELECT wp.data_prep FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
+        (SELECT wp.note      FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
+        (SELECT wp.created_at FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_created_at
       FROM work w
       ORDER BY w.created_at DESC
     `).all() as any[]
-    return works
+
+    return works.map((w: any) => {
+      const ultimaPrep: WorkPreparazione | null = w._up_id ? {
+        id: w._up_id,
+        work_id: w.id,
+        data_prep: w._up_data_prep,
+        note: w._up_note,
+        created_at: w._up_created_at,
+      } : null
+      const { _up_id, _up_data_prep, _up_note, _up_created_at, ...rest } = w
+      return {
+        ...rest,
+        ultima_preparazione: ultimaPrep,
+        stato_lab: calcolaStatoLab(ultimaPrep, w.validita_mesi),
+      }
+    })
   })
 
   // ── GET: singola work con ingredienti e metodi ────────────────────────────
@@ -35,6 +74,12 @@ export function registerWorkIpc(): void {
     work.metodi_ids = db.prepare(
       'SELECT metodo_id FROM work_metodi WHERE work_id = ?'
     ).all(id).map((r: any) => r.metodo_id)
+
+    const ultimaPrep = db.prepare(
+      'SELECT * FROM work_preparazioni WHERE work_id = ? ORDER BY data_prep DESC LIMIT 1'
+    ).get(id) as WorkPreparazione | undefined
+    work.ultima_preparazione = ultimaPrep ?? null
+    work.stato_lab = calcolaStatoLab(ultimaPrep, work.validita_mesi)
 
     return work
   })
@@ -216,5 +261,26 @@ export function registerWorkIpc(): void {
       WHERE wm.metodo_id = ?
       ORDER BY w.created_at DESC
     `).all(metodoId)
+  })
+
+  // ── PREPARA: registra una nuova preparazione ──────────────────────────────
+  ipcMain.handle('work:prepara', (_, data: {
+    work_id: number
+    data_prep: string
+    note?: string | null
+  }) => {
+    const db = getDb()
+    const result = db.prepare(`
+      INSERT INTO work_preparazioni (work_id, data_prep, note)
+      VALUES (?, ?, ?)
+    `).run(data.work_id, data.data_prep, data.note ?? null)
+    return db.prepare('SELECT * FROM work_preparazioni WHERE id = ?').get(result.lastInsertRowid)
+  })
+
+  // ── PREPARAZIONI LIST: storico preparazioni di una work ───────────────────
+  ipcMain.handle('work:preparazioni-list', (_, workId: number) => {
+    return getDb().prepare(
+      'SELECT * FROM work_preparazioni WHERE work_id = ? ORDER BY data_prep DESC'
+    ).all(workId)
   })
 }

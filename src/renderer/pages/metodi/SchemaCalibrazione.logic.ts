@@ -211,8 +211,6 @@ export async function salvaWorkNelDb(
   w: WorkInSchema,
   metodoId: string
 ): Promise<number | null> {
-  if (!w.validitaMesi) return null
-
   const payload = {
     nome:           w.nome,
     concentrazione: w.concVariabile ? null : w.conc,

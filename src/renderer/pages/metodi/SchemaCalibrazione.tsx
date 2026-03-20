@@ -14,7 +14,7 @@
 //   - SchemaCalibrazione.logic.ts
 //   - SchemaCalibrazione.grid.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useCallback, useRef, useLayoutEffect } from 'react'
+import { useState, useCallback, useRef, useLayoutEffect, useEffect } from 'react'
 import type {
   SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef
 } from './SchemaCalibrazione.types'
@@ -24,6 +24,7 @@ import {
   salvaWorkNelDb, getCompsFromWork, computeConnections,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
+import { schemaCalApi } from '../../lib/api'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG Overlay per frecce di connessione
@@ -614,14 +615,35 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   }, [])
 
   // ── Stato principale ──────────────────────────────────────────────────────
-  const [selSrcs,    setSelSrcs]    = useState<Map<string, SorgenteSel>>(new Map())
-  const [removedCon, setRemovedCon] = useState<Set<string>>(new Set())
-  const [removedMix, setRemovedMix] = useState<Set<string>>(new Set())
-  const [workCols,   setWorkCols]   = useState<WorkInSchema[][]>([[]])
-  const [modalOpen,  setModalOpen]  = useState(false)
-  const [saving,     setSaving]     = useState(false)
-  const [drawerWork, setDrawerWork] = useState<WorkInSchema | null>(null)
-  const [drawerCol,  setDrawerCol]  = useState(0)
+  const [selSrcs,      setSelSrcs]      = useState<Map<string, SorgenteSel>>(new Map())
+  const [removedCon,   setRemovedCon]   = useState<Set<string>>(new Set())
+  const [removedMix,   setRemovedMix]   = useState<Set<string>>(new Set())
+  const [workCols,     setWorkCols]     = useState<WorkInSchema[][]>([[]])
+  const [modalOpen,    setModalOpen]    = useState(false)
+  const [saving,       setSaving]       = useState(false)
+  const [drawerWork,   setDrawerWork]   = useState<WorkInSchema | null>(null)
+  const [drawerCol,    setDrawerCol]    = useState(0)
+  const [schemaLoaded, setSchemaLoaded] = useState(false)
+
+  // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
+  useEffect(() => {
+    if (loading || schemaLoaded) return
+    schemaCalApi.get(metodoId).then(saved => {
+      if (saved?.workCols) setWorkCols(saved.workCols)
+      if (saved?.removedCon) setRemovedCon(new Set(saved.removedCon))
+      if (saved?.removedMix) setRemovedMix(new Set(saved.removedMix))
+      setSchemaLoaded(true)
+    }).catch(() => setSchemaLoaded(true))
+  }, [loading, metodoId, schemaLoaded])
+
+  // ── Auto-save schema (debounced, solo dopo il caricamento iniziale) ────────
+  useEffect(() => {
+    if (!schemaLoaded) return
+    const timer = setTimeout(() => {
+      schemaCalApi.save(metodoId, workCols, Array.from(removedCon), Array.from(removedMix))
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [workCols, removedCon, removedMix, metodoId, schemaLoaded])
 
   // Duplicato ancora attivo = analita che ha sia mix (non rimosso) che singolo (non rimosso)
   const hasCon = analiti.some(a =>

@@ -121,9 +121,26 @@ export function WorkPage() {
 
 // ─── Card Work ────────────────────────────────────────────────────────────────
 
+const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
+  attiva:       { label: 'Attiva',       className: 'border-green-300 text-green-700 bg-green-50' },
+  in_scadenza:  { label: 'In scadenza',  className: 'border-amber-300 text-amber-700 bg-amber-50' },
+  scaduta:      { label: 'Scaduta',      className: 'border-red-300 text-red-700 bg-red-50' },
+  non_preparata:{ label: 'Non preparata',className: 'text-muted-foreground' },
+}
+
 function WorkCard({ work, onClick }: { work: any; onClick: () => void }) {
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
+  const statoLab = work.stato_lab as string | null | undefined
+  const statoBadge = statoLab ? STATO_LAB_BADGE[statoLab] : null
+
+  // Calcola data scadenza per badge attiva/in_scadenza
+  const scadenzaLabel = (() => {
+    if (!work.ultima_preparazione?.data_prep || !work.validita_mesi) return null
+    const d = new Date(work.ultima_preparazione.data_prep)
+    d.setDate(d.getDate() + Math.round(work.validita_mesi * 30.44))
+    return formatDate(d.toISOString().slice(0, 10))
+  })()
 
   return (
     <div
@@ -145,6 +162,11 @@ function WorkCard({ work, onClick }: { work: any; onClick: () => void }) {
           ) : (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
               al momento
+            </Badge>
+          )}
+          {statoBadge && (
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statoBadge.className}`}>
+              {statoBadge.label}{scadenzaLabel && (statoLab === 'attiva' || statoLab === 'in_scadenza') ? ` · ${scadenzaLabel}` : ''}
             </Badge>
           )}
         </div>

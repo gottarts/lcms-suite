@@ -12,6 +12,8 @@ import { registerConsumabiliIpc } from './ipc/consumabili.ipc'
 import { registerDiarioIpc } from './ipc/diario.ipc'
 import { registerQueryIpc } from './ipc/query.ipc'
 import { registerMigrationIpc } from './ipc/migration.ipc'
+import { registerWorkIpc } from './ipc/work.ipc'
+import { registerSchemaCalibrazioneIpc } from './ipc/schemaCalibrazione.ipc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -109,6 +111,8 @@ app.whenReady().then(() => {
   registerDiarioIpc()
   registerQueryIpc()
   registerMigrationIpc()
+  registerWorkIpc()
+  registerSchemaCalibrazioneIpc()
   createWindow()
 
   const config = loadConfig()

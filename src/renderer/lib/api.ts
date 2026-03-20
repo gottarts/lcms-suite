@@ -104,6 +104,10 @@ export const workApi = {
     api.invoke('work:delete', id) as Promise<{ ok: boolean }>,
   listByMetodo: (metodoId: string) =>
     api.invoke('work:list-by-metodo', metodoId) as Promise<any[]>,
+  prepara: (data: { work_id: number; data_prep: string; note?: string | null }) =>
+    api.invoke('work:prepara', data) as Promise<any>,
+  preparazioniList: (workId: number) =>
+    api.invoke('work:preparazioni-list', workId) as Promise<any[]>,
 }
 
 export const queryApi = {
@@ -112,5 +116,10 @@ export const queryApi = {
 }
 
 
-// ─── Aggiungere questo blocco in fondo a src/renderer/lib/api.ts ───────────
- 
+export const schemaCalApi = {
+  get: (metodoId: string) =>
+    api.invoke('schema-cal:get', metodoId) as Promise<any | null>,
+  save: (metodoId: string, workCols: any[][], removedCon: string[], removedMix: string[]) =>
+    api.invoke('schema-cal:save', metodoId, JSON.stringify({ workCols, removedCon, removedMix })) as Promise<{ ok: boolean }>,
+}
+

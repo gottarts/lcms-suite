@@ -211,6 +211,16 @@ export interface ElectronAPI {
 }
 
 // ── Work ──
+export type StatoLab = 'attiva' | 'in_scadenza' | 'scaduta' | 'non_preparata'
+
+export interface WorkPreparazione {
+  id: number
+  work_id: number
+  data_prep: string   // YYYY-MM-DD
+  note: string | null
+  created_at: string
+}
+
 export interface Work {
   id: number
   nome: string
@@ -229,6 +239,8 @@ export interface Work {
   n_metodi?: number
   ingredienti?: WorkIngrediente[]
   metodi_ids?: string[]
+  ultima_preparazione?: WorkPreparazione | null
+  stato_lab?: StatoLab | null
 }
 
 export interface WorkIngrediente {
