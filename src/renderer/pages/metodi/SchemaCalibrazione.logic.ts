@@ -26,8 +26,14 @@ export function useSchemaData(metodoId: string) {
         { metodo_id: metodoId }
       )
 
-      // Escludi i dismessi
-      const disponibili = rows.filter((r: any) => !r.data_dismissione)
+      // Escludi i dismessi e i CRM singoli scaduti
+      const oggi = new Date().toISOString().slice(0, 10)
+      const disponibili = rows.filter((r: any) => {
+        if (r.data_dismissione) return false
+        // Per i singoli (non mix) escludi se scaduti
+        if (!r.mix_id && r.scadenza_prodotto && r.scadenza_prodotto < oggi) return false
+        return true
+      })
 
       // Mappa → CrmItem
       const items: CrmItem[] = disponibili.map((r: any) => {
@@ -52,30 +58,35 @@ export function useSchemaData(metodoId: string) {
       })
       setCrmItems(items)
 
-      // Costruisce analiti (nomi unici), classificati in mixId / sngId / isCon
-      const mixMap = new Map<string, string>()   // nome → mix_id
-      const sngMap = new Map<string, string>()   // nome → String(id)
+      // Costruisce analiti (nomi unici), classificati in mixId / sngIds / isCon
+      const mixMap = new Map<string, string>()      // nome → mix_id
+      const sngMap = new Map<string, string[]>()    // nome → array di String(id) (tutti i singoli)
       const isMap  = new Map<string, boolean>()
 
       for (const item of items) {
-        if (item.mix_id) mixMap.set(item.nome, item.mix_id)
-        else             sngMap.set(item.nome, String(item.id))
-        if (item.isIS)   isMap.set(item.nome, true)
+        if (item.mix_id) {
+          mixMap.set(item.nome, item.mix_id)
+        } else {
+          const arr = sngMap.get(item.nome) ?? []
+          arr.push(String(item.id))
+          sngMap.set(item.nome, arr)
+        }
+        if (item.isIS) isMap.set(item.nome, true)
       }
 
       const nomiUnici = Array.from(new Set(items.map(i => i.nome)))
       const analitiCalc: AnalitoItem[] = nomiUnici.map(nome => ({
         nome,
-        mixId: mixMap.get(nome) ?? null,
-        sngId: sngMap.get(nome) ?? null,
-        isCon: mixMap.has(nome) && sngMap.has(nome),
-        isIS:  isMap.get(nome) ?? false,
+        mixId:  mixMap.get(nome) ?? null,
+        sngIds: sngMap.get(nome) ?? [],
+        isCon:  mixMap.has(nome) && sngMap.has(nome),
+        isIS:   isMap.get(nome) ?? false,
       }))
 
       // Ordine: solo-singoli → entrambi → solo-mix
-      const soloSng  = analitiCalc.filter(a => !a.mixId &&  a.sngId)
-      const entrambi = analitiCalc.filter(a =>  a.mixId &&  a.sngId)
-      const soloMix  = analitiCalc.filter(a =>  a.mixId && !a.sngId)
+      const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
+      const entrambi = analitiCalc.filter(a =>  a.mixId && a.sngIds.length > 0)
+      const soloMix  = analitiCalc.filter(a =>  a.mixId && a.sngIds.length === 0)
       setAnaliti([...soloSng, ...entrambi, ...soloMix])
     } catch (e: any) {
       setError(e?.message ?? 'Errore caricamento dati')

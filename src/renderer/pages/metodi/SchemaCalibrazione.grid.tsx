@@ -9,11 +9,12 @@
 //   - ModalCreaWork        → form modale per creare una Work
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import { getConcInfo, calcolaVols, targetColIdx } from './SchemaCalibrazione.logic'
 
-const ROW = 42 // px altezza riga
+const ROW = 42 // px altezza riga singola
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Griglia Analiti | Mix CRM | Singoli
@@ -22,18 +23,27 @@ interface GrigliaProps {
   analiti: AnalitoItem[]
   crmItems: CrmItem[]
   selSrcs: Map<string, SorgenteSel>
-  removedCon: Set<string>    // id singoli-conflitto rimossi
-  hasCon: boolean
+  removedCon: Set<string>    // id singoli rimossi
+  removedMix: Set<string>    // mix_id mix rimossi
   onToggleMix: (mixId: string) => void
   onToggleSng: (sngId: string) => void
   onRemoveCon: (sngId: string) => void
+  onRemoveMix: (mixId: string) => void
+  onClose: () => void        // per chiudere lo schema prima di navigare
 }
 
 export function GrigliaAnalitiCrm({
-  analiti, crmItems, selSrcs, removedCon, hasCon,
-  onToggleMix, onToggleSng, onRemoveCon,
+  analiti, crmItems, selSrcs, removedCon, removedMix,
+  onToggleMix, onToggleSng, onRemoveCon, onRemoveMix, onClose,
 }: GrigliaProps) {
-  // Costruisce mappa mix_id → array di nomi analiti
+  const navigate = useNavigate()
+
+  const goToComposto = (nome: string) => {
+    onClose()
+    navigate('/composti', { state: { searchFilter: nome } })
+  }
+
+  // mix_id → array nomi analiti
   const mixAnaliti = new Map<string, string[]>()
   for (const a of analiti) {
     if (a.mixId) {
@@ -43,42 +53,57 @@ export function GrigliaAnalitiCrm({
     }
   }
 
-  // Ottieni info mix CRM dal primo CrmItem con quel mix_id
+  // mix_id → primo CrmItem (per metadati)
   const mixInfo = new Map<string, CrmItem>()
   for (const c of crmItems) {
     if (c.mix_id && !mixInfo.has(c.mix_id)) mixInfo.set(c.mix_id, c)
   }
 
-  // Per i singoli: mappa nome → CrmItem
-  const sngInfo = new Map<string, CrmItem>()
+  // id (string) → CrmItem per i singoli
+  const sngById = new Map<string, CrmItem>()
   for (const c of crmItems) {
-    if (!c.mix_id) sngInfo.set(c.nome, c)
+    if (!c.mix_id) sngById.set(String(c.id), c)
   }
 
-  // Calcola posizione verticale mix (inizio e numero righe)
-  const mixStart: Record<string, number> = {}
-  const mixCount: Record<string, number> = {}
-  analiti.forEach((a, i) => {
-    if (!a.mixId) return
-    if (mixStart[a.mixId] === undefined) mixStart[a.mixId] = i
-    mixCount[a.mixId] = (mixCount[a.mixId] ?? 0) + 1
-  })
+  // altezza riga = max(1, numero singoli) * ROW
+  const rowHeight = (a: AnalitoItem) => Math.max(1, a.sngIds.length) * ROW
+
+  // Posizione verticale assoluta di ogni mix (top e height in px)
+  const mixTopPx: Record<string, number>    = {}
+  const mixHeightPx: Record<string, number> = {}
+  let cumY = 0
+  for (const a of analiti) {
+    const h = rowHeight(a)
+    if (a.mixId) {
+      if (mixTopPx[a.mixId] === undefined) mixTopPx[a.mixId] = cumY
+      mixHeightPx[a.mixId] = (mixHeightPx[a.mixId] ?? 0) + h
+    }
+    cumY += h + 1  // +1 per border-bottom
+  }
+  const totalMixHeight = cumY
+
+  // Prima occorrenza di ogni mix (per decidere dove renderizzare il blocco assoluto)
+  const mixFirstAnalita = new Map<string, string>()
+  for (const a of analiti) {
+    if (a.mixId && !mixFirstAnalita.has(a.mixId)) mixFirstAnalita.set(a.mixId, a.nome)
+  }
 
   // Separatori tra gruppi
-  const nSoloSng  = analiti.filter(a => !a.mixId &&  a.sngId).length
-  const nEntrambi = analiti.filter(a =>  a.mixId &&  a.sngId).length
+  const nSoloSng  = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
+  const nEntrambi = analiti.filter(a =>  a.mixId && a.sngIds.length > 0).length
 
   return (
     <div style={{ display:'flex', flexDirection:'column', flexShrink:0,
                   borderRight:`2px solid ${C.page.brd2}`, background:C.page.sur }}>
-      {/* Header colonne */}
+
+      {/* ── Header ── */}
       <div style={{ display:'flex', background:C.page.sur,
                     borderBottom:`1px solid ${C.page.brd}`, flexShrink:0 }}>
         {([
-          { w:190, label:'Analiti',         sub:`${analiti.length} composti` },
-          { w:270, label:'CRM disponibili', sub:'singoli · entrambi · mix', br:true },
-          { w:230, label:'Singoli',         sub:'solution · neat · IS' },
-        ] as any[]).map((h, i) => (
+          { w:190, label:'Analiti',        sub:`${analiti.length} composti` },
+          { w:270, label:'CRM Mix',        sub:'clicca per selezionare', br:true },
+          { w:260, label:'Singoli / Neat', sub:'preparazioni non scadute' },
+        ] as { w:number; label:string; sub:string; br?:boolean }[]).map((h, i) => (
           <div key={i} style={{ width:h.w, padding:'9px 11px', flexShrink:0,
                                 borderRight: h.br ? `1px solid ${C.page.brd}` : undefined }}>
             <div style={{ fontSize:11, fontWeight:700, color:C.page.t2,
@@ -89,148 +114,222 @@ export function GrigliaAnalitiCrm({
         ))}
       </div>
 
-      {/* Righe */}
-      <div style={{ flex:1, overflowY:'auto', overflowX:'hidden', position:'relative' }}>
-        {analiti.map((a, i) => {
-          const isSepSngEnt = i === nSoloSng && nSoloSng > 0 && nEntrambi > 0
-          const isSepEntMix = i === nSoloSng + nEntrambi && analiti.filter(x => x.mixId && !x.sngId).length > 0
-          const sngCrm = a.sngId ? sngInfo.get(a.nome) : undefined
-          const isRem  = a.sngId ? removedCon.has(a.sngId) : false
-          const isSel  = a.sngId ? selSrcs.has(a.sngId) : false
+      {/* ── Corpo scrollabile ── */}
+      <div style={{ flex:1, overflowY:'auto', overflowX:'hidden',
+                    display:'flex', position:'relative' }}>
 
-          return (
-            <div key={a.nome}>
-              {/* Separatori visivi tra i 3 gruppi */}
-              {(isSepSngEnt || isSepEntMix) && (
-                <div style={{ height:1, background:C.page.brd2, margin:'4px 0' }} />
-              )}
+        {/* Colonna Analiti + Singoli (scorrono insieme) */}
+        <div style={{ display:'flex', flexDirection:'column', flexShrink:0 }}>
+          {analiti.map((a, i) => {
+            const isSepSngEnt = i === nSoloSng && nSoloSng > 0 && nEntrambi > 0
+            const isSepEntMix = i === nSoloSng + nEntrambi &&
+                                analiti.filter(x => x.mixId && x.sngIds.length === 0).length > 0
+            const h = rowHeight(a)
 
-              <div style={{ display:'flex', height:ROW, borderBottom:`1px solid rgba(0,0,0,.05)`,
-                            flexShrink:0 }}>
-                {/* ── Cella Analita ── */}
-                <div style={{ width:190, flexShrink:0, padding:'5px 9px',
-                              borderRight:`1px solid ${C.page.brd}`,
-                              display:'flex', alignItems:'center' }}>
-                  <div style={{
-                    background: C.ana.bg, border:`1px solid ${C.ana.border}`,
-                    borderStyle: a.isIS ? 'dashed' : 'solid',
-                    opacity: a.isIS ? 0.68 : 1,
-                    borderRadius:4, padding:'3px 7px', fontSize:11,
-                    fontFamily:'IBM Plex Mono, monospace', whiteSpace:'nowrap',
-                    overflow:'hidden', textOverflow:'ellipsis', width:'100%',
-                  }}>
-                    {a.nome}{a.isIS ? ' [IS]' : ''}
-                  </div>
-                </div>
+            return (
+              <div key={a.nome}>
+                {(isSepSngEnt || isSepEntMix) && (
+                  <div style={{ height:1, background:C.page.brd2, margin:'4px 0' }} />
+                )}
 
-                {/* ── Cella Mix ── */}
-                <div style={{ width:270, flexShrink:0, position:'relative',
-                              borderRight:`1px solid ${C.page.brd}` }}>
-                  {a.mixId && mixStart[a.mixId] === i && (() => {
-                    const cnt  = mixCount[a.mixId] ?? 1
-                    const info = mixInfo.get(a.mixId)
-                    const sel  = selSrcs.has(a.mixId)
-                    const nomi = mixAnaliti.get(a.mixId) ?? []
-                    return (
-                      <div
-                        onClick={() => !hasCon && onToggleMix(a.mixId!)}
-                        style={{
-                          position:'absolute', left:6, right:6, top:5,
-                          height: cnt * ROW - 10,
-                          borderRadius:6, background: sel ? '#cee3f8' : C.mix.bg,
-                          border:`1.5px solid ${C.mix.border}`,
-                          padding:'6px 9px', cursor: hasCon ? 'not-allowed' : 'pointer',
-                          opacity: hasCon ? 0.35 : 1,
-                          boxShadow: sel ? `0 0 0 3px rgba(24,95,165,.3)` : undefined,
-                          overflow:'hidden', zIndex:2,
-                          transition:'box-shadow .12s, background .1s',
-                        }}
-                      >
-                        <div style={{ fontSize:11, fontWeight:700,
-                                      fontFamily:'IBM Plex Mono, monospace',
-                                      color:C.mix.text }}>
-                          {info?.mix_id ?? a.mixId}
-                        </div>
-                        <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
-                          {info?.produttore ?? ''}{info?.lotto ? ` · ${info.lotto}` : ''}
-                        </div>
-                        <div style={{ fontSize:10, color:C.page.th, marginTop:2,
-                                      fontFamily:'IBM Plex Mono, monospace' }}>
-                          {info?.cv ? `${info.cv} mg/L` : ''}
-                          {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
-                        </div>
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
-                          {nomi.map(n => {
-                            const isRmChip = analiti.find(x => x.nome === n)?.sngId
-                              ? removedCon.has(analiti.find(x => x.nome === n)!.sngId!)
-                              : false
-                            return (
-                              <span key={n} style={{
-                                fontSize:9, fontFamily:'IBM Plex Mono, monospace',
-                                background:C.mix.chip, color:C.mix.text,
-                                borderRadius:2, padding:'1px 4px',
-                                opacity: isRmChip ? 0.3 : 1,
-                                textDecoration: isRmChip ? 'line-through' : undefined,
-                              }}>{n}</span>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
+                <div style={{ display:'flex', height:h,
+                              borderBottom:`1px solid rgba(0,0,0,.05)`, flexShrink:0 }}>
 
-                {/* ── Cella Singolo ── */}
-                <div style={{ width:230, flexShrink:0, padding:'4px 8px',
-                              display:'flex', alignItems:'center' }}>
-                  {a.sngId && sngCrm && (
-                    <div
-                      onClick={() => !hasCon && !isRem && onToggleSng(a.sngId!)}
-                      style={{
-                        width:'100%', borderRadius:5, padding:'4px 8px',
-                        background: isRem ? C.page.sur : (a.isCon ? C.con.bg : (isSel ? '#b4d97c' : C.sng.bg)),
-                        border:`1.5px solid ${a.isCon ? C.con.border : C.sng.border}`,
-                        borderStyle: a.isIS ? 'dashed' : 'solid',
-                        opacity: isRem ? 0.28 : 1,
-                        textDecoration: isRem ? 'line-through' : undefined,
-                        cursor: hasCon || isRem ? 'not-allowed' : 'pointer',
-                        display:'flex', alignItems:'center', justifyContent:'space-between', gap:5,
-                        boxShadow: isSel ? `0 0 0 3px rgba(59,109,17,.28)` : undefined,
-                        transition:'box-shadow .12s, background .1s',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize:11, fontWeight:700,
-                                      fontFamily:'IBM Plex Mono, monospace',
-                                      color: a.isCon ? C.con.text : C.sng.text }}>
-                          {a.nome}
-                        </div>
-                        <div style={{ fontSize:10, color:C.page.th, marginTop:1,
-                                      fontFamily:'IBM Plex Mono, monospace' }}>
-                          {sngCrm.cv ? `${sngCrm.cv} mg/L` : '—'}
-                          {sngCrm.lotto ? ` · ${sngCrm.lotto}` : ''}
-                        </div>
-                      </div>
-                      {/* Pulsante × per rimuovere duplicato */}
-                      {a.isCon && !isRem && (
-                        <button
-                          onClick={e => { e.stopPropagation(); onRemoveCon(a.sngId!) }}
-                          style={{
-                            width:17, height:17, borderRadius:'50%',
-                            border:`1.5px solid ${C.con.border}`, background:'#fff',
-                            color:C.con.text, cursor:'pointer', flexShrink:0,
-                            display:'flex', alignItems:'center', justifyContent:'center',
-                            fontSize:12, fontWeight:700,
-                          }}
-                        >×</button>
-                      )}
+                  {/* Cella Analita */}
+                  <div style={{ width:190, flexShrink:0, padding:'5px 9px',
+                                borderRight:`1px solid ${C.page.brd}`,
+                                display:'flex', alignItems:'center' }}>
+                    <div style={{
+                      background: C.ana.bg, border:`1px solid ${C.ana.border}`,
+                      borderStyle: a.isIS ? 'dashed' : 'solid',
+                      opacity: a.isIS ? 0.68 : 1,
+                      borderRadius:4, padding:'3px 7px', fontSize:11,
+                      fontFamily:'IBM Plex Mono, monospace', whiteSpace:'nowrap',
+                      overflow:'hidden', textOverflow:'ellipsis', width:'100%',
+                    }}>
+                      {a.nome}{a.isIS ? ' [IS]' : ''}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Placeholder Mix (il blocco vero è assoluto) */}
+                  <div style={{ width:270, flexShrink:0,
+                                borderRight:`1px solid ${C.page.brd}` }} />
+
+                  {/* Cella Singoli — una card per sngId */}
+                  <div style={{ width:260, flexShrink:0, padding:'3px 6px',
+                                display:'flex', flexDirection:'column', gap:3,
+                                justifyContent:'center' }}>
+                    {a.sngIds.map(sngId => {
+                      const crm   = sngById.get(sngId)
+                      if (!crm) return null
+                      const isRem = removedCon.has(sngId)
+                      const isSel = selSrcs.has(sngId)
+                      // duplicato attivo = ha anche un mix non rimosso
+                      const isCon = a.isCon && !!a.mixId && !removedMix.has(a.mixId)
+                      return (
+                        <div
+                          key={sngId}
+                          onClick={() => !isRem && onToggleSng(sngId)}
+                          style={{
+                            borderRadius:5, padding:'3px 7px',
+                            background: isRem ? C.page.sur
+                              : (isCon ? C.con.bg : (isSel ? '#b4d97c' : C.sng.bg)),
+                            border:`1.5px solid ${isCon ? C.con.border : C.sng.border}`,
+                            borderStyle: a.isIS ? 'dashed' : 'solid',
+                            opacity: isRem ? 0.28 : 1,
+                            textDecoration: isRem ? 'line-through' : undefined,
+                            cursor: isRem ? 'default' : 'pointer',
+                            display:'flex', alignItems:'center',
+                            justifyContent:'space-between', gap:4,
+                            boxShadow: isSel ? `0 0 0 2px rgba(59,109,17,.28)` : undefined,
+                            transition:'box-shadow .12s, background .1s',
+                          }}
+                        >
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:10, fontWeight:700,
+                                          fontFamily:'IBM Plex Mono, monospace',
+                                          color: isCon ? C.con.text : C.sng.text,
+                                          whiteSpace:'nowrap', overflow:'hidden',
+                                          textOverflow:'ellipsis' }}>
+                              {crm.cv ? `${crm.cv} mg/L` : '—'}
+                              {crm.forma ? ` · ${crm.forma}` : ''}
+                            </div>
+                            <div style={{ fontSize:9, color:C.page.th,
+                                          fontFamily:'IBM Plex Mono, monospace' }}>
+                              {crm.lotto ?? '—'}
+                              {crm.scadenza_prodotto ? ` · scad. ${crm.scadenza_prodotto}` : ''}
+                            </div>
+                          </div>
+                          {!isRem && (
+                            <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+                              <button
+                                onClick={e => { e.stopPropagation(); goToComposto(crm.nome) }}
+                                style={{
+                                  width:15, height:15, borderRadius:3,
+                                  border:`1px solid ${C.sng.border}`,
+                                  background:'#fff', color:C.sng.text,
+                                  cursor:'pointer', display:'flex', alignItems:'center',
+                                  justifyContent:'center', fontSize:9,
+                                }}
+                                title="Vedi nel DB composti"
+                              >↗</button>
+                              <button
+                                onClick={e => { e.stopPropagation(); onRemoveCon(sngId) }}
+                                style={{
+                                  width:15, height:15, borderRadius:'50%',
+                                  border:`1.5px solid ${isCon ? C.con.border : C.sng.border}`,
+                                  background:'#fff',
+                                  color: isCon ? C.con.text : C.sng.text,
+                                  cursor:'pointer', display:'flex', alignItems:'center',
+                                  justifyContent:'center', fontSize:11, fontWeight:700,
+                                }}
+                                title="Rimuovi dallo schema"
+                              >×</button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+
+        {/* Blocchi Mix in position:absolute rispetto al corpo scrollabile */}
+        <div style={{
+          position:'absolute', left:190, width:270,
+          height: totalMixHeight, pointerEvents:'none',
+        }}>
+          {analiti.map(a => {
+            if (!a.mixId || mixFirstAnalita.get(a.mixId) !== a.nome) return null
+            const info   = mixInfo.get(a.mixId)
+            const sel    = selSrcs.has(a.mixId)
+            const isRmMx = removedMix.has(a.mixId)
+            const nomi   = mixAnaliti.get(a.mixId) ?? []
+            const top    = mixTopPx[a.mixId] ?? 0
+            const height = mixHeightPx[a.mixId] ?? ROW
+            return (
+              <div
+                key={a.mixId}
+                onClick={() => !isRmMx && onToggleMix(a.mixId!)}
+                style={{
+                  position:'absolute', left:6, right:6,
+                  top: top + 5, height: height - 10,
+                  borderRadius:6,
+                  background: isRmMx ? C.page.sur : (sel ? '#cee3f8' : C.mix.bg),
+                  border:`1.5px solid ${C.mix.border}`,
+                  padding:'6px 9px',
+                  cursor: isRmMx ? 'default' : 'pointer',
+                  opacity: isRmMx ? 0.28 : 1,
+                  textDecoration: isRmMx ? 'line-through' : undefined,
+                  boxShadow: sel ? `0 0 0 3px rgba(24,95,165,.3)` : undefined,
+                  overflow:'hidden', zIndex:2, pointerEvents:'all',
+                  transition:'box-shadow .12s, background .1s',
+                }}
+              >
+                {!isRmMx && (
+                  <div style={{ position:'absolute', top:4, right:4,
+                                display:'flex', gap:3, zIndex:3 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); goToComposto(info?.nome ?? a.mixId!) }}
+                      style={{
+                        width:15, height:15, borderRadius:3,
+                        border:`1px solid ${C.mix.border}`,
+                        background:'#fff', color:C.mix.text,
+                        cursor:'pointer', display:'flex', alignItems:'center',
+                        justifyContent:'center', fontSize:9,
+                      }}
+                      title="Vedi nel DB composti"
+                    >↗</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); onRemoveMix(a.mixId!) }}
+                      style={{
+                        width:15, height:15, borderRadius:'50%',
+                        border:`1.5px solid ${C.mix.border}`,
+                        background:'#fff', color:C.mix.text,
+                        cursor:'pointer', display:'flex', alignItems:'center',
+                        justifyContent:'center', fontSize:11, fontWeight:700,
+                      }}
+                      title="Rimuovi questo CRM dallo schema"
+                    >×</button>
+                  </div>
+                )}
+                <div style={{ fontSize:11, fontWeight:700,
+                              fontFamily:'IBM Plex Mono, monospace',
+                              color:C.mix.text, paddingRight: isRmMx ? 0 : 42 }}>
+                  {info?.mix_id ?? a.mixId}
+                </div>
+                <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
+                  {info?.produttore ?? ''}{info?.lotto ? ` · ${info.lotto}` : ''}
+                </div>
+                <div style={{ fontSize:10, color:C.page.th, marginTop:2,
+                              fontFamily:'IBM Plex Mono, monospace' }}>
+                  {info?.cv ? `${info.cv} mg/L` : ''}
+                  {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
+                  {nomi.map(n => {
+                    const analitoN = analiti.find(x => x.nome === n)
+                    const allRem   = analitoN?.sngIds.every(id => removedCon.has(id)) ?? false
+                    return (
+                      <span key={n} style={{
+                        fontSize:9, fontFamily:'IBM Plex Mono, monospace',
+                        background:C.mix.chip, color:C.mix.text,
+                        borderRadius:2, padding:'1px 4px',
+                        opacity: allRem ? 0.3 : 1,
+                        textDecoration: allRem ? 'line-through' : undefined,
+                      }}>{n}</span>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
       </div>
     </div>
   )

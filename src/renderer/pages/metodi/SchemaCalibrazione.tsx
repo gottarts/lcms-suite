@@ -20,7 +20,7 @@ import type {
 } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import {
-  useSchemaData, getConcInfo, targetColIdx,
+  useSchemaData, targetColIdx,
   salvaWorkNelDb, getCompsFromWork,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
@@ -529,18 +529,23 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   // ── Stato principale ──────────────────────────────────────────────────────
   const [selSrcs,    setSelSrcs]    = useState<Map<string, SorgenteSel>>(new Map())
   const [removedCon, setRemovedCon] = useState<Set<string>>(new Set())
+  const [removedMix, setRemovedMix] = useState<Set<string>>(new Set())
   const [workCols,   setWorkCols]   = useState<WorkInSchema[][]>([[]])
   const [modalOpen,  setModalOpen]  = useState(false)
   const [saving,     setSaving]     = useState(false)
   const [drawerWork, setDrawerWork] = useState<WorkInSchema | null>(null)
   const [drawerCol,  setDrawerCol]  = useState(0)
 
-  const hasCon = analiti.some(a => a.isCon && a.sngId && !removedCon.has(a.sngId))
+  // Duplicato ancora attivo = analita che ha sia mix (non rimosso) che singolo (non rimosso)
+  const hasCon = analiti.some(a =>
+    a.isCon &&
+    a.sngIds.some(id => !removedCon.has(id)) &&
+    a.mixId && !removedMix.has(a.mixId)
+  )
   const tgtCol = targetColIdx(selSrcs)
 
   // ── Toggle selezione sorgenti ──────────────────────────────────────────────
   const toggleMix = useCallback((mixId: string) => {
-    if (hasCon) return
     setSelSrcs(prev => {
       const m = new Map(prev)
       if (m.has(mixId)) { m.delete(mixId) }
@@ -550,10 +555,9 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       }
       return m
     })
-  }, [hasCon, crmItems])
+  }, [crmItems])
 
   const toggleSng = useCallback((sngId: string) => {
-    if (hasCon) return
     setSelSrcs(prev => {
       const m = new Map(prev)
       if (m.has(sngId)) { m.delete(sngId) }
@@ -563,7 +567,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       }
       return m
     })
-  }, [hasCon, crmItems])
+  }, [crmItems])
 
   const toggleWork = useCallback((w: WorkInSchema, colSrc: number) => {
     setSelSrcs(prev => {
@@ -578,6 +582,11 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const removeCon = useCallback((sngId: string) => {
     setRemovedCon(prev => new Set([...prev, sngId]))
     setSelSrcs(prev => { const m = new Map(prev); m.delete(sngId); return m })
+  }, [])
+
+  const removeMix = useCallback((mixId: string) => {
+    setRemovedMix(prev => new Set([...prev, mixId]))
+    setSelSrcs(prev => { const m = new Map(prev); m.delete(mixId); return m })
   }, [])
 
   // ── Crea Work ──────────────────────────────────────────────────────────────
@@ -633,7 +642,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
 
   const steps = [
     { n: 1, label: 'Lettura CRM' },
-    { n: 2, label: 'Risolvi duplicati' },
+    { n: 2, label: 'Rimuovi CRM indesiderati' },
     { n: 3, label: 'Seleziona sorgenti' },
     { n: 4, label: 'Crea Work' },
   ]
@@ -723,10 +732,12 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             crmItems={crmItems}
             selSrcs={selSrcs}
             removedCon={removedCon}
-            hasCon={hasCon}
+            removedMix={removedMix}
             onToggleMix={toggleMix}
             onToggleSng={toggleSng}
             onRemoveCon={removeCon}
+            onRemoveMix={removeMix}
+            onClose={onClose}
           />
           <ColonneWork
             workCols={workCols}
@@ -746,8 +757,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                     justifyContent:'space-between', flexShrink:0 }}>
         <div>
           {hasCon && (
-            <span style={{ fontSize:12, color:C.con.text, fontWeight:700 }}>
-              ⚠ Risolvi i duplicati prima di continuare
+            <span style={{ fontSize:12, color:C.con.text, fontWeight:600 }}>
+              ⚠ Ci sono analiti con sia mix che singolo — elimina quelli non voluti con ×
             </span>
           )}
         </div>
@@ -764,12 +775,12 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           <div style={{ width:1, height:20, background:C.page.brd }} />
           <button
             onClick={() => setModalOpen(true)}
-            disabled={selSrcs.size === 0 || hasCon}
+            disabled={selSrcs.size === 0}
             style={{
               padding:'7px 18px', borderRadius:6, border:'none', cursor:'pointer',
               fontSize:13, fontWeight:700,
-              background: (selSrcs.size === 0 || hasCon) ? C.page.brd : C.work.border,
-              color: (selSrcs.size === 0 || hasCon) ? C.page.th : '#fff',
+              background: selSrcs.size === 0 ? C.page.brd : C.work.border,
+              color: selSrcs.size === 0 ? C.page.th : '#fff',
             }}
           >+ Crea Work</button>
         </div>
