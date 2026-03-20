@@ -69,7 +69,15 @@ export function registerWorkIpc(): void {
         CASE
           WHEN wi.source_type = 'crm'  THEN (SELECT nome FROM composti WHERE id = wi.source_id)
           WHEN wi.source_type = 'work' THEN (SELECT nome FROM work    WHERE id = wi.source_id)
-        END AS source_nome
+        END AS source_nome,
+        CASE
+          WHEN wi.source_type = 'crm' THEN (SELECT lotto FROM composti WHERE id = wi.source_id)
+          ELSE NULL
+        END AS source_lotto,
+        CASE
+          WHEN wi.source_type = 'crm' THEN (SELECT forma_commerciale FROM composti WHERE id = wi.source_id)
+          ELSE NULL
+        END AS source_mix
       FROM work_ingredienti wi
       WHERE wi.work_id = ?
     `).all(id)

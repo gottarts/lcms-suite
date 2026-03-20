@@ -276,6 +276,49 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
           </>
         )}
 
+        {/* Sorgenti / Tracciabilità */}
+        {work.ingredienti && work.ingredienti.length > 0 && (
+          <>
+            <Separator />
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Sorgenti / Tracciabilità
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+              {/* Nodo root: la work stessa */}
+              <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11 }}>
+                <div style={{ width:8, height:8, borderRadius:'50%', background:'#BA7517', flexShrink:0 }} />
+                <div>
+                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{work.nome}</div>
+                  <div style={{ fontSize:10, color:'hsl(var(--muted-foreground))' }}>
+                    {work.concentrazione != null ? `${work.concentrazione} mg/L` : ''}
+                    {work.volume_ml ? ` · ${work.volume_ml} mL` : ''}
+                  </div>
+                </div>
+              </div>
+              {/* Sorgenti dirette */}
+              {work.ingredienti.map((ing: any, i: number) => (
+                <div key={i}>
+                  <div style={{ width:1, height:10, background:'hsl(var(--border))', marginLeft:3 }} />
+                  <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, paddingLeft:16 }}>
+                    <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
+                                  background: ing.source_type === 'crm' ? '#3B6D11' : '#BA7517' }} />
+                    <div>
+                      <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>
+                        {ing.source_nome ?? `ID ${ing.source_id}`}
+                      </div>
+                      <div style={{ fontSize:10, color:'hsl(var(--muted-foreground))' }}>
+                        {ing.source_type === 'crm'
+                          ? `${ing.source_mix ?? 'CRM'}${ing.source_lotto ? ` · Lotto: ${ing.source_lotto}` : ''}`
+                          : '↳ Work'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Composizione */}
         {work.ingredienti && work.ingredienti.length > 0 && (() => {
           const filtered = compSearch
@@ -314,8 +357,13 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                 }}>
                   <div>
                     <div style={{ fontWeight: 500 }}>{ing.source_nome ?? `ID ${ing.source_id}`}</div>
+                    {ing.source_type === 'crm' && ing.source_lotto && (
+                      <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
+                        Lotto: {ing.source_lotto}
+                      </div>
+                    )}
                     <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
-                      {ing.source_type === 'work' ? `↳ Work` : 'CRM'}
+                      {ing.source_type === 'work' ? '↳ Work' : (ing.source_mix ?? 'CRM')}
                     </div>
                   </div>
                   <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fontWeight: 500, color: 'hsl(var(--muted-foreground))' }}>

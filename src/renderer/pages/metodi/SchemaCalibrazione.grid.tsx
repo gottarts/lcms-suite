@@ -212,11 +212,12 @@ export function GrigliaAnalitiCrm({
                               {crm.cv ? `${crm.cv} mg/L` : '—'}
                               {crm.forma ? ` · ${crm.forma}` : ''}
                             </div>
-                            <div style={{ fontSize:9, color:C.page.th,
-                                          fontFamily:'IBM Plex Mono, monospace' }}>
-                              {crm.lotto ?? '—'}
-                              {crm.scadenza_prodotto ? ` · scad. ${crm.scadenza_prodotto}` : ''}
-                            </div>
+                            {crm.scadenza_prodotto && (
+                              <div style={{ fontSize:9, color:C.page.th,
+                                            fontFamily:'IBM Plex Mono, monospace' }}>
+                                scad. {crm.scadenza_prodotto}
+                              </div>
+                            )}
                           </div>
                           {!isRem && (
                             <div style={{ display:'flex', gap:3, flexShrink:0 }}>
@@ -323,7 +324,7 @@ export function GrigliaAnalitiCrm({
                   {info?.mix ?? info?.mix_id ?? a.mixId}
                 </div>
                 <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
-                  {info?.produttore ?? ''}{info?.lotto ? ` · ${info.lotto}` : ''}
+                  {info?.produttore ?? ''}
                 </div>
                 <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                               fontFamily:'IBM Plex Mono, monospace' }}>

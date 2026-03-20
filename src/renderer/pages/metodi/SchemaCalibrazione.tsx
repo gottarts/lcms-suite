@@ -25,6 +25,9 @@ import {
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
 import { schemaCalApi } from '../../lib/api'
+import { SlidePanel } from '@/components/shared/SlidePanel'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG Overlay per frecce di connessione
@@ -386,210 +389,179 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
   }
 
   return (
-    <>
-      {/* Backdrop */}
-      <div onClick={onClose} style={{
-        position:'fixed', inset:0, background:'rgba(0,0,0,.28)', zIndex:200,
-      }} />
+    <SlidePanel open={!!work} onClose={onClose} title={work.nome}
+                subtitle={isInter ? `Intermedia lv.${colIdx}` : 'Work'} width="460px">
+      <div className="space-y-4">
 
-      {/* Pannello */}
-      <div style={{
-        position:'fixed', top:0, right:0, bottom:0, width:440, maxWidth:'100vw',
-        background:C.page.sur, borderLeft:`1px solid ${C.page.brd}`,
-        display:'flex', flexDirection:'column',
-        boxShadow:'-4px 0 24px rgba(0,0,0,.1)', zIndex:201,
-      }}>
-        {/* Header */}
-        <div style={{ padding:'16px 18px 12px', borderBottom:`1px solid ${C.page.brd}`,
-                      flexShrink:0 }}>
-          <div style={{ display:'flex', justifyContent:'space-between',
-                        alignItems:'flex-start', gap:8, marginBottom:8 }}>
-            <div style={{ fontSize:15, fontWeight:700, color:C.page.t1,
-                          lineHeight:1.2 }}>{work.nome}</div>
-            <button onClick={onClose} style={{
-              width:26, height:26, borderRadius:'50%',
-              border:`1px solid ${C.page.brd}`, background:C.page.bg,
-              cursor:'pointer', display:'flex', alignItems:'center',
-              justifyContent:'center', fontSize:15, color:C.page.t2, flexShrink:0,
-            }}>×</button>
-          </div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:6, alignItems:'center' }}>
-            <span style={{
-              fontSize:10, padding:'2px 8px', borderRadius:3, fontWeight:700,
-              background:col.chip, color:col.text,
-            }}>{isInter ? `Intermedia ${colIdx}` : 'Work'}</span>
-            <span style={{
-              fontSize:10, padding:'2px 8px', borderRadius:3, fontWeight:700,
-              background: work.validitaMesi ? C.sng.chip : '#d3d1c7',
-              color: work.validitaMesi ? C.sng.text : C.page.t2,
-            }}>
-              {work.validitaMesi ? `valida ${work.validitaMesi} mesi` : 'al momento'}
-            </span>
-            {[
-              work.conc ? `${work.conc} mg/L` : (work.concVariabile ? 'variabile' : null),
-              work.volFin ? `${work.volFin} mL` : null,
-              work.solv || null,
-            ].filter(Boolean).map((kv, i) => (
-              <span key={i} style={{ fontSize:11, color:C.page.t2,
-                                     fontFamily:'IBM Plex Mono, monospace' }}>{kv}</span>
-            ))}
-          </div>
+        {/* Badge validità + info */}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, alignItems:'center' }}>
+          <span style={{
+            fontSize:10, padding:'2px 8px', borderRadius:3, fontWeight:700,
+            background: work.validitaMesi ? C.sng.chip : '#d3d1c7',
+            color: work.validitaMesi ? C.sng.text : C.page.t2,
+          }}>
+            {work.validitaMesi ? `valida ${work.validitaMesi} mesi` : 'al momento'}
+          </span>
+          {[
+            work.conc ? `${work.conc} mg/L` : (work.concVariabile ? 'variabile' : null),
+            work.volFin ? `${work.volFin} mL` : null,
+            work.solv || null,
+          ].filter(Boolean).map((kv, i) => (
+            <span key={i} style={{ fontSize:11, color:C.page.t2,
+                                   fontFamily:'IBM Plex Mono, monospace' }}>{kv}</span>
+          ))}
         </div>
 
         {/* Azioni */}
-        <div style={{ display:'flex', gap:8, padding:'10px 18px',
-                      borderBottom:`1px solid ${C.page.brd}`, flexShrink:0 }}>
-          <button
-            onClick={() => { if (workIdx >= 0) { onDelete(colIdx, workIdx); onClose() } }}
-            style={{
-              padding:'5px 14px', borderRadius:5,
-              border:`1px solid ${C.con.border}`, background:C.page.sur,
-              cursor:'pointer', fontSize:12, fontWeight:700,
-              fontFamily:'Lato, sans-serif', color:C.con.text,
-            }}
-          >✕ Elimina</button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="text-destructive"
+            onClick={() => { if (workIdx >= 0) { onDelete(colIdx, workIdx); onClose() } }}>
+            Elimina
+          </Button>
         </div>
 
-        {/* Body scrollabile */}
-        <div style={{ flex:1, overflowY:'auto', padding:'14px 18px',
-                      display:'flex', flexDirection:'column', gap:16 }}>
+        <Separator />
 
-          {/* Tabella volumi */}
-          <div>
-            <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
-                          textTransform:'uppercase', letterSpacing:'0.08em',
-                          marginBottom:6 }}>Volumi di prelievo</div>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <thead>
-                <tr>
-                  {['Sorgente', 'Diluizione', 'Preleva (mL)'].map(h => (
-                    <th key={h} style={{ textAlign:'left', fontSize:10, fontWeight:700,
-                                        color:C.page.th, textTransform:'uppercase',
-                                        letterSpacing:'0.06em', padding:'3px 6px',
-                                        borderBottom:`1px solid ${C.page.brd}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {work.vols.map((v, i) => (
-                  <tr key={i} style={{ background:col.bg }}>
-                    <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                  fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
-                      {v.nome}
-                    </td>
-                    <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                  fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
-                      {v.dilFactor ? `÷${v.dilFactor}` : (v.concTarget ? `${v.concTarget} mg/L` : '—')}
-                    </td>
-                    <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                  fontSize:11, fontWeight:700,
-                                  borderBottom:`1px solid rgba(0,0,0,.04)` }}>
-                      {v.vol.toFixed(3)}
-                    </td>
-                  </tr>
+        {/* Tabella volumi */}
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
+                        textTransform:'uppercase', letterSpacing:'0.08em',
+                        marginBottom:6 }}>Volumi di prelievo</div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr>
+                {['Sorgente', 'Diluizione', 'Preleva (mL)'].map(h => (
+                  <th key={h} style={{ textAlign:'left', fontSize:10, fontWeight:700,
+                                      color:C.page.th, textTransform:'uppercase',
+                                      letterSpacing:'0.06em', padding:'3px 6px',
+                                      borderBottom:`1px solid ${C.page.brd}` }}>{h}</th>
                 ))}
-                {/* Riga solvente / warning */}
-                <tr style={{ color:neg ? '#a32d2d' : C.page.th, fontStyle:'italic' }}>
-                  {neg ? (
-                    <td colSpan={2} style={{ padding:'4px 6px', fontSize:11,
-                                             fontWeight:700, fontStyle:'normal',
-                                             fontFamily:'IBM Plex Mono, monospace' }}>
-                      ⚠ Prelievi ({usedVol.toFixed(3)} mL) superano il volume finale
-                    </td>
-                  ) : (
-                    <>
-                      <td style={{ padding:'4px 6px', fontSize:11,
-                                   fontFamily:'IBM Plex Mono, monospace' }}>
-                        {work.solv || 'Solvente'} (completamento)
-                      </td>
-                      <td style={{ padding:'4px 6px', fontSize:11,
-                                   fontFamily:'IBM Plex Mono, monospace' }}>—</td>
-                    </>
-                  )}
-                  <td style={{ padding:'4px 6px', fontSize:11,
-                               fontFamily:'IBM Plex Mono, monospace',
-                               color: neg ? '#a32d2d' : C.page.th }}>
-                    {neg ? '—' : solvVol.toFixed(3)}
+              </tr>
+            </thead>
+            <tbody>
+              {work.vols.map((v, i) => (
+                <tr key={i} style={{ background:col.bg }}>
+                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
+                    {v.nome}
+                  </td>
+                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
+                    {v.dilFactor ? `÷${v.dilFactor}` : (v.concTarget ? `${v.concTarget} mg/L` : '—')}
+                  </td>
+                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                fontSize:11, fontWeight:700,
+                                borderBottom:`1px solid rgba(0,0,0,.04)` }}>
+                    {v.vol.toFixed(3)}
                   </td>
                 </tr>
-                {/* Riga totale */}
-                <tr style={{ fontWeight:700, borderTop:`2px solid ${C.page.brd}`,
-                             color: neg ? '#a32d2d' : undefined }}>
+              ))}
+              {/* Riga solvente / warning */}
+              <tr style={{ color:neg ? '#a32d2d' : C.page.th, fontStyle:'italic' }}>
+                {neg ? (
+                  <td colSpan={2} style={{ padding:'4px 6px', fontSize:11,
+                                           fontWeight:700, fontStyle:'normal',
+                                           fontFamily:'IBM Plex Mono, monospace' }}>
+                    ⚠ Prelievi ({usedVol.toFixed(3)} mL) superano il volume finale
+                  </td>
+                ) : (
+                  <>
+                    <td style={{ padding:'4px 6px', fontSize:11,
+                                 fontFamily:'IBM Plex Mono, monospace' }}>
+                      {work.solv || 'Solvente'} (completamento)
+                    </td>
+                    <td style={{ padding:'4px 6px', fontSize:11,
+                                 fontFamily:'IBM Plex Mono, monospace' }}>—</td>
+                  </>
+                )}
+                <td style={{ padding:'4px 6px', fontSize:11,
+                             fontFamily:'IBM Plex Mono, monospace',
+                             color: neg ? '#a32d2d' : C.page.th }}>
+                  {neg ? '—' : solvVol.toFixed(3)}
+                </td>
+              </tr>
+              {/* Riga totale */}
+              <tr style={{ fontWeight:700, borderTop:`2px solid ${C.page.brd}`,
+                           color: neg ? '#a32d2d' : undefined }}>
+                <td style={{ padding:'4px 6px', fontSize:11,
+                             fontFamily:'IBM Plex Mono, monospace' }}>Totale prelievi</td>
+                <td />
+                <td style={{ padding:'4px 6px', fontSize:11,
+                             fontFamily:'IBM Plex Mono, monospace' }}>
+                  {usedVol.toFixed(3)}
+                </td>
+              </tr>
+              {!neg && (
+                <tr style={{ fontWeight:700 }}>
                   <td style={{ padding:'4px 6px', fontSize:11,
-                               fontFamily:'IBM Plex Mono, monospace' }}>Totale prelievi</td>
+                               fontFamily:'IBM Plex Mono, monospace' }}>Volume finale</td>
                   <td />
                   <td style={{ padding:'4px 6px', fontSize:11,
                                fontFamily:'IBM Plex Mono, monospace' }}>
-                    {usedVol.toFixed(3)}
+                    {work.volFin.toFixed(3)}
                   </td>
                 </tr>
-                {!neg && (
-                  <tr style={{ fontWeight:700 }}>
-                    <td style={{ padding:'4px 6px', fontSize:11,
-                                 fontFamily:'IBM Plex Mono, monospace' }}>Volume finale</td>
-                    <td />
-                    <td style={{ padding:'4px 6px', fontSize:11,
-                                 fontFamily:'IBM Plex Mono, monospace' }}>
-                      {work.volFin.toFixed(3)}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          {/* Catena tracciabilità */}
-          <div>
-            <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
-                          textTransform:'uppercase', letterSpacing:'0.08em',
-                          marginBottom:6 }}>Catena di tracciabilità</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-              <ChainNode w={work} ci={colIdx} />
-            </div>
-          </div>
+        <Separator />
 
-          {/* Lista composti */}
-          <div>
-            <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
-                          textTransform:'uppercase', letterSpacing:'0.08em',
-                          marginBottom:6 }}>
-              Composti ({allComps.length})
-            </div>
-            <input
-              placeholder="Filtra composti..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                width:'100%', padding:'6px 9px', border:`1px solid ${C.page.brd}`,
-                borderRadius:5, fontSize:12, fontFamily:'Lato, sans-serif',
-                outline:'none', background:C.page.bg, color:C.page.t1, marginBottom:8,
-              }}
-            />
-            {comps.length === 0 ? (
-              <div style={{ fontSize:11, color:C.page.th, fontStyle:'italic' }}>
-                {search ? 'Nessun composto corrisponde al filtro' : 'Nessun composto trovato'}
-              </div>
-            ) : comps.map((c, i) => (
-              <div key={i} style={{
-                display:'flex', justifyContent:'space-between', alignItems:'center',
-                padding:'5px 8px', borderBottom:`1px solid rgba(0,0,0,.04)`,
-                fontSize:11,
-              }}>
-                <div>
-                  <div style={{ fontWeight:500, color:C.page.t1 }}>{c.nome}</div>
-                  <div style={{ fontSize:10, color:C.page.th,
-                                fontFamily:'IBM Plex Mono, monospace' }}>{c.srcPath}</div>
-                </div>
-                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:11,
-                              color:C.page.t2, fontWeight:500 }}>
-                  {c.concInWork.toFixed(4)} {c.unita}
-                </div>
-              </div>
-            ))}
+        {/* Catena tracciabilità */}
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
+                        textTransform:'uppercase', letterSpacing:'0.08em',
+                        marginBottom:6 }}>Catena di tracciabilità</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+            <ChainNode w={work} ci={colIdx} />
           </div>
         </div>
+
+        <Separator />
+
+        {/* Lista composti */}
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
+                        textTransform:'uppercase', letterSpacing:'0.08em',
+                        marginBottom:6 }}>
+            Composti ({allComps.length})
+          </div>
+          <input
+            placeholder="Filtra composti..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width:'100%', padding:'6px 9px', border:`1px solid ${C.page.brd}`,
+              borderRadius:5, fontSize:12, fontFamily:'Lato, sans-serif',
+              outline:'none', background:C.page.bg, color:C.page.t1, marginBottom:8,
+            }}
+          />
+          {comps.length === 0 ? (
+            <div style={{ fontSize:11, color:C.page.th, fontStyle:'italic' }}>
+              {search ? 'Nessun composto corrisponde al filtro' : 'Nessun composto trovato'}
+            </div>
+          ) : comps.map((c, i) => (
+            <div key={i} style={{
+              display:'flex', justifyContent:'space-between', alignItems:'center',
+              padding:'5px 8px', borderBottom:`1px solid rgba(0,0,0,.04)`,
+              fontSize:11,
+            }}>
+              <div>
+                <div style={{ fontWeight:500, color:C.page.t1 }}>{c.nome}</div>
+                <div style={{ fontSize:10, color:C.page.th,
+                              fontFamily:'IBM Plex Mono, monospace' }}>{c.srcPath}</div>
+              </div>
+              <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:11,
+                            color:C.page.t2, fontWeight:500 }}>
+                {c.concInWork.toFixed(4)} {c.unita}
+              </div>
+            </div>
+          ))}
+        </div>
+
       </div>
-    </>
+    </SlidePanel>
   )
 }
 
