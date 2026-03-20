@@ -10,11 +10,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema } from './SchemaCalibrazione.types'
+import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import { getConcInfo, calcolaVols, targetColIdx } from './SchemaCalibrazione.logic'
 
-const ROW = 42 // px altezza riga singola
+const ROW = 48 // px altezza riga singola
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Griglia Analiti | Mix CRM | Singoli
@@ -30,11 +30,12 @@ interface GrigliaProps {
   onRemoveCon: (sngId: string) => void
   onRemoveMix: (mixId: string) => void
   onClose: () => void        // per chiudere lo schema prima di navigare
+  registerCardRef: RegisterCardRef
 }
 
 export function GrigliaAnalitiCrm({
   analiti, crmItems, selSrcs, removedCon, removedMix,
-  onToggleMix, onToggleSng, onRemoveCon, onRemoveMix, onClose,
+  onToggleMix, onToggleSng, onRemoveCon, onRemoveMix, onClose, registerCardRef,
 }: GrigliaProps) {
   const navigate = useNavigate()
 
@@ -57,6 +58,12 @@ export function GrigliaAnalitiCrm({
   const mixInfo = new Map<string, CrmItem>()
   for (const c of crmItems) {
     if (c.mix_id && !mixInfo.has(c.mix_id)) mixInfo.set(c.mix_id, c)
+  }
+
+  // nome analita → CrmItem del mix (per concentrazioni nei chip)
+  const mixItemByNome = new Map<string, CrmItem>()
+  for (const c of crmItems) {
+    if (c.mix_id) mixItemByNome.set(c.nome, c)
   }
 
   // id (string) → CrmItem per i singoli
@@ -94,10 +101,18 @@ export function GrigliaAnalitiCrm({
 
   return (
     <div style={{ display:'flex', flexDirection:'column', flexShrink:0,
-                  borderRight:`2px solid ${C.page.brd2}`, background:C.page.sur }}>
+                  background:C.page.sur, margin:8, borderRadius:10,
+                  border:`1.5px dashed ${C.page.brd2}`, position:'relative' }}>
+
+      {/* Label sezione */}
+      <span style={{
+        position:'absolute', top:-9, left:14, background:C.page.bg,
+        padding:'0 6px', fontSize:9, fontWeight:700, color:C.page.th,
+        textTransform:'uppercase', letterSpacing:'0.08em', zIndex:2,
+      }}>CRM &amp; Analiti</span>
 
       {/* ── Header ── */}
-      <div style={{ display:'flex', background:C.page.sur,
+      <div style={{ display:'flex', background:C.page.sur, borderRadius:'10px 10px 0 0',
                     borderBottom:`1px solid ${C.page.brd}`, flexShrink:0 }}>
         {([
           { w:190, label:'Analiti',        sub:`${analiti.length} composti` },
@@ -143,7 +158,8 @@ export function GrigliaAnalitiCrm({
                       background: C.ana.bg, border:`1px solid ${C.ana.border}`,
                       borderStyle: a.isIS ? 'dashed' : 'solid',
                       opacity: a.isIS ? 0.68 : 1,
-                      borderRadius:4, padding:'3px 7px', fontSize:11,
+                      borderRadius:6, padding:'4px 8px', fontSize:11,
+                      boxShadow:'0 1px 2px rgba(0,0,0,0.06)',
                       fontFamily:'IBM Plex Mono, monospace', whiteSpace:'nowrap',
                       overflow:'hidden', textOverflow:'ellipsis', width:'100%',
                     }}>
@@ -169,19 +185,21 @@ export function GrigliaAnalitiCrm({
                       return (
                         <div
                           key={sngId}
+                          ref={el => registerCardRef(sngId, el)}
                           onClick={() => !isRem && onToggleSng(sngId)}
                           style={{
-                            borderRadius:5, padding:'3px 7px',
+                            borderRadius:8, padding:'5px 8px',
                             background: isRem ? C.page.sur
                               : (isCon ? C.con.bg : (isSel ? '#b4d97c' : C.sng.bg)),
                             border:`1.5px solid ${isCon ? C.con.border : C.sng.border}`,
+                            borderLeft:`3px solid ${isCon ? C.con.border : C.sng.border}`,
                             borderStyle: a.isIS ? 'dashed' : 'solid',
+                            boxShadow: isSel ? '0 0 0 2px rgba(59,109,17,.28)' : '0 1px 3px rgba(0,0,0,0.08)',
                             opacity: isRem ? 0.28 : 1,
                             textDecoration: isRem ? 'line-through' : undefined,
                             cursor: isRem ? 'default' : 'pointer',
                             display:'flex', alignItems:'center',
                             justifyContent:'space-between', gap:4,
-                            boxShadow: isSel ? `0 0 0 2px rgba(59,109,17,.28)` : undefined,
                             transition:'box-shadow .12s, background .1s',
                           }}
                         >
@@ -254,18 +272,20 @@ export function GrigliaAnalitiCrm({
             return (
               <div
                 key={a.mixId}
+                ref={el => registerCardRef(a.mixId!, el)}
                 onClick={() => !isRmMx && onToggleMix(a.mixId!)}
                 style={{
-                  position:'absolute', left:6, right:6,
+                  position:'absolute', left:8, right:8,
                   top: top + 5, height: height - 10,
-                  borderRadius:6,
+                  borderRadius:8,
                   background: isRmMx ? C.page.sur : (sel ? '#cee3f8' : C.mix.bg),
                   border:`1.5px solid ${C.mix.border}`,
+                  borderLeft:`3px solid ${C.mix.border}`,
                   padding:'6px 9px',
+                  boxShadow: sel ? '0 0 0 3px rgba(24,95,165,.3)' : '0 1px 3px rgba(0,0,0,0.08)',
                   cursor: isRmMx ? 'default' : 'pointer',
                   opacity: isRmMx ? 0.28 : 1,
                   textDecoration: isRmMx ? 'line-through' : undefined,
-                  boxShadow: sel ? `0 0 0 3px rgba(24,95,165,.3)` : undefined,
                   overflow:'hidden', zIndex:2, pointerEvents:'all',
                   transition:'box-shadow .12s, background .1s',
                 }}
@@ -274,7 +294,7 @@ export function GrigliaAnalitiCrm({
                   <div style={{ position:'absolute', top:4, right:4,
                                 display:'flex', gap:3, zIndex:3 }}>
                     <button
-                      onClick={e => { e.stopPropagation(); goToComposto(info?.nome ?? a.mixId!) }}
+                      onClick={e => { e.stopPropagation(); goToComposto(a.mixId!) }}
                       style={{
                         width:15, height:15, borderRadius:3,
                         border:`1px solid ${C.mix.border}`,
@@ -300,7 +320,7 @@ export function GrigliaAnalitiCrm({
                 <div style={{ fontSize:11, fontWeight:700,
                               fontFamily:'IBM Plex Mono, monospace',
                               color:C.mix.text, paddingRight: isRmMx ? 0 : 42 }}>
-                  {info?.mix_id ?? a.mixId}
+                  {info?.mix ?? info?.mix_id ?? a.mixId}
                 </div>
                 <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
                   {info?.produttore ?? ''}{info?.lotto ? ` · ${info.lotto}` : ''}
@@ -313,7 +333,10 @@ export function GrigliaAnalitiCrm({
                 <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
                   {nomi.map(n => {
                     const analitoN = analiti.find(x => x.nome === n)
-                    const allRem   = analitoN?.sngIds.every(id => removedCon.has(id)) ?? false
+                    const allRem   = !!analitoN && analitoN.sngIds.length > 0
+                                     && analitoN.sngIds.every(id => removedCon.has(id))
+                    const mixItem  = mixItemByNome.get(n)
+                    const concLabel = mixItem?.cv ? ` · ${mixItem.cv} mg/L` : ''
                     return (
                       <span key={n} style={{
                         fontSize:9, fontFamily:'IBM Plex Mono, monospace',
@@ -321,7 +344,7 @@ export function GrigliaAnalitiCrm({
                         borderRadius:2, padding:'1px 4px',
                         opacity: allRem ? 0.3 : 1,
                         textDecoration: allRem ? 'line-through' : undefined,
-                      }}>{n}</span>
+                      }}>{n}{concLabel}</span>
                     )
                   })}
                 </div>

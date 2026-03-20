@@ -14,16 +14,82 @@
 //   - SchemaCalibrazione.logic.ts
 //   - SchemaCalibrazione.grid.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useLayoutEffect } from 'react'
 import type {
-  SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps
+  SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef
 } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import {
   useSchemaData, targetColIdx,
-  salvaWorkNelDb, getCompsFromWork,
+  salvaWorkNelDb, getCompsFromWork, computeConnections,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG Overlay per frecce di connessione
+// ─────────────────────────────────────────────────────────────────────────────
+function ConnectionsOverlay({
+  workCols, cardRefs, containerRef,
+}: {
+  workCols: WorkInSchema[][]
+  cardRefs: React.MutableRefObject<Map<string, HTMLDivElement>>
+  containerRef: React.RefObject<HTMLDivElement | null>
+}) {
+  const [lines, setLines] = useState<ConnectionLine[]>([])
+  const [size, setSize] = useState({ w: 0, h: 0 })
+
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const update = () => {
+      setSize({ w: el.scrollWidth, h: el.scrollHeight })
+      setLines(computeConnections(workCols, cardRefs.current, el))
+    }
+
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    el.addEventListener('scroll', update, { passive: true })
+    return () => { ro.disconnect(); el.removeEventListener('scroll', update) }
+  }, [workCols, cardRefs, containerRef])
+
+  if (lines.length === 0) return null
+
+  return (
+    <svg
+      style={{
+        position: 'absolute', top: 0, left: 0,
+        width: size.w, height: size.h,
+        pointerEvents: 'none', zIndex: 1,
+      }}
+    >
+      <defs>
+        {['mix', 'sng', 'work'].map(t => {
+          const col = t === 'mix' ? C.mix.border : t === 'sng' ? C.sng.border : C.work.border
+          return (
+            <marker key={t} id={`arrow-${t}`} viewBox="0 0 10 8" refX="9" refY="4"
+              markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 4 L 0 8 z" fill={col} />
+            </marker>
+          )
+        })}
+      </defs>
+      {lines.map((l, i) => {
+        const dx = Math.abs(l.x2 - l.x1)
+        const cpx = Math.max(30, dx * 0.4)
+        const d = `M ${l.x1} ${l.y1} C ${l.x1 + cpx} ${l.y1}, ${l.x2 - cpx} ${l.y2}, ${l.x2} ${l.y2}`
+        return (
+          <path key={i} d={d}
+            fill="none" stroke={l.color} strokeWidth={1.5}
+            strokeDasharray="5 3" opacity={0.55}
+            markerEnd={`url(#arrow-${l.sourceType})`}
+          />
+        )
+      })}
+    </svg>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Colonne Work dinamiche
@@ -36,14 +102,25 @@ interface ColonneWorkProps {
   onDeleteWork: (colIdx: number, workIdx: number) => void
   onOpenDrawer: (w: WorkInSchema, colIdx: number) => void
   onAddCol: () => void
+  registerCardRef: RegisterCardRef
 }
 
 function ColonneWork({
   workCols, selSrcs, hasCon,
-  onToggleWork, onDeleteWork, onOpenDrawer, onAddCol,
+  onToggleWork, onDeleteWork, onOpenDrawer, onAddCol, registerCardRef,
 }: ColonneWorkProps) {
   return (
-    <div style={{ display:'flex', flexDirection:'row', flexShrink:0 }}>
+    <div style={{ display:'flex', flexDirection:'row', flexShrink:0,
+                  margin:8, borderRadius:10, border:`1.5px dashed ${C.page.brd2}`,
+                  position:'relative', background:C.page.sur }}>
+
+      {/* Label sezione */}
+      <span style={{
+        position:'absolute', top:-9, left:14, background:C.page.bg,
+        padding:'0 6px', fontSize:9, fontWeight:700, color:C.page.th,
+        textTransform:'uppercase', letterSpacing:'0.08em', zIndex:2,
+      }}>Soluzioni Work</span>
+
       {workCols.map((works, ci) => {
         const isFirst = ci === 0
         const lbl  = isFirst ? 'Work' : `Intermedia ${ci}`
@@ -53,7 +130,7 @@ function ColonneWork({
 
         return (
           <div key={ci} style={{
-            width:255, flexShrink:0,
+            width:270, flexShrink:0,
             borderRight:`1px solid ${C.page.brd}`,
             display:'flex', flexDirection:'column', overflow:'hidden',
           }}>
@@ -93,15 +170,17 @@ function ColonneWork({
                 return (
                   <div
                     key={w.id}
+                    ref={el => registerCardRef(w.id, el)}
                     onClick={() => canBeSrc && onToggleWork(w, ci)}
                     style={{
-                      borderRadius:7, padding:'9px 10px', position:'relative',
+                      borderRadius:8, padding:'8px 12px', position:'relative',
                       background: isSel ? (isInter ? '#d5caf7' : '#fcedc7') : col.bg,
                       border:`1.5px solid ${col.border}`,
-                      cursor: canBeSrc ? 'pointer' : 'default',
+                      borderLeft:`3px solid ${col.border}`,
                       boxShadow: isSel
-                        ? `0 0 0 3px rgba(107,80,200,.42), outline 2px solid ${col.border}`
-                        : undefined,
+                        ? `0 0 0 3px rgba(107,80,200,.42)`
+                        : '0 1px 3px rgba(0,0,0,0.08)',
+                      cursor: canBeSrc ? 'pointer' : 'default',
                       outline: isSel ? `2px solid ${col.border}` : undefined,
                       outlineOffset: isSel ? 1 : undefined,
                       transition:'box-shadow .12s, background .1s',
@@ -526,6 +605,14 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
 export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: SchemaCalibrazioneProps) {
   const { crmItems, analiti, loading, error } = useSchemaData(metodoId)
 
+  // ── Ref registry per SVG connections ───────────────────────────────────────
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  const registerCardRef: RegisterCardRef = useCallback((id, el) => {
+    if (el) cardRefs.current.set(id, el)
+    else cardRefs.current.delete(id)
+  }, [])
+
   // ── Stato principale ──────────────────────────────────────────────────────
   const [selSrcs,    setSelSrcs]    = useState<Map<string, SorgenteSel>>(new Map())
   const [removedCon, setRemovedCon] = useState<Set<string>>(new Set())
@@ -725,8 +812,14 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           Errore: {error}
         </div>
       ) : (
-        <div style={{ flex:1, display:'flex', flexDirection:'row',
-                      overflowX:'auto', overflowY:'hidden', minHeight:0 }}>
+        <div ref={workspaceRef} style={{ flex:1, display:'flex', flexDirection:'row',
+                      overflowX:'auto', overflowY:'hidden', minHeight:0, position:'relative',
+                      gap:12, padding:'4px 0' }}>
+          <ConnectionsOverlay
+            workCols={workCols}
+            cardRefs={cardRefs}
+            containerRef={workspaceRef}
+          />
           <GrigliaAnalitiCrm
             analiti={analiti}
             crmItems={crmItems}
@@ -738,6 +831,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onRemoveCon={removeCon}
             onRemoveMix={removeMix}
             onClose={onClose}
+            registerCardRef={registerCardRef}
           />
           <ColonneWork
             workCols={workCols}
@@ -747,6 +841,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onDeleteWork={handleDeleteWork}
             onOpenDrawer={(w, ci) => { setDrawerWork(w); setDrawerCol(ci) }}
             onAddCol={() => setWorkCols(prev => [...prev, []])}
+            registerCardRef={registerCardRef}
           />
         </div>
       )}

@@ -43,6 +43,7 @@ export interface CrmItem {
   id: number
   nome: string
   mix_id: string | null
+  mix: string | null           // nome commerciale del mix (campo composti.mix)
   concentrazione: number | null
   unita_conc: string
   forma: string | null
@@ -61,6 +62,15 @@ export interface AnalitoItem {
   isCon: boolean            // ha sia mix che almeno un singolo
   isIS: boolean
 }
+
+export interface ConnectionLine {
+  x1: number; y1: number
+  x2: number; y2: number
+  color: string
+  sourceType: SorgenteTipo
+}
+
+export type RegisterCardRef = (id: string, el: HTMLDivElement | null) => void
 
 export interface SchemaCalibrazioneProps {
   metodoId: string

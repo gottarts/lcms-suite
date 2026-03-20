@@ -5,7 +5,8 @@
 //   src/renderer/pages/metodi/SchemaCalibrazione.logic.ts
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
-import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema } from './SchemaCalibrazione.types'
+import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema, ConnectionLine } from './SchemaCalibrazione.types'
+import { C } from './SchemaCalibrazione.types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook: carica CRM del metodo dal DB (tutti tranne dismessi)
@@ -45,6 +46,7 @@ export function useSchemaData(metodoId: string) {
           id:               r.id,
           nome:             r.nome ?? '',
           mix_id:           r.mix_id ?? null,
+          mix:              r.mix ?? null,
           concentrazione:   r.concentrazione ?? null,
           unita_conc:       r.unita_conc ?? 'mg/L',
           forma:            r.forma ?? null,
@@ -237,4 +239,43 @@ export async function salvaWorkNelDb(
 
   const result: any = await (window as any).electronAPI.invoke('work:create', payload)
   return result?.id ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Calcola le connessioni SVG tra card sorgente → card Work
+// ─────────────────────────────────────────────────────────────────────────────
+export function computeConnections(
+  workCols: WorkInSchema[][],
+  cardRefs: Map<string, HTMLDivElement>,
+  scrollContainer: HTMLDivElement
+): ConnectionLine[] {
+  const lines: ConnectionLine[] = []
+  const containerRect = scrollContainer.getBoundingClientRect()
+
+  for (const works of workCols) {
+    for (const w of works) {
+      const targetEl = cardRefs.get(w.id)
+      if (!targetEl) continue
+
+      for (const src of w.srcs) {
+        const sourceEl = cardRefs.get(src.id)
+        if (!sourceEl) continue
+
+        const sRect = sourceEl.getBoundingClientRect()
+        const tRect = targetEl.getBoundingClientRect()
+
+        const x1 = sRect.right  - containerRect.left + scrollContainer.scrollLeft
+        const y1 = sRect.top + sRect.height / 2 - containerRect.top + scrollContainer.scrollTop
+        const x2 = tRect.left   - containerRect.left + scrollContainer.scrollLeft
+        const y2 = tRect.top + tRect.height / 2 - containerRect.top + scrollContainer.scrollTop
+
+        const color = src.tipo === 'mix' ? C.mix.border
+                    : src.tipo === 'sng' ? C.sng.border
+                    : C.work.border
+
+        lines.push({ x1, y1, x2, y2, color, sourceType: src.tipo })
+      }
+    }
+  }
+  return lines
 }

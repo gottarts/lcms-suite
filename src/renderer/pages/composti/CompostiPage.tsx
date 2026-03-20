@@ -513,6 +513,7 @@ export function CompostiPage() {
         c.stoccaggio?.toLowerCase().includes(q) ||
         c.accreditamento_crm?.toLowerCase().includes(q) ||
         c.work_standard?.toLowerCase().includes(q) ||
+        c.mix_id?.toLowerCase().includes(q) ||
         c.metodi_ids?.some((id: string) => metodiNomeMap[id]?.includes(q))
       )
     }
