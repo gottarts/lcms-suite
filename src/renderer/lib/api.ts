@@ -110,3 +110,7 @@ export const queryApi = {
   snapshot: (request: { strumento_id: string; metodo_id?: string; data: string }) =>
     api.invoke('query:snapshot', request) as Promise<any>,
 }
+
+
+// ─── Aggiungere questo blocco in fondo a src/renderer/lib/api.ts ───────────
+ 

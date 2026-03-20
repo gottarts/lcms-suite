@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 const navItems = [
   { to: '/composti', label: 'Reference Standards', icon: '🧪' },
   { to: '/metodi', label: 'Metodi', icon: '📋' },
+  { to: '/work', label: 'Work Solutions', icon: '⚗️' },
   { to: '/strumenti', label: 'Strumenti', icon: '🔬' },
   { to: '/consumabili', label: 'Consumabili', icon: '📦' },
   { to: '/anagrafiche', label: 'Anagrafiche', icon: '📖' },

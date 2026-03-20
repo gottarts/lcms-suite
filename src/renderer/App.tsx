@@ -6,6 +6,7 @@ import { MetodiPage } from './pages/metodi/MetodiPage'
 import { StrumentiPage } from './pages/strumenti/StrumentiPage'
 import { ConsumabiliPage } from './pages/consumabili/ConsumabiliPage'
 import { CompostiPage } from './pages/composti/CompostiPage'
+import { WorkPage } from './pages/work/WorkPage'
 import { useState, useEffect } from 'react'
 
 export function App() {
@@ -38,6 +39,7 @@ export function App() {
           <Route path="/strumenti" element={<StrumentiPage />} />
           <Route path="/consumabili" element={<ConsumabiliPage />} />
           <Route path="/anagrafiche" element={<AnagrafichePage />} />
+          <Route path="/work" element={<WorkPage />} />
           <Route path="*" element={<Navigate to="/composti" replace />} />
         </Route>
       </Routes>
