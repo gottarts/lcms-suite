@@ -2,8 +2,8 @@ import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 
-const CONFIG_DIR = path.join(app.getPath('userData'))
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
+const getConfigDir = () => path.join(app.getPath('userData'))
+const getConfigFile = () => path.join(getConfigDir(), 'config.json')
 
 export interface AppConfig {
   dbPath: string | null
@@ -17,8 +17,9 @@ const DEFAULT_CONFIG: AppConfig = {
 
 export function loadConfig(): AppConfig {
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
+    const configFile = getConfigFile()
+    if (fs.existsSync(configFile)) {
+      const raw = fs.readFileSync(configFile, 'utf-8')
       return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
     }
   } catch (e) {
@@ -29,8 +30,10 @@ export function loadConfig(): AppConfig {
 
 export function saveConfig(config: AppConfig): void {
   try {
-    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
+    const configDir = getConfigDir()
+    const configFile = getConfigFile()
+    if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true })
+    fs.writeFileSync(configFile, JSON.stringify(config, null, 2))
   } catch (e) {
     console.error('Failed to save config:', e)
   }

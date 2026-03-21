@@ -21,7 +21,13 @@ export function useSchemaData(metodoId: string) {
     setLoading(true)
     setError(null)
     try {
-      // Chiama l'IPC esistente passando il metodo_id come filtro
+      // 1. Lista analiti persistente (fonte autorevole)
+      const analitiRows: { id: number; nome: string }[] = await (window as any).electronAPI.invoke(
+        'metodo-analiti:list',
+        metodoId
+      )
+
+      // 2. CRM disponibili per il metodo (per popolare le sorgenti selezionabili)
       const rows: any[] = await (window as any).electronAPI.invoke(
         'composti:list',
         { metodo_id: metodoId }
@@ -60,7 +66,7 @@ export function useSchemaData(metodoId: string) {
       })
       setCrmItems(items)
 
-      // Costruisce analiti (nomi unici), classificati in mixId / sngIds / isCon
+      // 3. Costruisce mappe CRM disponibili per nome
       const mixMap = new Map<string, string>()      // nome → mix_id
       const sngMap = new Map<string, string[]>()    // nome → array di String(id) (tutti i singoli)
       const isMap  = new Map<string, boolean>()
@@ -76,20 +82,23 @@ export function useSchemaData(metodoId: string) {
         if (item.isIS) isMap.set(item.nome, true)
       }
 
-      const nomiUnici = Array.from(new Set(items.map(i => i.nome)))
-      const analitiCalc: AnalitoItem[] = nomiUnici.map(nome => ({
-        nome,
-        mixId:  mixMap.get(nome) ?? null,
-        sngIds: sngMap.get(nome) ?? [],
-        isCon:  mixMap.has(nome) && sngMap.has(nome),
-        isIS:   isMap.get(nome) ?? false,
+      // 4. Costruisce AnalitoItem[] dalla lista persistente (non dai CRM)
+      //    Gli analiti senza CRM disponibili sono comunque inclusi (senzaCrm)
+      const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
+        nome:   row.nome,
+        mixId:  mixMap.get(row.nome) ?? null,
+        sngIds: sngMap.get(row.nome) ?? [],
+        isCon:  mixMap.has(row.nome) && sngMap.has(row.nome),
+        isIS:   isMap.get(row.nome) ?? false,
       }))
 
-      // Ordine: solo-singoli → entrambi → solo-mix
-      const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
-      const entrambi = analitiCalc.filter(a =>  a.mixId && a.sngIds.length > 0)
-      const soloMix  = analitiCalc.filter(a =>  a.mixId && a.sngIds.length === 0)
-      setAnaliti([...soloSng, ...entrambi, ...soloMix])
+      // Ordine: solo-singoli → entrambi → solo-mix → senza CRM (in coda)
+      const conCrm   = analitiCalc.filter(a => a.mixId || a.sngIds.length > 0)
+      const senzaCrm = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0)
+      const soloSng  = conCrm.filter(a => !a.mixId)
+      const entrambi = conCrm.filter(a =>  a.mixId && a.sngIds.length > 0)
+      const soloMix  = conCrm.filter(a =>  a.mixId && a.sngIds.length === 0)
+      setAnaliti([...soloSng, ...entrambi, ...soloMix, ...senzaCrm])
     } catch (e: any) {
       setError(e?.message ?? 'Errore caricamento dati')
     } finally {

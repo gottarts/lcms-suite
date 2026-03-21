@@ -173,6 +173,9 @@ FROM composti c`
     const insertLink = db.prepare(
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
+    const insertAnalita = db.prepare(
+      'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
+    )
 
     let newId: number | bigint = 0
     db.transaction(() => {
@@ -180,6 +183,7 @@ FROM composti c`
       newId = result.lastInsertRowid
       for (const mid of metodiIds) {
         insertLink.run(newId, mid)
+        insertAnalita.run(mid, row.nome)
       }
     })()
 
@@ -248,9 +252,23 @@ FROM composti c`
        volume_ml=@volume_ml,
        updated_at=datetime('now') WHERE id=@id`
     )
+    const getOldMetodiIds = db.prepare('SELECT metodo_id FROM composti_metodi WHERE composto_id = ?')
     const deleteLinks = db.prepare('DELETE FROM composti_metodi WHERE composto_id = ?')
     const insertLink = db.prepare(
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
+    )
+    const insertAnalitaUpd = db.prepare(
+      'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
+    )
+    // Rimuove il nome da metodo_analiti solo se non ci sono altri composti
+    // con lo stesso nome ancora collegati a quel metodo
+    const checkAltriComposti = db.prepare(
+      `SELECT COUNT(*) AS n FROM composti_metodi cm
+       JOIN composti c ON c.id = cm.composto_id
+       WHERE cm.metodo_id = ? AND LOWER(c.nome) = LOWER(?)`
+    )
+    const deleteAnalita = db.prepare(
+      'DELETE FROM metodo_analiti WHERE metodo_id = ? AND LOWER(nome) = LOWER(?)'
     )
 
     const vecchioLotto = row.mix_id
@@ -308,8 +326,8 @@ FROM composti c`
         }
 
         const altriIds = db.prepare(
-          'SELECT id FROM composti WHERE mix_id = ? AND id != ?'
-        ).all(row.mix_id, id) as { id: number }[]
+          'SELECT id, nome FROM composti WHERE mix_id = ? AND id != ?'
+        ).all(row.mix_id, id) as { id: number; nome: string }[]
 
         const deleteLinksMix = db.prepare('DELETE FROM composti_metodi WHERE composto_id = ?')
         const insertLinkMix = db.prepare(
@@ -319,13 +337,28 @@ FROM composti c`
           deleteLinksMix.run(altro.id)
           for (const mid of metodiIds) {
             insertLinkMix.run(altro.id, mid)
+            insertAnalitaUpd.run(mid, altro.nome as string)
           }
         }
       }
 
+      // Legge i metodi precedenti PRIMA di deleteLinks (dopo sarebbe vuoto)
+      const oldMetodiIds = (getOldMetodiIds.all(id) as { metodo_id: string }[])
+        .map(r => r.metodo_id)
+      const newMetodiSet = new Set(metodiIds.map(String))
+
       deleteLinks.run(id)
       for (const mid of metodiIds) {
         insertLink.run(id, mid)
+        insertAnalitaUpd.run(mid, row.nome as string)
+      }
+
+      // Per i metodi rimossi: cancella il nome da metodo_analiti
+      // solo se nessun altro composto con lo stesso nome è ancora collegato a quel metodo
+      for (const mid of oldMetodiIds) {
+        if (newMetodiSet.has(String(mid))) continue
+        const check = checkAltriComposti.get(mid, row.nome as string) as { n: number }
+        if (check.n === 0) deleteAnalita.run(mid, row.nome as string)
       }
     })()
 
@@ -409,6 +442,9 @@ FROM composti c`
     const insertLink = db.prepare(
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
+    const insertAnalitaMix = db.prepare(
+      'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
+    )
 
     const common = {
       codice_interno: data.codice_interno || null,
@@ -467,6 +503,7 @@ FROM composti c`
         const newId = result.lastInsertRowid
         for (const mid of metodiIds) {
           insertLink.run(newId, mid)
+          insertAnalitaMix.run(mid, comp.nome)
         }
       }
       return componenti.length

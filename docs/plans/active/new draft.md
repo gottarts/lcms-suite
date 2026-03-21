@@ -1,16 +1,13 @@
 # prossimi feat:
 
-
+bisogna creare una lista di analiti che sono i parametri nei metodi immutabile. attualemte anche negli schemi la lista analiti è collegata al db composti. Ma in realta la lista analiti è immutabile. è sincronizzata al db composti (tramite aggiungi metodi) ma una volta che il composto è in un metodo la cancellazione dal db non puo eliminare il composto nel metodo. l analita parametro del emtodo puo essere eliminato solo dal modulo metodo. Non so se e chiato ma la sicronizzazione db composti -> metodi -> schemi vale solo per l aggiunta di composti e non per la cancellazione. 
 
  
+alcune work vivono su piu metodi e sono uguali. bisogna far si che ci sia il modo di riciamarle negli schemi di altri metododi, che ci sia una condivisione delle work (se il metodo ha gli stessi crm per quella work)
 
-
-
- Nella card work dello schema non serve Operatore che invece e necessaria nella card work in workpage (si deve segnare solo data preparazione work e operatore per quelle tracciate)
-
-
-
-
+capire gestione lotto nealla preparazione work. 
+ Forse anche in schema calibraioni si possono rimettere i lotti. che succede se un crm cambia lotto e il vecchio viene dismesso? sarebbe il caso se ci sono queste vaariazioni che il work nella pagina workpage venga bloccato in maniera che l operatore non possa fare preparazioni con lo schema con lotti errati o modificati o scaduti. 
+ Lo schema di uso deve essere che operatore puo creare una preparazione work se lo schema ha tutti i crm attivi con lotti validi e definiti. se ci sono ambiguita (piu lotti validi o lotto originale dismesso e aggiunta di un nuovo lotto) loperatore deve andare in schemi e creare una nuova work. A quel puonto la vecchia work card viene archiviata (con tutto il suo storico di preparazioni sorgenti e lotti)
  
 
 
@@ -27,7 +24,7 @@
  ## altri
   
  
-
+nella card delle work in workpage dece esserci la selezione del metodo come filtro delle work. 
 
 
 

@@ -98,6 +98,7 @@ export function GrigliaAnalitiCrm({
   // Separatori tra gruppi
   const nSoloSng  = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
   const nEntrambi = analiti.filter(a =>  a.mixId && a.sngIds.length > 0).length
+  const nConCrm   = analiti.filter(a =>  a.mixId || a.sngIds.length > 0).length
 
   return (
     <div style={{ display:'flex', flexDirection:'column', flexShrink:0,
@@ -139,11 +140,14 @@ export function GrigliaAnalitiCrm({
             const isSepSngEnt = i === nSoloSng && nSoloSng > 0 && nEntrambi > 0
             const isSepEntMix = i === nSoloSng + nEntrambi &&
                                 analiti.filter(x => x.mixId && x.sngIds.length === 0).length > 0
+            const isSepSenzaCrm = i === nConCrm && nConCrm > 0 &&
+                                  analiti.filter(x => !x.mixId && x.sngIds.length === 0).length > 0
+            const senzaCrm = !a.mixId && a.sngIds.length === 0
             const h = rowHeight(a)
 
             return (
               <div key={a.nome}>
-                {(isSepSngEnt || isSepEntMix) && (
+                {(isSepSngEnt || isSepEntMix || isSepSenzaCrm) && (
                   <div style={{ height:1, background:C.page.brd2, margin:'4px 0' }} />
                 )}
 
@@ -155,15 +159,16 @@ export function GrigliaAnalitiCrm({
                                 borderRight:`1px solid ${C.page.brd}`,
                                 display:'flex', alignItems:'center' }}>
                     <div style={{
-                      background: C.ana.bg, border:`1px solid ${C.ana.border}`,
-                      borderStyle: a.isIS ? 'dashed' : 'solid',
-                      opacity: a.isIS ? 0.68 : 1,
+                      background: senzaCrm ? C.page.sur : C.ana.bg,
+                      border:`1px ${senzaCrm ? 'dashed' : (a.isIS ? 'dashed' : 'solid')} ${senzaCrm ? C.page.brd2 : C.ana.border}`,
+                      opacity: senzaCrm ? 0.5 : (a.isIS ? 0.68 : 1),
                       borderRadius:6, padding:'4px 8px', fontSize:11,
-                      boxShadow:'0 1px 2px rgba(0,0,0,0.06)',
+                      boxShadow: senzaCrm ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
                       fontFamily:'IBM Plex Mono, monospace', whiteSpace:'nowrap',
                       overflow:'hidden', textOverflow:'ellipsis', width:'100%',
+                      color: senzaCrm ? C.page.th : undefined,
                     }}>
-                      {a.nome}{a.isIS ? ' [IS]' : ''}
+                      {a.nome}{a.isIS ? ' [IS]' : ''}{senzaCrm ? ' ·' : ''}
                     </div>
                   </div>
 

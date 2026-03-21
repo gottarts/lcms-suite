@@ -62,8 +62,9 @@ export function MetodiPage() {
     }
   }
 
-  const handleEdit = (metodo: any) => {
-    setEditMetodo(metodo)
+  const handleEdit = async (metodo: any) => {
+    const full = await metodiApi.get(metodo.id)
+    setEditMetodo(full)
     setDrawerId(null)
     setFormOpen(true)
   }
@@ -128,7 +129,12 @@ export function MetodiPage() {
         onClose={() => setFormOpen(false)}
         metodo={editMetodo}
         strumenti={strumenti}
-        onSave={load}
+        onSave={() => {
+          load()
+          if (editMetodo?.id && editMetodo.id === schemaMetodoId) {
+            setSchemaMetodoId(null)
+          }
+        }}
       />
 
       <MetodoDrawer

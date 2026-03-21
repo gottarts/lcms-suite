@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { metodiApi } from '@/lib/api'
+import { metodiApi, metodoAnalitiApi, compostiApi } from '@/lib/api'
 
 interface MetodoFormProps {
   open: boolean
@@ -32,9 +32,30 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
   // FIX-merge: se il backend segnala un conflitto, salviamo qui i dati per il dialogo
   const [mergeState, setMergeState] = useState<MergeState | null>(null)
 
+  // ── Gestione analiti persistenti (solo in modalità edit) ──
+  const [analiti, setAnaliti]               = useState<{ id: number; nome: string }[]>([])
+  const [selAnaliti, setSelAnaliti]         = useState<Set<string>>(new Set())
+  const [addInput, setAddInput]             = useState('')
+  const [addSugg, setAddSugg]               = useState<string[]>([])
+  const [allNomiDb, setAllNomiDb]           = useState<string[]>([])
+
+  const loadAnaliti = useCallback(async (metodoId: string) => {
+    const rows = await metodoAnalitiApi.list(metodoId)
+    setAnaliti(rows)
+    setSelAnaliti(new Set())
+  }, [])
+
+  const loadNomiDb = useCallback(async () => {
+    const rows: any[] = await compostiApi.list({})
+    const nomiUnici = Array.from(new Set(rows.map((r: any) => r.nome as string).filter(Boolean))).sort()
+    setAllNomiDb(nomiUnici)
+  }, [])
+
   useEffect(() => {
     if (metodo) {
       setForm({ ...metodo })
+      loadAnaliti(metodo.id)
+      loadNomiDb()
     } else {
       setForm({
         id: crypto.randomUUID(),
@@ -43,10 +64,50 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
         ionizzazione: '', polarita: '', acquisizione: '', srm: '',
         lims_id: '', oqlab_id: '', note: '',
       })
+      setAnaliti([])
     }
-  }, [metodo, open])
+  }, [metodo, open, loadAnaliti, loadNomiDb])
 
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
+
+  const handleAddAnalita = async (nome: string) => {
+    const trimmed = nome.trim()
+    if (!trimmed || !metodo?.id) return
+    if (analiti.some(a => a.nome.toLowerCase() === trimmed.toLowerCase())) return
+    await metodoAnalitiApi.add(metodo.id, [trimmed])
+    setAddInput('')
+    setAddSugg([])
+    await loadAnaliti(metodo.id)
+  }
+
+  const handleRimuoviSelezionati = async () => {
+    if (!metodo?.id || selAnaliti.size === 0) return
+    await metodoAnalitiApi.remove(metodo.id, Array.from(selAnaliti))
+    // Ricarica i composti_ids aggiornati dal backend, altrimenti al salvataggio
+    // il form reinserisce i composti appena scollegati
+    const updated = await metodiApi.get(metodo.id)
+    setForm(f => ({ ...f, composti_ids: updated?.composti_ids ?? [] }))
+    await loadAnaliti(metodo.id)
+  }
+
+  const toggleSelAnalita = (nome: string) => {
+    setSelAnaliti(prev => {
+      const next = new Set(prev)
+      if (next.has(nome)) next.delete(nome)
+      else next.add(nome)
+      return next
+    })
+  }
+
+  const handleAddInputChange = (val: string) => {
+    setAddInput(val)
+    if (val.trim().length < 2) { setAddSugg([]); return }
+    const esistenti = new Set(analiti.map(a => a.nome.toLowerCase()))
+    const sugg = allNomiDb
+      .filter(n => n.toLowerCase().includes(val.toLowerCase()) && !esistenti.has(n.toLowerCase()))
+      .slice(0, 8)
+    setAddSugg(sugg)
+  }
 
   const handleSave = async () => {
     if (!form.nome?.trim()) return
@@ -159,6 +220,93 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
               <Label className="text-xs">Note</Label>
               <Textarea value={form.note || ''} onChange={e => set('note', e.target.value)} rows={3} />
             </div>
+
+            {isEdit && (
+              <>
+                <Separator />
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Analiti del metodo
+                    </div>
+                    {selAnaliti.size > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={handleRimuoviSelezionati}
+                      >
+                        Rimuovi selezionati ({selAnaliti.size})
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Lista analiti con checkbox */}
+                  <div className="max-h-48 overflow-y-auto border rounded-md divide-y text-sm mb-3">
+                    {analiti.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground italic">
+                        Nessun analita — aggiungili dal DB Composti o manualmente
+                      </div>
+                    )}
+                    {analiti.map(a => (
+                      <label
+                        key={a.nome}
+                        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/40 select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selAnaliti.has(a.nome)}
+                          onChange={() => toggleSelAnalita(a.nome)}
+                          className="accent-destructive"
+                        />
+                        <span className="font-mono text-xs">{a.nome}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Aggiungi analita */}
+                  <div className="relative">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Nome analita (dal catalogo o libero)"
+                        value={addInput}
+                        onChange={e => handleAddInputChange(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); handleAddAnalita(addInput) }
+                          if (e.key === 'Escape') { setAddInput(''); setAddSugg([]) }
+                        }}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        variant="outline"
+                        disabled={!addInput.trim()}
+                        onClick={() => handleAddAnalita(addInput)}
+                      >
+                        Aggiungi
+                      </Button>
+                    </div>
+                    {addSugg.length > 0 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                        {addSugg.map(n => (
+                          <div
+                            key={n}
+                            className="px-3 py-1.5 text-xs font-mono cursor-pointer hover:bg-muted"
+                            onClick={() => handleAddAnalita(n)}
+                          >
+                            {n}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Le modifiche agli analiti sono immediate. Un analita aggiunto manualmente apparirà grigio nello schema finché non viene associato un CRM.
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>

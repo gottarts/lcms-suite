@@ -1,0 +1,47 @@
+import { ipcMain } from 'electron'
+import { getDb } from '../db'
+
+export function registerMetodoAnalitiIpc(): void {
+  ipcMain.handle('metodo-analiti:list', (_, metodoId: string) => {
+    return getDb().prepare(
+      `SELECT id, nome, ordine FROM metodo_analiti
+       WHERE metodo_id = ?
+       ORDER BY COALESCE(ordine, 9999), id ASC`
+    ).all(metodoId)
+  })
+
+  ipcMain.handle('metodo-analiti:add', (_, metodoId: string, nomi: string[]) => {
+    const db = getDb()
+    const insert = db.prepare(
+      'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
+    )
+    db.transaction(() => {
+      for (const nome of nomi) {
+        insert.run(metodoId, nome.trim())
+      }
+    })()
+    return { ok: true }
+  })
+
+  ipcMain.handle('metodo-analiti:remove', (_, metodoId: string, nomi: string[]) => {
+    const db = getDb()
+    const delAnalita = db.prepare(
+      'DELETE FROM metodo_analiti WHERE metodo_id = ? AND LOWER(nome) = LOWER(?)'
+    )
+    // Scollega dal metodo tutti i composti il cui nome corrisponde all'analita rimosso
+    const delLinks = db.prepare(`
+      DELETE FROM composti_metodi
+      WHERE metodo_id = ?
+        AND composto_id IN (
+          SELECT id FROM composti WHERE LOWER(nome) = LOWER(?)
+        )
+    `)
+    db.transaction(() => {
+      for (const nome of nomi) {
+        delAnalita.run(metodoId, nome)
+        delLinks.run(metodoId, nome)
+      }
+    })()
+    return { ok: true }
+  })
+}

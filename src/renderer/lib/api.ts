@@ -123,3 +123,12 @@ export const schemaCalApi = {
     api.invoke('schema-cal:save', metodoId, JSON.stringify({ workCols, removedCon, removedMix })) as Promise<{ ok: boolean }>,
 }
 
+export const metodoAnalitiApi = {
+  list: (metodoId: string) =>
+    api.invoke('metodo-analiti:list', metodoId) as Promise<{ id: number; nome: string; ordine: number | null }[]>,
+  add: (metodoId: string, nomi: string[]) =>
+    api.invoke('metodo-analiti:add', metodoId, nomi) as Promise<{ ok: boolean }>,
+  remove: (metodoId: string, nomi: string[]) =>
+    api.invoke('metodo-analiti:remove', metodoId, nomi) as Promise<{ ok: boolean }>,
+}
+

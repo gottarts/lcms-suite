@@ -40,11 +40,17 @@ export function registerMetodiIpc(): void {
     const insertLink = db.prepare(
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
     )
+    const getNomeComposto = db.prepare('SELECT nome FROM composti WHERE id = ?')
+    const insertAnalita = db.prepare(
+      'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
+    )
 
     db.transaction(() => {
       insertMetodo.run(metodoData)
       for (const cid of compostiIds) {
         insertLink.run(cid, data.id)
+        const c = getNomeComposto.get(cid) as { nome: string } | undefined
+        if (c?.nome) insertAnalita.run(data.id, c.nome)
       }
     })()
 
@@ -84,15 +90,23 @@ export function registerMetodiIpc(): void {
        note=@note, updated_at=datetime('now') WHERE id=@id`
     )
     const deleteLinks = db.prepare('DELETE FROM composti_metodi WHERE metodo_id = ?')
+    const deleteAllAnaliti = db.prepare('DELETE FROM metodo_analiti WHERE metodo_id = ?')
     const insertLink = db.prepare(
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
+    )
+    const getNomeCompostoUpd = db.prepare('SELECT nome FROM composti WHERE id = ?')
+    const insertAnalitaUpd = db.prepare(
+      'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
     )
 
     db.transaction(() => {
       updateMetodo.run({ ...metodoData, id })
       deleteLinks.run(id)
+      deleteAllAnaliti.run(id)
       for (const cid of compostiIds) {
         insertLink.run(cid, id)
+        const c = getNomeCompostoUpd.get(cid) as { nome: string } | undefined
+        if (c?.nome) insertAnalitaUpd.run(id, c.nome)
       }
     })()
 
@@ -143,7 +157,18 @@ export function registerMetodiIpc(): void {
         insertLink.run(cid, destId)
       }
 
-      // Elimina il metodo sorgente
+      // Ricalcola analiti del destinazione da zero (composti uniti)
+      db.prepare('DELETE FROM metodo_analiti WHERE metodo_id = ?').run(destId)
+      const getNomeCompostoMerge = db.prepare('SELECT nome FROM composti WHERE id = ?')
+      const insertAnalitaMerge = db.prepare(
+        'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
+      )
+      for (const cid of allIds) {
+        const c = getNomeCompostoMerge.get(cid) as { nome: string } | undefined
+        if (c?.nome) insertAnalitaMerge.run(destId, c.nome)
+      }
+
+      // Elimina il metodo sorgente (ON DELETE CASCADE rimuove i suoi metodo_analiti)
       deleteSource.run(sourceId)
     })()
 
