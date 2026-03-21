@@ -1,9 +1,9 @@
 # prossimi feat:
 
-bisogna creare una lista di analiti che sono i parametri nei metodi immutabile. attualemte anche negli schemi la lista analiti è collegata al db composti. Ma in realta la lista analiti è immutabile. è sincronizzata al db composti (tramite aggiungi metodi) ma una volta che il composto è in un metodo la cancellazione dal db non puo eliminare il composto nel metodo. l analita parametro del emtodo puo essere eliminato solo dal modulo metodo. Non so se e chiato ma la sicronizzazione db composti -> metodi -> schemi vale solo per l aggiunta di composti e non per la cancellazione. 
+ 
 
  
-alcune work vivono su piu metodi e sono uguali. bisogna far si che ci sia il modo di riciamarle negli schemi di altri metododi, che ci sia una condivisione delle work (se il metodo ha gli stessi crm per quella work)
+alcune work vivono su piu metodi e sono uguali. bisogna far si che ci sia il modo di riciamarle negli schemi di altri metodi, che ci sia una condivisione delle work (se il metodo ha gli stessi crm per quella work)
 
 capire gestione lotto nealla preparazione work. 
  Forse anche in schema calibraioni si possono rimettere i lotti. che succede se un crm cambia lotto e il vecchio viene dismesso? sarebbe il caso se ci sono queste vaariazioni che il work nella pagina workpage venga bloccato in maniera che l operatore non possa fare preparazioni con lo schema con lotti errati o modificati o scaduti. 
