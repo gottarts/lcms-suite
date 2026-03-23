@@ -1,8 +1,48 @@
-import { useState, useMemo, useRef, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, memo, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+/**
+ * Input filtro con stato locale per evitare perdita di focus.
+ * L'input mantiene il proprio stato interno e sincronizza verso l'alto onChange,
+ * così React non ricrea il DOM element ad ogni keystroke.
+ */
+const ColumnFilterInput = memo(function ColumnFilterInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [localValue, setLocalValue] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Sincronizza se il valore esterno cambia (es. reset filtri)
+  useEffect(() => {
+    setLocalValue(value)
+  }, [value])
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value
+    setLocalValue(v)
+    onChange(v)
+  }, [onChange])
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={localValue}
+      onChange={handleChange}
+      placeholder="Filtra..."
+      className="w-full h-6 px-1.5 text-xs rounded border border-input bg-background
+                 text-foreground placeholder:text-muted-foreground focus:outline-none
+                 focus:ring-1 focus:ring-ring font-normal"
+    />
+  )
+})
 
 // Altezza fissa di ogni riga in px.
 // TableCell ha padding p-2 (8px top + 8px bottom) + ~20px testo = ~36px.
@@ -88,6 +128,15 @@ export function DataTable<T extends Record<string, unknown>>({
   // Determina se almeno una colonna ha il filtro per colonna attivo
   const hasColFilters = columns.some(col => col.onFilterChange !== undefined)
 
+  // Blocca la scelta virtualizzato/non-virtualizzato per evitare switch di branch
+  // durante la digitazione nei filtri (che causerebbe perdita di focus).
+  // Si aggiorna solo quando nessun filtro è attivo.
+  const isFilterActive = columns.some(col => col.filterValue)
+  const useVirtual = useRef(data.length >= VIRTUALIZE_THRESHOLD)
+  if (!isFilterActive) {
+    useVirtual.current = data.length >= VIRTUALIZE_THRESHOLD
+  }
+
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
@@ -121,14 +170,9 @@ export function DataTable<T extends Record<string, unknown>>({
           </div>
           {col.onFilterChange && (
             <div onClick={e => e.stopPropagation()} className="mt-1">
-              <input
-                type="text"
+              <ColumnFilterInput
                 value={col.filterValue ?? ''}
-                onChange={e => col.onFilterChange!(e.target.value)}
-                placeholder="Filtra..."
-                className="w-full h-6 px-1.5 text-xs rounded border border-input bg-background
-                           text-foreground placeholder:text-muted-foreground focus:outline-none
-                           focus:ring-1 focus:ring-ring font-normal"
+                onChange={col.onFilterChange}
               />
             </div>
           )}
@@ -154,14 +198,9 @@ export function DataTable<T extends Record<string, unknown>>({
           </div>
           {col.onFilterChange && (
             <div onClick={e => e.stopPropagation()} className="mt-1">
-              <input
-                type="text"
+              <ColumnFilterInput
                 value={col.filterValue ?? ''}
-                onChange={e => col.onFilterChange!(e.target.value)}
-                placeholder="Filtra..."
-                className="w-full h-6 px-1.5 text-xs rounded border border-input bg-background
-                           text-foreground placeholder:text-muted-foreground focus:outline-none
-                           focus:ring-1 focus:ring-ring font-normal"
+                onChange={col.onFilterChange}
               />
             </div>
           )}
@@ -171,7 +210,7 @@ export function DataTable<T extends Record<string, unknown>>({
   }
 
   // Liste corte: rendering normale senza virtualizzazione
-  if (sorted.length < VIRTUALIZE_THRESHOLD) {
+  if (!useVirtual.current) {
     return (
       <Table>
         <TableHeader>
