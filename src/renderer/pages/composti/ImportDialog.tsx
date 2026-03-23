@@ -424,10 +424,17 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
   const mappedCols = csvHeaders
     .map((h, i) => ({ h, i }))
     .filter(({ h }) => mapping[h] && mapping[h] !== '_skip')
-  const previewRows = csvRows.slice(0, 5)
+
+  // Filtra righe senza nome in base alla mappatura corrente
+  const nomeColHeader = Object.entries(mapping).find(([, v]) => v === 'nome')?.[0]
+  const nomeColIdx = nomeColHeader ? csvHeaders.indexOf(nomeColHeader) : -1
+  const filteredRows = nomeColIdx >= 0
+    ? csvRows.filter(r => (r[nomeColIdx] ?? '').trim() !== '')
+    : csvRows
+  const previewRows = filteredRows.slice(0, 5)
 
   // TASK 2: calcola quanti mix verranno rilevati — usato nel banner dello step preview
-  const mixRilevatiCount = calcolaMixDaLotto(csvRows, csvHeaders, mapping).size
+  const mixRilevatiCount = calcolaMixDaLotto(filteredRows, csvHeaders, mapping).size
 
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
@@ -494,18 +501,24 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
             <div className="border rounded-md overflow-auto max-h-72">
               <table className="text-xs w-full">
                 <tbody>
-                  {rawRows.slice(0, 20).map((row, ri) => (
+                  {rawRows.map((row, ri) => (
                     <tr
                       key={ri}
                       className="cursor-pointer hover:bg-blue-50 border-b transition-colors"
                       onClick={() => {
                         const headers = row.map(c => String(c ?? '').trim())
+                        const autoMapping = autoMap(headers)
+                        // Trova l'indice della colonna mappata a 'nome'
+                        const nomeHeader = Object.entries(autoMapping).find(([, v]) => v === 'nome')?.[0]
+                        const nomeIdx = nomeHeader ? headers.indexOf(nomeHeader) : -1
                         const dataRows = rawRows
                           .slice(ri + 1)
                           .filter(r => r.some(c => c !== '' && c != null))
+                          // Filtra righe senza nome
+                          .filter(r => nomeIdx === -1 || (r[nomeIdx] ?? '').trim() !== '')
                         setCsvHeaders(headers)
                         setCsvRows(dataRows)
-                        setMapping(autoMap(headers))
+                        setMapping(autoMapping)
                         setStep('mapping')
                       }}
                     >
@@ -546,7 +559,7 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
         {step === 'mapping' && (
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Trovate <strong>{csvHeaders.length} colonne</strong> e <strong>{csvRows.length} righe</strong>.
+              Trovate <strong>{csvHeaders.length} colonne</strong> e <strong>{filteredRows.length} righe</strong> con nome.
               Controlla la mappatura automatica e correggila se necessario.
             </p>
 
@@ -596,7 +609,7 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
         {step === 'preview' && (
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Anteprima delle prime 5 righe (colonne ignorate escluse). Verranno importati <strong>{csvRows.length}</strong> composti.
+              Anteprima delle prime 5 righe (colonne ignorate escluse). Verranno importati <strong>{filteredRows.length}</strong> composti.
             </p>
 
             {/* TASK 2: banner mix rilevati */}
@@ -638,7 +651,7 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" onClick={() => setStep('mapping')}>← Indietro</Button>
               <Button onClick={handleImport}>
-                Importa {csvRows.length} composti
+                Importa {filteredRows.length} composti
               </Button>
             </div>
           </div>

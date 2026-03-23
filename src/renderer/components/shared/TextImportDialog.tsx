@@ -158,6 +158,13 @@ export function TextImportDialog({ open, onClose, fields, onImport }: TextImport
   function handleImport() {
     const result: Record<string, string> = {}
 
+    // Filtra righe senza nome (colonna mappata a 'nomi')
+    const nomiColName = Object.entries(mapping).find(([, v]) => v === 'nomi')?.[0]
+    const nomiColIdx = nomiColName ? headers.indexOf(nomiColName) : -1
+    const filteredRows = nomiColIdx >= 0
+      ? dataRows.filter(row => (row[nomiColIdx] ?? '').trim() !== '')
+      : dataRows
+
     for (const [colName, fieldKey] of Object.entries(mapping)) {
       if (!fieldKey || fieldKey === '_skip') continue
 
@@ -168,13 +175,13 @@ export function TextImportDialog({ open, onClose, fields, onImport }: TextImport
 
       if (field?.multi || fieldKey === 'nomi') {
         // Raccoglie TUTTI i valori non vuoti della colonna, uniti da ;
-        const valori = dataRows
+        const valori = filteredRows
           .map(row => row[colIdx]?.trim())
           .filter(Boolean)
         result[fieldKey] = valori.join(';')
       } else {
         // Prende il valore dalla prima riga dati non vuota
-        const val = dataRows.find(row => row[colIdx]?.trim())?.[colIdx] ?? ''
+        const val = filteredRows.find(row => row[colIdx]?.trim())?.[colIdx] ?? ''
         result[fieldKey] = val.trim()
       }
     }
