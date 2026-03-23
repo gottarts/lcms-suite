@@ -434,7 +434,7 @@ export function CompostiPage() {
   const [panelId, setPanelId] = useState<number | null>(null)
   const [panelTab, setPanelTab] = useState<string>('dettaglio')
   const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [deleteMixInfo, setDeleteMixInfo] = useState<{ count: number; lotto: string | null } | null>(null)
+  const [deleteMixInfo, setDeleteMixInfo] = useState<{ count: number; lotto: string | null; mix_id: string | null } | null>(null)
   const [mixOpen, setMixOpen] = useState(false)
   const [mixTemplate, setMixTemplate] = useState<any>(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -653,14 +653,22 @@ export function CompostiPage() {
   // ─── Delete singolo ───────────────────────────────────────────────────────
   const handleDelete = useCallback(async () => {
     if (deleteId !== null) {
-      if (deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1) {
-        await window.electronAPI.invoke('composti:delete-by-lotto', deleteMixInfo.lotto)
+      if (deleteMixInfo && deleteMixInfo.mix_id && deleteMixInfo.count > 1) {
+        await window.electronAPI.invoke('composti:delete-by-mix-id', deleteMixInfo.mix_id)
       } else {
         await compostiApi.delete(deleteId)
       }
       setDeleteId(null); setDeleteMixInfo(null); setPanelId(null); load()
     }
   }, [deleteId, deleteMixInfo, load])
+
+  // ─── Delete solo questo composto (senza il resto del mix) ──────────────────
+  const handleDeleteSingle = useCallback(async () => {
+    if (deleteId !== null) {
+      await compostiApi.delete(deleteId)
+      setDeleteId(null); setDeleteMixInfo(null); setPanelId(null); load()
+    }
+  }, [deleteId, load])
 
   // ─── Bulk delete (solo fase mix-scope, nessuna fase lotto) ───────────────
   const handleBulkDelete = useCallback(async () => {
@@ -1126,12 +1134,22 @@ export function CompostiPage() {
       <ConfirmDialog
         open={deleteId !== null} title="Elimina composto"
         message={
-          deleteMixInfo && deleteMixInfo.lotto && deleteMixInfo.count > 1
-            ? `Questo composto fa parte di un mix (lotto: ${deleteMixInfo.lotto}). Verranno eliminati ${deleteMixInfo.count} composti con tutti i dati correlati. Continuare?`
+          deleteMixInfo && deleteMixInfo.mix_id && deleteMixInfo.count > 1
+            ? `Questo composto fa parte di un mix (lotto: ${deleteMixInfo.lotto}, ${deleteMixInfo.count} composti). Vuoi eliminare solo questo composto o tutto il mix?`
             : 'Eliminare questo composto e tutti i dati correlati (preparazioni, storia, associazioni metodi)?'
         }
-        confirmLabel="Elimina" variant="danger" onConfirm={handleDelete}
+        confirmLabel={
+          deleteMixInfo && deleteMixInfo.mix_id && deleteMixInfo.count > 1
+            ? `Tutto il mix (${deleteMixInfo.count})`
+            : 'Elimina'
+        }
+        variant="danger" onConfirm={handleDelete}
         onCancel={() => { setDeleteId(null); setDeleteMixInfo(null) }}
+        secondaryAction={
+          deleteMixInfo && deleteMixInfo.mix_id && deleteMixInfo.count > 1
+            ? { label: 'Solo questo composto', onClick: handleDeleteSingle }
+            : undefined
+        }
       />
 
       {/* ConfirmDialog eliminazione bulk */}

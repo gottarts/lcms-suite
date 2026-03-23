@@ -352,6 +352,15 @@ export function ImportDialog({ open, onClose, onSave }: ImportDialogProps) {
     // TASK 2 — PASSO 2: post-processing mix — assegna mix_id, mix, forma ai composti
     // che hanno un lotto condiviso con almeno un altro composto nella stessa importazione.
     const mixIdMap = calcolaMixDaLotto(csvRows, csvHeaders, mapping)
+
+    // Se un lotto del batch corrisponde a una mix già presente nel DB, riusa il mix_id esistente
+    for (const [lotto] of mixIdMap.entries()) {
+      const existingMixId = await window.electronAPI.invoke('composti:find-mix-id-by-lotto', lotto)
+      if (existingMixId) {
+        mixIdMap.set(lotto, existingMixId)
+      }
+    }
+
     setMixImportCount(mixIdMap.size)
     for (const { composto } of compostiDaImportare) {
       const lotto = (composto.lotto as string)?.trim()

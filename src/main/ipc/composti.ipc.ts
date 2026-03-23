@@ -210,6 +210,21 @@ FROM composti c`
       volume_ml: data.volume_ml ?? null,
     }
 
+    // Auto-assign mix_id se forma=Mix, lotto presente e mix_id non fornito
+    if (
+      (row.forma as string | null)?.toLowerCase() === 'mix' &&
+      row.lotto &&
+      !row.mix_id
+    ) {
+      const existing = db.prepare(
+        'SELECT mix_id FROM composti WHERE lotto = ? AND mix_id IS NOT NULL LIMIT 1'
+      ).get(row.lotto as string) as { mix_id: string } | undefined
+      if (existing) {
+        row.mix_id = existing.mix_id
+        row.mix = row.mix || row.lotto
+      }
+    }
+
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
       'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
@@ -426,7 +441,7 @@ FROM composti c`
     const result = db.prepare(
       'SELECT COUNT(*) as count FROM composti WHERE lotto = ?'
     ).get(row.lotto) as any
-    return { count: result.count, lotto: row.lotto }
+    return { count: result.count, lotto: row.lotto, mix_id: row.mix_id }
   })
 
   ipcMain.handle('composti:delete-by-lotto', (_, lotto: string) => {
@@ -444,6 +459,13 @@ FROM composti c`
       'SELECT COUNT(*) as count FROM composti WHERE mix_id = ?'
     ).get(mix_id) as { count: number }
     return result?.count ?? 0
+  })
+
+  ipcMain.handle('composti:find-mix-id-by-lotto', (_, lotto: string) => {
+    const row = getDb().prepare(
+      'SELECT mix_id FROM composti WHERE lotto = ? AND mix_id IS NOT NULL LIMIT 1'
+    ).get(lotto) as { mix_id: string } | undefined
+    return row?.mix_id ?? null
   })
 
   ipcMain.handle('composti:create-mix', (_, data: {
@@ -476,7 +498,15 @@ FROM composti c`
     }>
   }) => {
     const db = getDb()
-    const mix_id = 'mix_' + Date.now().toString(36)
+    let mix_id: string
+    if (data.lotto) {
+      const existing = db.prepare(
+        'SELECT mix_id FROM composti WHERE lotto = ? AND mix_id IS NOT NULL LIMIT 1'
+      ).get(data.lotto) as { mix_id: string } | undefined
+      mix_id = existing?.mix_id ?? ('mix_' + Date.now().toString(36))
+    } else {
+      mix_id = 'mix_' + Date.now().toString(36)
+    }
     const metodiIds = data.metodi_ids || []
 
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
