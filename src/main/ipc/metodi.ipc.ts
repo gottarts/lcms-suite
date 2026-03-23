@@ -99,6 +99,21 @@ export function registerMetodiIpc(): void {
       'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
     )
 
+    // Legge gli analiti esistenti PRIMA di cancellare, per preservare quelli manuali
+    const analitiEsistenti = db.prepare(
+      'SELECT nome FROM metodo_analiti WHERE metodo_id = ?'
+    ).all(id).map((r: any) => r.nome as string)
+
+    // Calcola i nomi che deriveranno dai nuovi composti_ids
+    const nomiDaNuoviComposti = new Set<string>()
+    for (const cid of compostiIds) {
+      const c = getNomeCompostoUpd.get(cid) as { nome: string } | undefined
+      if (c?.nome) nomiDaNuoviComposti.add(c.nome)
+    }
+
+    // Analiti manuali: esistenti non coperti dai nuovi composti_ids
+    const analitiManuali = analitiEsistenti.filter(n => !nomiDaNuoviComposti.has(n))
+
     db.transaction(() => {
       updateMetodo.run({ ...metodoData, id })
       deleteLinks.run(id)
@@ -107,6 +122,10 @@ export function registerMetodiIpc(): void {
         insertLink.run(cid, id)
         const c = getNomeCompostoUpd.get(cid) as { nome: string } | undefined
         if (c?.nome) insertAnalitaUpd.run(id, c.nome)
+      }
+      // Ripristina gli analiti manuali (non legati a composti)
+      for (const nome of analitiManuali) {
+        insertAnalitaUpd.run(id, nome)
       }
     })()
 

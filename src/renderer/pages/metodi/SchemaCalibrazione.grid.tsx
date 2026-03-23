@@ -233,6 +233,12 @@ export function GrigliaAnalitiCrm({
                                 scad. {crm.scadenza_prodotto}
                               </div>
                             )}
+                            {crm.ultima_rivalidazione && (
+                              <div style={{ fontSize:9, color:'#b45309',
+                                            fontFamily:'IBM Plex Mono, monospace' }}>
+                                Rivalidato · scad. est. {crm.ultima_rivalidazione}
+                              </div>
+                            )}
                           </div>
                           {!isRem && (
                             <div style={{ display:'flex', gap:3, flexShrink:0 }}>
@@ -347,6 +353,12 @@ export function GrigliaAnalitiCrm({
                   {info?.cv ? `${info.cv} mg/L` : ''}
                   {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
                 </div>
+                {info?.ultima_rivalidazione && (
+                  <div style={{ fontSize:10, color:'#b45309', marginTop:2,
+                                fontFamily:'IBM Plex Mono, monospace' }}>
+                    Rivalidato · scad. est. {info.ultima_rivalidazione}
+                  </div>
+                )}
                 <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
                   {allComps.map(n => {
                     const mixItem  = mixItemByNome.get(n)

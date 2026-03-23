@@ -15,9 +15,19 @@ export function registerMetodoAnalitiIpc(): void {
     const insert = db.prepare(
       'INSERT OR IGNORE INTO metodo_analiti (metodo_id, nome) VALUES (?, ?)'
     )
+    const getComposto = db.prepare(
+      'SELECT id FROM composti WHERE LOWER(nome) = LOWER(?)'
+    )
+    const insertLink = db.prepare(
+      'INSERT OR IGNORE INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
+    )
     db.transaction(() => {
       for (const nome of nomi) {
-        insert.run(metodoId, nome.trim())
+        const trimmed = nome.trim()
+        insert.run(metodoId, trimmed)
+        // Se esiste un composto con questo nome, collega anche composti_metodi
+        const composto = getComposto.get(trimmed) as { id: number } | undefined
+        if (composto) insertLink.run(composto.id, metodoId)
       }
     })()
     return { ok: true }

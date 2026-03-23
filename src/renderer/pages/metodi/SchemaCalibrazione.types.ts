@@ -50,6 +50,7 @@ export interface CrmItem {
   lotto: string | null
   produttore: string | null
   scadenza_prodotto: string | null
+  ultima_rivalidazione: string | null
   cv: number
   concVariabile: boolean
   isIS: boolean

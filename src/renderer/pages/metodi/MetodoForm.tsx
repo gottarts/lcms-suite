@@ -77,6 +77,10 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
     await metodoAnalitiApi.add(metodo.id, [trimmed])
     setAddInput('')
     setAddSugg([])
+    // Ricarica i composti_ids aggiornati dal backend, altrimenti al salvataggio
+    // il form sovrascrive i link appena creati (stesso pattern di handleRimuoviSelezionati)
+    const updated = await metodiApi.get(metodo.id)
+    setForm(f => ({ ...f, composti_ids: updated?.composti_ids ?? [] }))
     await loadAnaliti(metodo.id)
   }
 

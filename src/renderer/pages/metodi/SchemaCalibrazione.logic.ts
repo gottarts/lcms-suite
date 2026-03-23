@@ -33,12 +33,14 @@ export function useSchemaData(metodoId: string) {
         metodoId
       )
 
-      // Escludi i dismessi e i CRM singoli scaduti
+      // Escludi i dismessi e i CRM singoli scaduti (senza rivalidazione attiva)
       const oggi = new Date().toISOString().slice(0, 10)
       const disponibili = rows.filter((r: any) => {
         if (r.data_dismissione) return false
-        // Per i singoli (non mix) escludi se scaduti
-        if (!r.mix_id && r.scadenza_prodotto && r.scadenza_prodotto < oggi) return false
+        // Per i singoli (non mix) escludi se scaduti E senza rivalidazione ancora valida
+        if (!r.mix_id && r.scadenza_prodotto && r.scadenza_prodotto < oggi) {
+          if (!r.ultima_rivalidazione || r.ultima_rivalidazione < oggi) return false
+        }
         return true
       })
 
@@ -58,7 +60,8 @@ export function useSchemaData(metodoId: string) {
           forma:            r.forma ?? null,
           lotto:            r.lotto ?? null,
           produttore:       r.produttore ?? null,
-          scadenza_prodotto:r.scadenza_prodotto ?? null,
+          scadenza_prodotto:    r.scadenza_prodotto ?? null,
+          ultima_rivalidazione: r.ultima_rivalidazione ?? null,
           cv,
           concVariabile: false,
           isIS,
