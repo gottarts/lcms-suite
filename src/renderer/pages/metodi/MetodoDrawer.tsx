@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SlidePanel } from '@/components/shared/SlidePanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Pencil, Trash2, ExternalLink } from 'lucide-react'
-import { metodiApi, compostiApi } from '@/lib/api'
+import { metodiApi, metodoAnalitiApi } from '@/lib/api'
 interface MetodoDrawerProps {
   metodoId: string | null
   onClose: () => void
@@ -16,40 +16,17 @@ interface MetodoDrawerProps {
 
 export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema }: MetodoDrawerProps) {
   const [metodo, setMetodo] = useState<any>(null)
-  const [composti, setComposti] = useState<any[]>([])
+  const [analiti, setAnaliti] = useState<{ id: number; nome: string }[]>([])
   const navigate = useNavigate()
 
   useEffect(() => {
     if (metodoId) {
-      metodiApi.get(metodoId).then(m => {
-        setMetodo(m)
-        if (m?.composti_ids?.length) {
-          compostiApi.list({ metodo_id: metodoId }).then(rows => {
-            // deduplicazione per id (sicurezza)
-            const seen = new Set<number>()
-            const unique = rows.filter((c: any) => {
-              if (seen.has(c.id)) return false
-              seen.add(c.id)
-              return true
-            })
-            setComposti(unique)
-          })
-        } else {
-          setComposti([])
-        }
-      })
+      metodiApi.get(metodoId).then(setMetodo)
+      metodoAnalitiApi.list(metodoId).then(rows =>
+        setAnaliti(rows.sort((a, b) => a.nome.localeCompare(b.nome)))
+      )
     }
   }, [metodoId])
-
-  // Raggruppa per nome: array di [nome, count] ordinato alfabeticamente
-  const compostiPerNome = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const c of composti) {
-      const nome = c.nome ?? '—'
-      map.set(nome, (map.get(nome) ?? 0) + 1)
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-  }, [composti])
 
   if (!metodo) return null
 
@@ -119,27 +96,22 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
           </>
         )}
 
-        {compostiPerNome.length > 0 && (
+        {analiti.length > 0 && (
           <>
             <Separator />
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Composti associati ({compostiPerNome.length} sostanze, {composti.length} lotti)
+              Analiti del metodo ({analiti.length})
             </div>
             <div className="flex flex-wrap gap-1">
-              {compostiPerNome.map(([nome, count]) => (
+              {analiti.map(a => (
                 <Badge
-                  key={nome}
+                  key={a.id}
                   variant="outline"
                   className="text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors flex items-center gap-1"
-                  onClick={() => handleBadgeClick(nome)}
+                  onClick={() => handleBadgeClick(a.nome)}
                   title="Vai ai composti filtrati per questo nome"
                 >
-                  {nome}
-                  {count > 1 && (
-                    <span className="ml-1 bg-muted text-muted-foreground rounded-full px-1.5 py-0 text-[10px] font-medium">
-                      {count}
-                    </span>
-                  )}
+                  {a.nome}
                   <ExternalLink className="h-3 w-3 opacity-50" />
                 </Badge>
               ))}

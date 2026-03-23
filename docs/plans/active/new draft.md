@@ -1,6 +1,11 @@
 # prossimi feat:
 
  
+Lista composti CRM — gli analiti eliminati dal metodo non dovrebbero sparire da CRM/work dello schema di calibrazione, perché CRM e work devono includere anche composti presenti nei prodotti ma non nel metodo. Tutti i dettagli e le descrizioni degli work devono indicare il reale contenuto. NOn so come hai organizzato il database ma la logica principale è che c'e una lista magazzino (db composti), una lista di parametri dei metodi (che come adesso comunica con il db composti accetando composti in cui viene indicato il metodo nel db composti e allo stesso tempo cancella il campo metodi in db composti quando il parametro viene eliminato dal metodo) e gli schemi di calibrazione prendono gli analiti dai parametri del metodo e i crm dai db composti.
+
+Anche nel drawer metodo bisogna sistemare questo
+Composti associati (37 sostanze, 38 lotti) . l elenco sono le sostanze dele metodo. 
+
 
  
 alcune work vivono su piu metodi e sono uguali. bisogna far si che ci sia il modo di riciamarle negli schemi di altri metodi, che ci sia una condivisione delle work (se il metodo ha gli stessi crm per quella work)

@@ -44,13 +44,23 @@ export function GrigliaAnalitiCrm({
     navigate('/composti', { state: { searchFilter: nome } })
   }
 
-  // mix_id → array nomi analiti
+  // mix_id → array nomi analiti (usato per layout righe)
   const mixAnaliti = new Map<string, string[]>()
   for (const a of analiti) {
     if (a.mixId) {
       const arr = mixAnaliti.get(a.mixId) ?? []
       arr.push(a.nome)
       mixAnaliti.set(a.mixId, arr)
+    }
+  }
+
+  // mix_id → tutti i nomi componenti del mix (contenuto reale, inclusi non-analiti)
+  const mixAllComps = new Map<string, string[]>()
+  for (const c of crmItems) {
+    if (c.mix_id) {
+      const arr = mixAllComps.get(c.mix_id) ?? []
+      if (!arr.includes(c.nome)) arr.push(c.nome)
+      mixAllComps.set(c.mix_id, arr)
     }
   }
 
@@ -272,7 +282,8 @@ export function GrigliaAnalitiCrm({
             const info   = mixInfo.get(a.mixId)
             const sel    = selSrcs.has(a.mixId)
             const isRmMx = removedMix.has(a.mixId)
-            const nomi   = mixAnaliti.get(a.mixId) ?? []
+            const allComps = mixAllComps.get(a.mixId) ?? []
+            const analitiSet = new Set(mixAnaliti.get(a.mixId) ?? [])
             const top    = mixTopPx[a.mixId] ?? 0
             const height = mixHeightPx[a.mixId] ?? ROW
             return (
@@ -337,14 +348,17 @@ export function GrigliaAnalitiCrm({
                   {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
                 </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
-                  {nomi.map(n => {
+                  {allComps.map(n => {
                     const mixItem  = mixItemByNome.get(n)
                     const concLabel = mixItem?.cv ? ` · ${mixItem.cv} mg/L` : ''
+                    const isAnalita = analitiSet.has(n)
                     return (
                       <span key={n} style={{
                         fontSize:9, fontFamily:'IBM Plex Mono, monospace',
-                        background:C.mix.chip, color:C.mix.text,
+                        background: isAnalita ? C.mix.chip : 'rgba(181,212,244,0.35)',
+                        color: isAnalita ? C.mix.text : C.page.t2,
                         borderRadius:2, padding:'1px 4px',
+                        opacity: isAnalita ? 1 : 0.7,
                       }}>{n}{concLabel}</span>
                     )
                   })}

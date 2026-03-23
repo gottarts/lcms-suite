@@ -97,6 +97,52 @@ FROM composti c`
     return db.prepare(sql).all(...params)
   })
 
+  // CRM per SchemaCalibrazione: cerca per nome analita (non per composti_metodi).
+  // Singoli: nome = analita. Mix: carica TUTTI i componenti di mix che contengono almeno un analita.
+  ipcMain.handle('composti:list-for-schema', (_, metodoId: string) => {
+    const db = getDb()
+    const analitiNomi = db.prepare(
+      'SELECT LOWER(nome) AS nome FROM metodo_analiti WHERE metodo_id = ?'
+    ).all(metodoId).map((r: any) => r.nome as string)
+
+    if (analitiNomi.length === 0) return []
+
+    const placeholders = analitiNomi.map(() => '?').join(',')
+
+    // Trova i mix_id di mix che contengono almeno un analita
+    const mixIds = db.prepare(`
+      SELECT DISTINCT mix_id FROM composti
+      WHERE mix_id IS NOT NULL AND LOWER(nome) IN (${placeholders})
+    `).all(...analitiNomi).map((r: any) => r.mix_id as string)
+
+    // Singoli con nome analita + TUTTI i componenti dei mix trovati
+    let sql = `
+      SELECT c.*,
+        (SELECT COUNT(*) FROM preparazioni
+         WHERE composto_id = c.id AND stato = 'Attiva')                            AS prep_attive_count,
+        (SELECT COUNT(*) FROM preparazioni
+         WHERE composto_id = c.id AND stato = 'Attiva' AND scadenza < date('now')) AS prep_scadute_count,
+        (SELECT GROUP_CONCAT(metodo_id) FROM composti_metodi
+         WHERE composto_id = c.id)                                                 AS metodi_ids_raw
+      FROM composti c
+      WHERE `
+
+    const params: string[] = []
+
+    if (mixIds.length > 0) {
+      const mixPh = mixIds.map(() => '?').join(',')
+      sql += `(c.mix_id IS NULL AND LOWER(c.nome) IN (${placeholders}))
+              OR (c.mix_id IN (${mixPh}))`
+      params.push(...analitiNomi, ...mixIds)
+    } else {
+      sql += `c.mix_id IS NULL AND LOWER(c.nome) IN (${placeholders})`
+      params.push(...analitiNomi)
+    }
+
+    sql += ' ORDER BY c.id ASC'
+    return db.prepare(sql).all(...params)
+  })
+
   ipcMain.handle('composti:get', (_, id: number) => {
     const db = getDb()
     const composto = db.prepare('SELECT * FROM composti WHERE id = ?').get(id)

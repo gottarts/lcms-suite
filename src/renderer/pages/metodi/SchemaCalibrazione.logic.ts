@@ -27,10 +27,10 @@ export function useSchemaData(metodoId: string) {
         metodoId
       )
 
-      // 2. CRM disponibili per il metodo (per popolare le sorgenti selezionabili)
+      // 2. CRM disponibili per il metodo (per nome analita, include mix completi)
       const rows: any[] = await (window as any).electronAPI.invoke(
-        'composti:list',
-        { metodo_id: metodoId }
+        'composti:list-for-schema',
+        metodoId
       )
 
       // Escludi i dismessi e i CRM singoli scaduti

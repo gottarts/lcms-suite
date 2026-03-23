@@ -34,6 +34,9 @@ export const compostiApi = {
   }) => api.invoke('composti:storia-add', compostoId, data) as Promise<{ id: number }>,
   createMix: (data: Record<string, unknown>) =>
     api.invoke('composti:create-mix', data) as Promise<{ mix_id: string; count: number }>,
+  // CRM per SchemaCalibrazione: cerca per nome analita, non per composti_metodi
+  listForSchema: (metodoId: string) =>
+    api.invoke('composti:list-for-schema', metodoId) as Promise<any[]>,
   // TASK A-1: valori distinti di una colonna (per autocomplete)
   distinctValues: (campo: string) =>
     api.invoke('composti:distinct-values', campo) as Promise<string[]>,
