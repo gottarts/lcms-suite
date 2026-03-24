@@ -387,7 +387,25 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                               background: src.tipo === 'mix' ? C.mix.border : C.sng.border }} />
                 <div>
                   <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{src.nome}</div>
-                  <div style={{ fontSize:10, color:C.page.th }}>{src.cv} mg/L · CRM</div>
+                  <div style={{ fontSize:10, color:C.page.th }}>
+                    {src.concVariabile ? (
+                      <>
+                        <span style={{ fontStyle:'italic' }}>variabile</span>
+                        {(() => {
+                          const comps = crmItems.filter(c => c.mix_id === src.id)
+                          if (comps.length === 0) return null
+                          const tip = comps.map(c => `${c.nome} · ${c.cv} ${c.unita_conc}`).join('\n')
+                          return (
+                            <span title={tip}
+                                  style={{ marginLeft:4, cursor:'help', opacity:0.6 }}>ⓘ</span>
+                          )
+                        })()}
+                        {' · CRM'}
+                      </>
+                    ) : (
+                      `${src.cv} mg/L · CRM`
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -928,6 +946,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
         open={modalOpen}
         selSrcs={selSrcs}
         workCols={workCols}
+        crmItems={crmItems}
         onClose={() => setModalOpen(false)}
         onSave={handleSaveWork}
         saving={saving}

@@ -63,11 +63,25 @@ export function useSchemaData(metodoId: string) {
           scadenza_prodotto:    r.scadenza_prodotto ?? null,
           ultima_rivalidazione: r.ultima_rivalidazione ?? null,
           cv,
-          concVariabile: false,
+          concVariabile: false, // verrà ricalcolato sotto
           isIS,
         }
       })
-      setCrmItems(items)
+
+      // Rileva mix eterogenei e imposta concVariabile correttamente
+      const mixCvSets = new Map<string, Set<number>>()
+      for (const item of items) {
+        if (item.mix_id) {
+          const s = mixCvSets.get(item.mix_id) ?? new Set<number>()
+          s.add(item.cv)
+          mixCvSets.set(item.mix_id, s)
+        }
+      }
+      const itemsFinal = items.map(item => ({
+        ...item,
+        concVariabile: item.mix_id ? (mixCvSets.get(item.mix_id)?.size ?? 0) > 1 : false,
+      }))
+      setCrmItems(itemsFinal)
 
       // 3. Costruisce mappe CRM disponibili per nome
       const mixMap = new Map<string, string>()      // nome → mix_id

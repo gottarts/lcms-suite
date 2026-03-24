@@ -12,7 +12,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
-import { getConcInfo, calcolaVols, targetColIdx } from './SchemaCalibrazione.logic'
+import { getConcInfo, calcolaVols, targetColIdx, getCompsFromWork } from './SchemaCalibrazione.logic'
 
 const ROW = 48 // px altezza riga singola
 
@@ -69,6 +69,16 @@ export function GrigliaAnalitiCrm({
   const mixInfo = new Map<string, CrmItem>()
   for (const c of crmItems) {
     if (c.mix_id && !mixInfo.has(c.mix_id)) mixInfo.set(c.mix_id, c)
+  }
+
+  // mix_id → set di cv distinti (per rilevare mix eterogenei)
+  const mixCvSets = new Map<string, Set<number>>()
+  for (const c of crmItems) {
+    if (c.mix_id) {
+      const s = mixCvSets.get(c.mix_id) ?? new Set<number>()
+      s.add(c.cv)
+      mixCvSets.set(c.mix_id, s)
+    }
   }
 
   // nome analita → CrmItem del mix (per concentrazioni nei chip)
@@ -381,7 +391,7 @@ export function GrigliaAnalitiCrm({
                 </div>
                 <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                               fontFamily:'IBM Plex Mono, monospace' }}>
-                  {info?.cv ? `${info.cv} mg/L` : ''}
+                  {(mixCvSets.get(a.mixId)?.size ?? 0) <= 1 && info?.cv ? `${info.cv} mg/L` : ''}
                   {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
                 </div>
                 {info?.ultima_rivalidazione && (
@@ -423,12 +433,13 @@ interface ModalProps {
   open: boolean
   selSrcs: Map<string, SorgenteSel>
   workCols: WorkInSchema[][]
+  crmItems: CrmItem[]
   onClose: () => void
   onSave: (w: Omit<WorkInSchema, 'id' | 'dbId'>) => Promise<void>
   saving: boolean
 }
 
-export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving }: ModalProps) {
+export function ModalCreaWork({ open, selSrcs, workCols, crmItems, onClose, onSave, saving }: ModalProps) {
   const [nome,        setNome]       = useState('')
   const [volFin,      setVolFin]     = useState('')
   const [solv,        setSolv]       = useState('MeOH')
@@ -555,6 +566,23 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
               {srcs.map(s => {
                 const info  = getConcInfo(s, workCols)
                 const isVar = !info.omogenea
+                const tooltipText = (() => {
+                  if (!isVar) return null
+                  if (s.tipo === 'mix') {
+                    const comps = crmItems.filter(c => c.mix_id === s.id)
+                    if (comps.length === 0) return null
+                    return comps.map(c => `${c.nome} · ${c.cv} ${c.unita_conc}`).join('\n')
+                  }
+                  if (s.tipo === 'work') {
+                    let w: WorkInSchema | undefined
+                    for (const col of workCols) { w = col.find(x => x.id === s.id); if (w) break }
+                    if (!w) return null
+                    const comps = getCompsFromWork(w, workCols, crmItems)
+                    if (comps.length === 0) return null
+                    return comps.map(c => `${c.nome} · ${c.concInWork.toFixed(3)} ${c.unita}`).join('\n')
+                  }
+                  return null
+                })()
                 return (
                   <div key={s.id} style={{
                     display:'flex', justifyContent:'space-between', alignItems:'center',
@@ -569,6 +597,12 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
                     </span>
                     <span style={{ color:C.page.th, fontStyle: isVar ? 'italic' : undefined }}>
                       {info.label}
+                      {isVar && tooltipText && (
+                        <span
+                          title={tooltipText}
+                          style={{ marginLeft:4, cursor:'help', opacity:0.6, fontStyle:'normal' }}
+                        >ⓘ</span>
+                      )}
                     </span>
                     {customMode && (
                       <input
