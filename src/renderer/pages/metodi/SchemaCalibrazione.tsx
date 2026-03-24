@@ -862,7 +862,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       ) : (
         <div ref={workspaceRef} style={{ flex:1, display:'flex', flexDirection:'row',
                       overflowX:'auto', overflowY:'hidden', minHeight:0, position:'relative',
-                      gap:16, padding:'8px 12px' }}>
+                      gap:16, padding:'16px 12px 8px' }}>
           <ConnectionsOverlay
             workCols={workCols}
             cardRefs={cardRefs}

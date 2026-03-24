@@ -152,7 +152,7 @@ export function GrigliaAnalitiCrm({
 
   return (
     <div style={{ display:'flex', flexDirection:'column', flexShrink:0,
-                  minHeight:0, overflow:'hidden',
+                  minHeight:0,
                   background:C.page.sur, margin:0, borderRadius:12,
                   border:`1.5px dashed ${C.page.brd2}`, position:'relative',
                   boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
