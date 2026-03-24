@@ -86,8 +86,8 @@ function ConnectionsOverlay({
         const d = `M ${l.x1} ${l.y1} C ${l.x1 + cpx} ${l.y1}, ${l.x2 - cpx} ${l.y2}, ${l.x2} ${l.y2}`
         return (
           <path key={i} d={d}
-            fill="none" stroke={l.color} strokeWidth={1.5}
-            strokeDasharray="5 3" opacity={0.55}
+            fill="none" stroke={l.color} strokeWidth={1.2}
+            strokeDasharray="6 4" opacity={0.4}
             markerEnd={`url(#arrow-${l.sourceType})`}
           />
         )
@@ -116,14 +116,15 @@ function ColonneWork({
 }: ColonneWorkProps) {
   return (
     <div style={{ display:'flex', flexDirection:'row', flexShrink:0,
-                  margin:8, borderRadius:10, border:`1.5px dashed ${C.page.brd2}`,
-                  position:'relative', background:C.page.sur }}>
+                  margin:0, borderRadius:12, border:`1.5px dashed ${C.page.brd2}`,
+                  position:'relative', background:C.page.sur,
+                  boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
 
       {/* Label sezione */}
       <span style={{
-        position:'absolute', top:-9, left:14, background:C.page.bg,
-        padding:'0 6px', fontSize:9, fontWeight:700, color:C.page.th,
-        textTransform:'uppercase', letterSpacing:'0.08em', zIndex:2,
+        position:'absolute', top:-9, left:16, background:C.page.bg,
+        padding:'0 8px', fontSize:9, fontWeight:600, color:C.page.th,
+        textTransform:'uppercase', letterSpacing:'0.1em', zIndex:2,
       }}>Soluzioni Work</span>
 
       {workCols.map((works, ci) => {
@@ -141,8 +142,8 @@ function ColonneWork({
           }}>
             {/* Header colonna */}
             <div style={{ padding:'9px 11px 7px', background:C.page.sur,
-                          borderBottom:`1px solid ${C.page.brd}`, flexShrink:0 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:C.page.t2,
+                          borderBottom:'1px solid rgba(0,0,0,0.06)', flexShrink:0 }}>
+              <div style={{ fontSize:10, fontWeight:600, color:C.page.t2,
                             textTransform:'uppercase', letterSpacing:'0.08em' }}>{lbl}</div>
               <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                             fontFamily:'IBM Plex Mono, monospace' }}>{sub}</div>
@@ -153,9 +154,9 @@ function ColonneWork({
                           display:'flex', flexDirection:'column', gap:7 }}>
               {works.length === 0 && (
                 <div style={{
-                  border:`1.5px dashed ${C.page.brd2}`, borderRadius:7,
+                  border:`2px dashed ${C.page.brd}`, borderRadius:10,
                   padding:'18px 12px', textAlign:'center', color:C.page.th,
-                  fontSize:11, lineHeight:1.6,
+                  fontSize:11, lineHeight:1.6, background:'transparent',
                 }}>
                   {isFirst
                     ? <>Seleziona CRM e clicca <strong>Crea Work</strong></>
@@ -178,16 +179,16 @@ function ColonneWork({
                     ref={el => registerCardRef(w.id, el)}
                     onClick={() => canBeSrc && onToggleWork(w, ci)}
                     style={{
-                      borderRadius:8, padding:'8px 12px', position:'relative',
-                      background: isSel ? (isInter ? '#d5caf7' : '#fcedc7') : col.bg,
+                      borderRadius:10, padding:'8px 12px', position:'relative',
+                      background: isSel ? (isInter ? '#ddd4f5' : '#f5e8c8') : col.bg,
                       border:`1.5px solid ${col.border}`,
                       borderLeft:`3px solid ${col.border}`,
                       boxShadow: isSel
-                        ? `0 0 0 3px rgba(107,80,200,.42)`
-                        : '0 1px 3px rgba(0,0,0,0.08)',
+                        ? `0 0 0 3px rgba(155,134,214,.35)`
+                        : '0 1px 2px rgba(0,0,0,0.04)',
                       cursor: canBeSrc ? 'pointer' : 'default',
                       outline: isSel ? `2px solid ${col.border}` : undefined,
-                      outlineOffset: isSel ? 1 : undefined,
+                      outlineOffset: isSel ? 2 : undefined,
                       transition:'box-shadow .12s, background .1s',
                     }}
                   >
@@ -227,8 +228,8 @@ function ColonneWork({
 
                     {/* Badge validità */}
                     <span style={{
-                      display:'inline-block', fontSize:9, padding:'1px 6px',
-                      borderRadius:3, fontWeight:700, marginTop:4,
+                      display:'inline-block', fontSize:9, padding:'1px 8px',
+                      borderRadius:10, fontWeight:700, marginTop:4,
                       background: w.validitaMesi ? C.sng.chip : '#d3d1c7',
                       color: w.validitaMesi ? C.sng.text : C.page.t2,
                     }}>
@@ -242,13 +243,13 @@ function ColonneWork({
                         <span key={s.id} style={{
                           fontSize:9, fontFamily:'IBM Plex Mono, monospace',
                           background:col.chip, color:col.text,
-                          borderRadius:2, padding:'1px 4px',
+                          borderRadius:4, padding:'2px 6px',
                         }}>{s.nome}</span>
                       ))}
                     </div>
 
                     {/* Tabella volumi mini */}
-                    <div style={{ marginTop:6, borderTop:`1px solid ${C.page.brd}`,
+                    <div style={{ marginTop:6, borderTop:`1px dashed ${C.page.brd}`,
                                   paddingTop:5 }}>
                       {w.vols.map(v => (
                         <div key={v.nome} style={{
@@ -291,8 +292,8 @@ function ColonneWork({
         <button
           onClick={onAddCol}
           style={{
-            width:38, flexShrink:0, background:C.page.bg, border:'none',
-            borderLeft:`1px solid ${C.page.brd}`, cursor:'pointer',
+            width:40, flexShrink:0, background:'transparent', border:'none',
+            borderLeft:`1.5px dashed ${C.page.brd}`, cursor:'pointer',
             display:'flex', flexDirection:'column', alignItems:'center',
             justifyContent:'center', gap:4, color:C.page.th, fontSize:20,
           }}
@@ -534,8 +535,8 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
             onChange={e => setSearch(e.target.value)}
             style={{
               width:'100%', padding:'6px 9px', border:`1px solid ${C.page.brd}`,
-              borderRadius:5, fontSize:12, fontFamily:'Lato, sans-serif',
-              outline:'none', background:C.page.bg, color:C.page.t1, marginBottom:8,
+              borderRadius:8, fontSize:12, fontFamily:'Lato, sans-serif',
+              outline:'none', background:'#fafafa', color:C.page.t1, marginBottom:8,
             }}
           />
           {comps.length === 0 ? (
@@ -748,17 +749,19 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   return (
     <div style={{
       position:'relative', background:C.page.bg,
-      display:'flex', flexDirection:'column', height:'100%', minHeight:0,
+      display:'flex', flexDirection:'column',
+      height:'calc(100vh - 48px - 32px)', margin:-16, overflow:'hidden',
       fontFamily:'Lato, sans-serif',
     }}>
       {/* ── Header ── */}
-      <div style={{ background:C.page.sur, borderBottom:`1px solid ${C.page.brd}`,
-                    padding:'10px 18px', display:'flex', alignItems:'center',
+      <div style={{ background:C.page.sur, boxShadow:'0 1px 0 rgba(0,0,0,0.06)',
+                    padding:'12px 24px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <span style={{ fontSize:14, fontWeight:700 }}>Schema Calibrazione</span>
+          <span style={{ fontSize:15, fontWeight:600 }}>Schema Calibrazione</span>
           <span style={{ fontSize:11, color:C.page.t2,
-                         fontFamily:'IBM Plex Mono, monospace' }}>{metodoNome}</span>
+                         fontFamily:'IBM Plex Mono, monospace',
+                         background:'#f0f0f0', borderRadius:12, padding:'2px 10px' }}>{metodoNome}</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           {/* Legenda */}
@@ -771,7 +774,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           ].map(l => (
             <div key={l.label} style={{ display:'flex', alignItems:'center',
                                         gap:4, fontSize:11, color:C.page.t2 }}>
-              <div style={{ width:10, height:10, borderRadius:2,
+              <div style={{ width:8, height:8, borderRadius:'50%',
                             background:l.color, border:`1px solid ${l.border}` }} />
               {l.label}
             </div>
@@ -780,23 +783,23 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       </div>
 
       {/* ── Step bar ── */}
-      <div style={{ background:C.page.sur, borderBottom:`1px solid ${C.page.brd}`,
-                    padding:'7px 18px', display:'flex', alignItems:'center',
+      <div style={{ background:C.page.sur, boxShadow:'0 1px 0 rgba(0,0,0,0.06)',
+                    padding:'7px 24px', display:'flex', alignItems:'center',
                     gap:5, flexShrink:0 }}>
         {steps.map((s, i) => {
           const isDone = s.n < stepStatus
           const isOn   = s.n === stepStatus
-          const color  = isDone ? '#3B6D11' : isOn ? '#185FA5' : C.page.th
+          const color  = isDone ? '#7db85a' : isOn ? '#6ba3d6' : C.page.th
           return (
             <div key={s.n} style={{ display:'flex', alignItems:'center', gap:5 }}>
-              {i > 0 && <div style={{ width:18, height:1, background:C.page.brd }} />}
+              {i > 0 && <div style={{ width:24, height:0, borderTop:`1.5px dashed ${C.page.brd}` }} />}
               <div style={{ display:'flex', alignItems:'center', gap:5,
-                            fontSize:11, color, fontWeight: isOn ? 700 : 400,
+                            fontSize:11, color, fontWeight: isOn ? 600 : 400,
                             whiteSpace:'nowrap' }}>
                 <div style={{
-                  width:18, height:18, borderRadius:'50%',
-                  border:`1.5px solid ${color}`,
-                  background: isDone ? '#3B6D11' : isOn ? '#185FA5' : 'transparent',
+                  width:20, height:20, borderRadius:'50%',
+                  border: (isDone || isOn) ? `1.5px solid ${color}` : '1.5px dashed #d0d0d0',
+                  background: isDone ? '#7db85a' : isOn ? '#6ba3d6' : 'transparent',
                   color: (isDone || isOn) ? '#fff' : color,
                   display:'flex', alignItems:'center', justifyContent:'center',
                   fontSize:10, fontWeight:700,
@@ -824,7 +827,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       ) : (
         <div ref={workspaceRef} style={{ flex:1, display:'flex', flexDirection:'row',
                       overflowX:'auto', overflowY:'hidden', minHeight:0, position:'relative',
-                      gap:12, padding:'4px 0' }}>
+                      gap:16, padding:'8px 12px' }}>
           <ConnectionsOverlay
             workCols={workCols}
             cardRefs={cardRefs}
@@ -857,8 +860,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       )}
 
       {/* ── Bottom bar ── */}
-      <div style={{ background:C.page.sur, borderTop:`1px solid ${C.page.brd}`,
-                    padding:'8px 18px', display:'flex', alignItems:'center',
+      <div style={{ background:C.page.sur, boxShadow:'0 -1px 0 rgba(0,0,0,0.06)',
+                    padding:'10px 24px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           {hasCon && (
@@ -867,14 +870,14 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             </span>
           )}
           <button onClick={() => setConfirmReset('reload')} style={{
-            padding:'5px 12px', borderRadius:5, border:`1px solid ${C.page.brd}`,
+            padding:'5px 12px', borderRadius:8, border:`1px solid ${C.page.brd}`,
             background:C.page.sur, cursor:'pointer', fontSize:11,
-            fontWeight:600, color:C.page.t2,
+            fontWeight:500, color:C.page.t2,
           }}>&#x21bb; Ricarica</button>
           <button onClick={() => setConfirmReset('full')} style={{
-            padding:'5px 12px', borderRadius:5, border:`1px solid ${C.con.border}`,
+            padding:'5px 12px', borderRadius:8, border:`1px solid ${C.con.border}`,
             background:C.page.sur, cursor:'pointer', fontSize:11,
-            fontWeight:600, color:C.con.text,
+            fontWeight:500, color:C.con.text,
           }}>Ricomincia da zero</button>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
@@ -883,7 +886,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             {selSrcs.size} sorgent{selSrcs.size === 1 ? 'e' : 'i'} selezionat{selSrcs.size === 1 ? 'a' : 'e'}
           </span>
           <button onClick={onClose} style={{
-            padding:'7px 14px', borderRadius:6, border:`1px solid ${C.page.brd}`,
+            padding:'7px 14px', borderRadius:8, border:`1px solid ${C.page.brd}`,
             background:C.page.sur, cursor:'pointer', fontSize:13,
             fontWeight:700, color:C.page.t2,
           }}>← Chiudi schema</button>
@@ -892,7 +895,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onClick={() => setModalOpen(true)}
             disabled={selSrcs.size === 0}
             style={{
-              padding:'7px 18px', borderRadius:6, border:'none', cursor:'pointer',
+              padding:'7px 18px', borderRadius:8, border:'none', cursor:'pointer',
               fontSize:13, fontWeight:700,
               background: selSrcs.size === 0 ? C.page.brd : C.work.border,
               color: selSrcs.size === 0 ? C.page.th : '#fff',

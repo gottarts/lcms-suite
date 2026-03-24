@@ -112,19 +112,20 @@ export function GrigliaAnalitiCrm({
 
   return (
     <div style={{ display:'flex', flexDirection:'column', flexShrink:0,
-                  background:C.page.sur, margin:8, borderRadius:10,
-                  border:`1.5px dashed ${C.page.brd2}`, position:'relative' }}>
+                  background:C.page.sur, margin:0, borderRadius:12,
+                  border:`1.5px dashed ${C.page.brd2}`, position:'relative',
+                  boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
 
       {/* Label sezione */}
       <span style={{
-        position:'absolute', top:-9, left:14, background:C.page.bg,
-        padding:'0 6px', fontSize:9, fontWeight:700, color:C.page.th,
-        textTransform:'uppercase', letterSpacing:'0.08em', zIndex:2,
+        position:'absolute', top:-9, left:16, background:C.page.bg,
+        padding:'0 8px', fontSize:9, fontWeight:600, color:C.page.th,
+        textTransform:'uppercase', letterSpacing:'0.1em', zIndex:2,
       }}>CRM &amp; Analiti</span>
 
       {/* ── Header ── */}
-      <div style={{ display:'flex', background:C.page.sur, borderRadius:'10px 10px 0 0',
-                    borderBottom:`1px solid ${C.page.brd}`, flexShrink:0 }}>
+      <div style={{ display:'flex', background:C.page.sur, borderRadius:'12px 12px 0 0',
+                    borderBottom:'1px solid rgba(0,0,0,0.06)', flexShrink:0 }}>
         {([
           { w:190, label:'Analiti',        sub:`${analiti.length} composti` },
           { w:270, label:'CRM Mix',        sub:'clicca per selezionare', br:true },
@@ -132,7 +133,7 @@ export function GrigliaAnalitiCrm({
         ] as { w:number; label:string; sub:string; br?:boolean }[]).map((h, i) => (
           <div key={i} style={{ width:h.w, padding:'9px 11px', flexShrink:0,
                                 borderRight: h.br ? `1px solid ${C.page.brd}` : undefined }}>
-            <div style={{ fontSize:11, fontWeight:700, color:C.page.t2,
+            <div style={{ fontSize:10, fontWeight:600, color:C.page.t2,
                           textTransform:'uppercase', letterSpacing:'0.08em' }}>{h.label}</div>
             <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                           fontFamily:'IBM Plex Mono, monospace' }}>{h.sub}</div>
@@ -170,10 +171,9 @@ export function GrigliaAnalitiCrm({
                                 display:'flex', alignItems:'center' }}>
                     <div style={{
                       background: senzaCrm ? C.page.sur : C.ana.bg,
-                      border:`1px ${senzaCrm ? 'dashed' : (a.isIS ? 'dashed' : 'solid')} ${senzaCrm ? C.page.brd2 : C.ana.border}`,
-                      opacity: senzaCrm ? 0.5 : (a.isIS ? 0.68 : 1),
-                      borderRadius:6, padding:'4px 8px', fontSize:11,
-                      boxShadow: senzaCrm ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
+                      border:`1px ${senzaCrm ? 'dashed' : (a.isIS ? 'dashed' : 'solid')} ${senzaCrm ? C.page.brd : C.ana.border}`,
+                      opacity: senzaCrm ? 0.4 : (a.isIS ? 0.68 : 1),
+                      borderRadius:8, padding:'4px 8px', fontSize:11,
                       fontFamily:'IBM Plex Mono, monospace', whiteSpace:'nowrap',
                       overflow:'hidden', textOverflow:'ellipsis', width:'100%',
                       color: senzaCrm ? C.page.th : undefined,
@@ -203,13 +203,13 @@ export function GrigliaAnalitiCrm({
                           ref={el => registerCardRef(sngId, el)}
                           onClick={() => !isRem && onToggleSng(sngId)}
                           style={{
-                            borderRadius:8, padding:'5px 8px',
+                            borderRadius:10, padding:'5px 8px',
                             background: isRem ? C.page.sur
-                              : (isCon ? C.con.bg : (isSel ? '#b4d97c' : C.sng.bg)),
+                              : (isCon ? C.con.bg : (isSel ? '#c8e8a8' : C.sng.bg)),
                             border:`1.5px solid ${isCon ? C.con.border : C.sng.border}`,
                             borderLeft:`3px solid ${isCon ? C.con.border : C.sng.border}`,
                             borderStyle: a.isIS ? 'dashed' : 'solid',
-                            boxShadow: isSel ? '0 0 0 2px rgba(59,109,17,.28)' : '0 1px 3px rgba(0,0,0,0.08)',
+                            boxShadow: isSel ? '0 0 0 2px rgba(125,184,90,.35)' : '0 1px 2px rgba(0,0,0,0.04)',
                             opacity: isRem ? 0.28 : 1,
                             textDecoration: isRem ? 'line-through' : undefined,
                             cursor: isRem ? 'default' : 'pointer',
@@ -246,8 +246,8 @@ export function GrigliaAnalitiCrm({
                                 onClick={e => { e.stopPropagation(); goToComposto(crm.nome) }}
                                 style={{
                                   width:15, height:15, borderRadius:3,
-                                  border:`1px solid ${C.sng.border}`,
-                                  background:'#fff', color:C.sng.text,
+                                  border:`1px solid ${C.page.brd}`,
+                                  background:'#fff', color:C.page.t2,
                                   cursor:'pointer', display:'flex', alignItems:'center',
                                   justifyContent:'center', fontSize:9,
                                 }}
@@ -257,9 +257,9 @@ export function GrigliaAnalitiCrm({
                                 onClick={e => { e.stopPropagation(); onRemoveCon(sngId) }}
                                 style={{
                                   width:15, height:15, borderRadius:'50%',
-                                  border:`1.5px solid ${isCon ? C.con.border : C.sng.border}`,
+                                  border:`1.5px solid ${C.page.brd}`,
                                   background:'#fff',
-                                  color: isCon ? C.con.text : C.sng.text,
+                                  color: C.page.t2,
                                   cursor:'pointer', display:'flex', alignItems:'center',
                                   justifyContent:'center', fontSize:11, fontWeight:700,
                                 }}
@@ -300,12 +300,12 @@ export function GrigliaAnalitiCrm({
                 style={{
                   position:'absolute', left:8, right:8,
                   top: top + 5, height: height - 10,
-                  borderRadius:8,
-                  background: isRmMx ? C.page.sur : (sel ? '#cee3f8' : C.mix.bg),
+                  borderRadius:10,
+                  background: isRmMx ? C.page.sur : (sel ? '#d4e8fa' : C.mix.bg),
                   border:`1.5px solid ${C.mix.border}`,
                   borderLeft:`3px solid ${C.mix.border}`,
                   padding:'6px 9px',
-                  boxShadow: sel ? '0 0 0 3px rgba(24,95,165,.3)' : '0 1px 3px rgba(0,0,0,0.08)',
+                  boxShadow: sel ? '0 0 0 2px rgba(107,163,214,.35)' : '0 1px 2px rgba(0,0,0,0.04)',
                   cursor: isRmMx ? 'default' : 'pointer',
                   opacity: isRmMx ? 0.28 : 1,
                   textDecoration: isRmMx ? 'line-through' : undefined,
@@ -320,8 +320,8 @@ export function GrigliaAnalitiCrm({
                       onClick={e => { e.stopPropagation(); goToComposto(a.mixId!) }}
                       style={{
                         width:15, height:15, borderRadius:3,
-                        border:`1px solid ${C.mix.border}`,
-                        background:'#fff', color:C.mix.text,
+                        border:`1px solid ${C.page.brd}`,
+                        background:'#fff', color:C.page.t2,
                         cursor:'pointer', display:'flex', alignItems:'center',
                         justifyContent:'center', fontSize:9,
                       }}
@@ -331,8 +331,8 @@ export function GrigliaAnalitiCrm({
                       onClick={e => { e.stopPropagation(); onRemoveMix(a.mixId!) }}
                       style={{
                         width:15, height:15, borderRadius:'50%',
-                        border:`1.5px solid ${C.mix.border}`,
-                        background:'#fff', color:C.mix.text,
+                        border:`1.5px solid ${C.page.brd}`,
+                        background:'#fff', color:C.page.t2,
                         cursor:'pointer', display:'flex', alignItems:'center',
                         justifyContent:'center', fontSize:11, fontWeight:700,
                       }}
@@ -367,9 +367,9 @@ export function GrigliaAnalitiCrm({
                     return (
                       <span key={n} style={{
                         fontSize:9, fontFamily:'IBM Plex Mono, monospace',
-                        background: isAnalita ? C.mix.chip : 'rgba(181,212,244,0.35)',
+                        background: isAnalita ? C.mix.chip : 'rgba(212,232,250,0.4)',
                         color: isAnalita ? C.mix.text : C.page.t2,
-                        borderRadius:2, padding:'1px 4px',
+                        borderRadius:4, padding:'2px 6px',
                         opacity: isAnalita ? 1 : 0.7,
                       }}>{n}{concLabel}</span>
                     )
@@ -464,9 +464,9 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
   if (!open) return null
 
   const inputStyle: React.CSSProperties = {
-    width:'100%', padding:'6px 9px', border:`1px solid ${C.page.brd}`,
-    borderRadius:5, fontSize:13, fontFamily:'Lato, sans-serif',
-    color:C.page.t1, background:C.page.bg, outline:'none',
+    width:'100%', padding:'7px 10px', border:`1px solid ${C.page.brd}`,
+    borderRadius:8, fontSize:13, fontFamily:'Lato, sans-serif',
+    color:C.page.t1, background:'#fafafa', outline:'none',
   }
   const labelStyle: React.CSSProperties = {
     fontSize:10, fontWeight:700, color:C.page.t2,
@@ -477,14 +477,15 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
       style={{
-        position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
+        position:'fixed', inset:0, background:'rgba(0,0,0,.3)',
         display:'flex', alignItems:'center', justifyContent:'center', zIndex:100,
       }}
     >
       <div style={{
-        background:C.page.sur, borderRadius:10, width:430, maxWidth:'95vw',
-        maxHeight:'88vh', overflowY:'auto', padding:22,
-        boxShadow:'0 8px 32px rgba(0,0,0,.2)',
+        background:C.page.sur, borderRadius:14, width:440, maxWidth:'95vw',
+        maxHeight:'88vh', overflowY:'auto', padding:24,
+        boxShadow:'0 12px 40px rgba(0,0,0,.12)',
+        border:`1px solid ${C.page.brd}`,
       }}>
         <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>
           {isInter ? 'Nuova Work intermedia' : 'Nuova Work'}
@@ -600,7 +601,7 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
         {srcs.length > 0 && parseFloat(volFin) > 0 && (
           <div style={{
             background:C.work.bg, border:`1px solid ${C.work.border}`,
-            borderRadius:6, padding:'9px 11px', marginBottom:10,
+            borderRadius:10, padding:'9px 11px', marginBottom:10,
             fontSize:11, fontFamily:'IBM Plex Mono, monospace',
           }}>
             <div style={{ fontWeight:700, color:C.work.text, marginBottom:5, fontSize:12 }}>
@@ -648,7 +649,7 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
         {/* Footer */}
         <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:14 }}>
           <button onClick={onClose} style={{
-            padding:'6px 14px', borderRadius:5, border:`1px solid ${C.page.brd}`,
+            padding:'6px 14px', borderRadius:8, border:`1px solid ${C.page.brd}`,
             background:C.page.sur, color:C.page.t2, cursor:'pointer',
             fontSize:13, fontWeight:700,
           }}>Annulla</button>
@@ -656,7 +657,7 @@ export function ModalCreaWork({ open, selSrcs, workCols, onClose, onSave, saving
             onClick={handleSave}
             disabled={saving || !nome.trim()}
             style={{
-              padding:'6px 14px', borderRadius:5, border:'none',
+              padding:'6px 14px', borderRadius:8, border:'none',
               background: saving || !nome.trim() ? C.page.brd : C.work.border,
               color:'#fff', cursor: saving || !nome.trim() ? 'not-allowed' : 'pointer',
               fontSize:13, fontWeight:700,

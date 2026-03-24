@@ -81,12 +81,12 @@ export interface SchemaCalibrazioneProps {
 
 // Palette colori (usata come oggetto stile inline)
 export const C = {
-  mix:  { bg: '#deedf9', border: '#185FA5', text: '#0C447C', chip: '#b5d4f4' },
-  sng:  { bg: '#e4f2d8', border: '#3B6D11', text: '#27500A', chip: '#c0dd97' },
-  con:  { bg: '#faece7', border: '#D85A30', text: '#993C1D' },
-  work: { bg: '#fef9ec', border: '#BA7517', text: '#633806', chip: '#FAC775' },
-  inter:{ bg: '#f0ecfe', border: '#6B50C8', text: '#3D2A8A', chip: '#c9bef7' },
-  ana:  { bg: '#f7f6f2', border: '#888780' },
-  page: { bg: '#f2f0eb', sur: '#fff', brd: '#d6d3cc', brd2: '#b8b5ae',
-          t1: '#1a1917', t2: '#5c5a56', th: '#9c9a96' },
+  mix:  { bg: '#eef6ff', border: '#6ba3d6', text: '#2b5f8a', chip: '#d4e8fa' },
+  sng:  { bg: '#eef8e8', border: '#7db85a', text: '#3a6b24', chip: '#d2edbe' },
+  con:  { bg: '#fef0ec', border: '#d4806a', text: '#8c3e2a' },
+  work: { bg: '#fdf6e8', border: '#c49540', text: '#6b4f1a', chip: '#f5e2b8' },
+  inter:{ bg: '#f2effe', border: '#9b86d6', text: '#5a3fa0', chip: '#d8cff5' },
+  ana:  { bg: '#f5f5f3', border: '#b0afaa' },
+  page: { bg: '#ffffff', sur: '#ffffff', brd: '#e5e5e5', brd2: '#d0d0d0',
+          t1: '#1e1e1e', t2: '#6b6b6b', th: '#a0a0a0' },
 } as const
