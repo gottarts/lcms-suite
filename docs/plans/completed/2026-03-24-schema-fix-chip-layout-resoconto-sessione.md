@@ -36,11 +36,11 @@ Risolvere i bug rimasti dal redesign grafico di SchemaCalibrazione:
 
 ## Bug ancora aperti
 
-### Frecce SVG statiche rispetto allo scroll
+### Frecce SVG statiche rispetto allo scroll verticale
 
-Le frecce di connessione (ConnectionsOverlay SVG) non si aggiornano quando si scrolla orizzontalmente il workspace. Le coordinate in `computeConnections` sono calcolate correttamente (con `scrollLeft`/`scrollTop`), ma potrebbe esserci un problema di timing React (setState asincrono) o di posizionamento SVG.
+Le frecce di connessione (ConnectionsOverlay SVG) restano ferme e puntano a posizioni sbagliate quando si scrolla **verticalmente** la griglia CRM/Analiti. Il listener scroll è registrato sul `workspaceRef` (scroll orizzontale), ma lo scroll verticale avviene dentro il corpo scrollabile della `GrigliaAnalitiCrm` (`overflowY:auto`), che è un container diverso.
 
-**Causa probabile:** L'SVG `position:absolute` potrebbe non scrollare correttamente con il container, oppure il re-render React è troppo lento rispetto all'evento scroll.
+**Causa probabile:** `computeConnections` usa `getBoundingClientRect()` sulle card, che restituisce coordinate viewport-relative. Quando la griglia scrolla verticalmente, le card si spostano ma l'SVG (che è nel workspace) non viene ricalcolato perché il listener scroll è sul workspace, non sulla griglia.
 
 ---
 

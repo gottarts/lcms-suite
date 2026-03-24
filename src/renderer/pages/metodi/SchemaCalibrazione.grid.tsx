@@ -8,7 +8,7 @@
 //   - GrigliaAnalitiCrm    → colonne Analiti | Mix CRM | Singoli
 //   - ModalCreaWork        → form modale per creare una Work
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
@@ -31,11 +31,12 @@ interface GrigliaProps {
   onRemoveMix: (mixId: string) => void
   onClose: () => void        // per chiudere lo schema prima di navigare
   registerCardRef: RegisterCardRef
+  gridBodyRef?: React.RefObject<HTMLDivElement | null>
 }
 
 export function GrigliaAnalitiCrm({
   analiti, crmItems, selSrcs, removedCon, removedMix,
-  onToggleMix, onToggleSng, onRemoveCon, onRemoveMix, onClose, registerCardRef,
+  onToggleMix, onToggleSng, onRemoveCon, onRemoveMix, onClose, registerCardRef, gridBodyRef,
 }: GrigliaProps) {
   const navigate = useNavigate()
 
@@ -172,7 +173,7 @@ export function GrigliaAnalitiCrm({
       </div>
 
       {/* ── Corpo scrollabile ── */}
-      <div style={{ flex:1, overflowY:'auto', overflowX:'hidden',
+      <div ref={gridBodyRef} style={{ flex:1, overflowY:'auto', overflowX:'hidden',
                     display:'flex', position:'relative' }}>
 
         {/* Colonna Analiti + Singoli (scorrono insieme) */}

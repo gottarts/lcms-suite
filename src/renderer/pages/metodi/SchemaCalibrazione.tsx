@@ -34,11 +34,12 @@ import { Separator } from '@/components/ui/separator'
 // SVG Overlay per frecce di connessione
 // ─────────────────────────────────────────────────────────────────────────────
 function ConnectionsOverlay({
-  workCols, cardRefs, containerRef,
+  workCols, cardRefs, containerRef, gridScrollRef,
 }: {
   workCols: WorkInSchema[][]
   cardRefs: React.MutableRefObject<Map<string, HTMLDivElement>>
   containerRef: React.RefObject<HTMLDivElement | null>
+  gridScrollRef?: React.RefObject<HTMLDivElement | null>
 }) {
   const [lines, setLines] = useState<ConnectionLine[]>([])
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -56,8 +57,14 @@ function ConnectionsOverlay({
     const ro = new ResizeObserver(update)
     ro.observe(el)
     el.addEventListener('scroll', update, { passive: true })
-    return () => { ro.disconnect(); el.removeEventListener('scroll', update) }
-  }, [workCols, cardRefs, containerRef])
+    const grid = gridScrollRef?.current
+    if (grid) grid.addEventListener('scroll', update, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', update)
+      if (grid) grid.removeEventListener('scroll', update)
+    }
+  }, [workCols, cardRefs, containerRef, gridScrollRef])
 
   if (lines.length === 0) return null
 
@@ -576,6 +583,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   // ── Ref registry per SVG connections ───────────────────────────────────────
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const workspaceRef = useRef<HTMLDivElement>(null)
+  const gridBodyRef = useRef<HTMLDivElement>(null)
   const registerCardRef: RegisterCardRef = useCallback((id, el) => {
     if (el) cardRefs.current.set(id, el)
     else cardRefs.current.delete(id)
@@ -832,6 +840,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             workCols={workCols}
             cardRefs={cardRefs}
             containerRef={workspaceRef}
+            gridScrollRef={gridBodyRef}
           />
           <GrigliaAnalitiCrm
             analiti={analiti}
@@ -845,6 +854,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onRemoveMix={removeMix}
             onClose={onClose}
             registerCardRef={registerCardRef}
+            gridBodyRef={gridBodyRef}
           />
           <ColonneWork
             workCols={workCols}
