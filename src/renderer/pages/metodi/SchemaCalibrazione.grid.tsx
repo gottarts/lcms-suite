@@ -82,20 +82,54 @@ export function GrigliaAnalitiCrm({
     if (!c.mix_id) sngById.set(String(c.id), c)
   }
 
-  // altezza riga = max(1, numero singoli) * ROW
-  const rowHeight = (a: AnalitoItem) => Math.max(1, a.sngIds.length) * ROW
+  // Stima altezza minima mix basata sui chip (simula flex-wrap)
+  const mixPerRowH: Record<string, number> = {}
+  for (const [mixId, comps] of mixAllComps.entries()) {
+    const nAna = (mixAnaliti.get(mixId) ?? []).length
+    if (nAna === 0) continue
+    const CHIP_AREA = 236 // card 254px - padding 18px
+    let rw = 0, cr = 1
+    for (const name of comps) {
+      const ci = mixItemByNome.get(name)
+      const lbl = ci?.cv ? `${name} · ${ci.cv} mg/L` : name
+      const cw = lbl.length * 6 + 14 // char ~6px (IBM Plex Mono 9px) + padding 14px
+      if (rw > 0 && rw + 2 + cw > CHIP_AREA) { cr++; rw = cw }
+      else { rw += (rw > 0 ? 2 : 0) + cw }
+    }
+    const minH = 62 + cr * 18 + 20 // header + chip rows + padding/offset + buffer
+    mixPerRowH[mixId] = Math.ceil(minH / nAna)
+  }
+
+  // altezza riga = max(base singoli, quota proporzionale mix)
+  const rowHeight = (a: AnalitoItem) => {
+    const baseH = Math.max(1, a.sngIds.length) * ROW
+    return a.mixId && mixPerRowH[a.mixId] ? Math.max(baseH, mixPerRowH[a.mixId]) : baseH
+  }
+
+  // Separatori tra gruppi
+  const nSoloSng  = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
+  const nEntrambi = analiti.filter(a =>  a.mixId && a.sngIds.length > 0).length
+  const nConCrm   = analiti.filter(a =>  a.mixId || a.sngIds.length > 0).length
+  const hasMixOnly  = analiti.some(a => a.mixId && a.sngIds.length === 0)
+  const hasSenzaCrm = analiti.some(a => !a.mixId && a.sngIds.length === 0)
 
   // Posizione verticale assoluta di ogni mix (top e height in px)
   const mixTopPx: Record<string, number>    = {}
   const mixHeightPx: Record<string, number> = {}
   let cumY = 0
-  for (const a of analiti) {
+  for (let i = 0; i < analiti.length; i++) {
+    const a = analiti[i]
+    // Separatori aggiungono 9px (height:1 + margin:4px*2)
+    const hasSep = (i === nSoloSng && nSoloSng > 0 && nEntrambi > 0) ||
+                   (i === nSoloSng + nEntrambi && hasMixOnly) ||
+                   (i === nConCrm && nConCrm > 0 && hasSenzaCrm)
+    if (hasSep) cumY += 9
     const h = rowHeight(a)
     if (a.mixId) {
       if (mixTopPx[a.mixId] === undefined) mixTopPx[a.mixId] = cumY
       mixHeightPx[a.mixId] = (mixHeightPx[a.mixId] ?? 0) + h
     }
-    cumY += h + 1  // +1 per border-bottom
+    cumY += h  // border-box: border è dentro h
   }
   const totalMixHeight = cumY
 
@@ -105,13 +139,9 @@ export function GrigliaAnalitiCrm({
     if (a.mixId && !mixFirstAnalita.has(a.mixId)) mixFirstAnalita.set(a.mixId, a.nome)
   }
 
-  // Separatori tra gruppi
-  const nSoloSng  = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
-  const nEntrambi = analiti.filter(a =>  a.mixId && a.sngIds.length > 0).length
-  const nConCrm   = analiti.filter(a =>  a.mixId || a.sngIds.length > 0).length
-
   return (
     <div style={{ display:'flex', flexDirection:'column', flexShrink:0,
+                  minHeight:0, overflow:'hidden',
                   background:C.page.sur, margin:0, borderRadius:12,
                   border:`1.5px dashed ${C.page.brd2}`, position:'relative',
                   boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -281,7 +311,7 @@ export function GrigliaAnalitiCrm({
         {/* Blocchi Mix in position:absolute rispetto al corpo scrollabile */}
         <div style={{
           position:'absolute', left:190, width:270,
-          height: totalMixHeight, pointerEvents:'none',
+          height: totalMixHeight, pointerEvents:'none', overflow:'hidden',
         }}>
           {analiti.map(a => {
             if (!a.mixId || mixFirstAnalita.get(a.mixId) !== a.nome) return null
