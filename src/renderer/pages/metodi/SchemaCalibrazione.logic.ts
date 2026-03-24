@@ -121,6 +121,7 @@ export function getConcInfo(
   workCols: WorkInSchema[][]
 ): { omogenea: boolean; cv: number; label: string } {
   if (s.tipo === 'sng' || s.tipo === 'mix') {
+    if (s.concVariabile) return { omogenea: false, cv: s.cv, label: 'variabile' }
     if (s.cv > 0) return { omogenea: true, cv: s.cv, label: `${s.cv} mg/L` }
     return { omogenea: false, cv: 0, label: 'variabile' }
   }
@@ -194,8 +195,19 @@ export function getCompsFromWork(
   crmItems: CrmItem[]
 ): CompostoInWork[] {
   const result: CompostoInWork[] = []
-  for (const src of w.srcs) {
-    const dilFactor = w.conc && src.cv ? w.conc / src.cv : 1
+  for (let i = 0; i < w.srcs.length; i++) {
+    const src = w.srcs[i]
+    const ing = w.vols[i]
+    let dilFactor: number
+    if (ing?.modo === 'dil' && ing.dilFactor) {
+      dilFactor = 1 / ing.dilFactor   // ÷10 → conc finale = conc_sorgente × 0.1
+    } else if (ing?.modo === 'conc' && ing.concTarget && src.cv) {
+      dilFactor = ing.concTarget / src.cv
+    } else if (w.conc && src.cv) {
+      dilFactor = w.conc / src.cv     // fallback originale
+    } else {
+      dilFactor = 1
+    }
     if (src.tipo === 'work') {
       let srcWork: WorkInSchema | undefined
       for (const col of workCols) { srcWork = col.find(x => x.id === src.id); if (srcWork) break }

@@ -656,8 +656,17 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       const m = new Map(prev)
       if (m.has(mixId)) { m.delete(mixId) }
       else {
-        const crm = crmItems.find(c => c.mix_id === mixId)
-        m.set(mixId, { id: mixId, nome: crm?.mix ?? mixId, cv: crm?.cv ?? 0, tipo: 'mix' })
+        const comps = crmItems.filter(c => c.mix_id === mixId)
+        const crm = comps[0]
+        const cvSet = new Set(comps.map(c => c.cv))
+        const eterogenea = cvSet.size > 1
+        m.set(mixId, {
+          id: mixId,
+          nome: crm?.mix ?? mixId,
+          cv: crm?.cv ?? 0,
+          tipo: 'mix',
+          concVariabile: eterogenea,
+        })
       }
       return m
     })
