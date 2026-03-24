@@ -26,6 +26,7 @@ import {
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
 import { schemaCalApi } from '../../lib/api'
 import { SlidePanel } from '@/components/shared/SlidePanel'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
@@ -569,7 +570,7 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
 // Componente principale SchemaCalibrazione
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: SchemaCalibrazioneProps) {
-  const { crmItems, analiti, loading, error } = useSchemaData(metodoId)
+  const { crmItems, analiti, loading, error, reload } = useSchemaData(metodoId)
 
   // ── Ref registry per SVG connections ───────────────────────────────────────
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -589,6 +590,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [drawerWork,   setDrawerWork]   = useState<WorkInSchema | null>(null)
   const [drawerCol,    setDrawerCol]    = useState(0)
   const [schemaLoaded, setSchemaLoaded] = useState(false)
+  const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
   useEffect(() => {
@@ -609,6 +611,27 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     }, 500)
     return () => clearTimeout(timer)
   }, [workCols, removedCon, removedMix, metodoId, schemaLoaded])
+
+  // ── Ricarica / Reset schema ─────────────────────────────────────────────────
+  const handleReloadSchema = useCallback(async () => {
+    setSchemaLoaded(false)
+    setWorkCols([[]])
+    setRemovedCon(new Set())
+    setRemovedMix(new Set())
+    setSelSrcs(new Map())
+    await reload()
+    // schemaLoaded=false + loading→false triggera il useEffect che ri-carica dal DB
+  }, [reload])
+
+  const handleFullReset = useCallback(async () => {
+    await schemaCalApi.save(metodoId, [[]], [], [])
+    setWorkCols([[]])
+    setRemovedCon(new Set())
+    setRemovedMix(new Set())
+    setSelSrcs(new Map())
+    setSchemaLoaded(true) // stato già pulito, non ri-caricare dal DB
+    await reload()
+  }, [metodoId, reload])
 
   // Duplicato ancora attivo = analita che ha sia mix (non rimosso) che singolo (non rimosso)
   const hasCon = analiti.some(a =>
@@ -837,12 +860,22 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       <div style={{ background:C.page.sur, borderTop:`1px solid ${C.page.brd}`,
                     padding:'8px 18px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
-        <div>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           {hasCon && (
             <span style={{ fontSize:12, color:C.con.text, fontWeight:600 }}>
               ⚠ Ci sono analiti con sia mix che singolo — elimina quelli non voluti con ×
             </span>
           )}
+          <button onClick={() => setConfirmReset('reload')} style={{
+            padding:'5px 12px', borderRadius:5, border:`1px solid ${C.page.brd}`,
+            background:C.page.sur, cursor:'pointer', fontSize:11,
+            fontWeight:600, color:C.page.t2,
+          }}>&#x21bb; Ricarica</button>
+          <button onClick={() => setConfirmReset('full')} style={{
+            padding:'5px 12px', borderRadius:5, border:`1px solid ${C.con.border}`,
+            background:C.page.sur, cursor:'pointer', fontSize:11,
+            fontWeight:600, color:C.con.text,
+          }}>Ricomincia da zero</button>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
           <span style={{ fontSize:11, color:C.page.t2,
@@ -889,6 +922,24 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           onDelete={handleDeleteWork}
         />
       )}
+
+      {/* ── Dialog conferma ricarica / reset ── */}
+      <ConfirmDialog
+        open={confirmReset !== null}
+        title={confirmReset === 'full' ? 'Ricominciare da zero?' : 'Ricaricare lo schema?'}
+        message={confirmReset === 'full'
+          ? 'Tutti i Work e le rimozioni CRM verranno cancellati. I dati CRM verranno ricaricati dal database.'
+          : 'I dati CRM verranno ricaricati dal database e lo schema verrà ripristinato dall\'ultimo salvataggio automatico.'}
+        confirmLabel={confirmReset === 'full' ? 'Ricomincia da zero' : 'Ricarica'}
+        variant={confirmReset === 'full' ? 'danger' : 'default'}
+        onConfirm={() => {
+          const mode = confirmReset
+          setConfirmReset(null)
+          if (mode === 'full') handleFullReset()
+          else handleReloadSchema()
+        }}
+        onCancel={() => setConfirmReset(null)}
+      />
     </div>
   )
 }
