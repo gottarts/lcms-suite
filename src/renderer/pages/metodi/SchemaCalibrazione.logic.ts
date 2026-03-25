@@ -5,7 +5,7 @@
 //   src/renderer/pages/metodi/SchemaCalibrazione.logic.ts
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
-import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema, ConnectionLine } from './SchemaCalibrazione.types'
+import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema, ConnectionLine, Ingrediente } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -309,6 +309,114 @@ export async function salvaWorkNelDb(
 
   const result: any = await (window as any).electronAPI.invoke('work:create', payload)
   return result?.id ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Verifica compatibilità CRM di una work importata con il metodo corrente
+// ─────────────────────────────────────────────────────────────────────────────
+export function verificaCompatibilitaCrm(
+  dbWork: any,
+  crmItems: CrmItem[]
+): { compatibile: boolean; mancanti: string[] } {
+  const crmIds = new Set(crmItems.map(c => c.id))
+  const mancanti: string[] = []
+
+  for (const ing of (dbWork.ingredienti ?? [])) {
+    if (ing.source_type === 'crm' && !crmIds.has(ing.source_id)) {
+      if (!mancanti.includes(ing.source_nome ?? `ID ${ing.source_id}`))
+        mancanti.push(ing.source_nome ?? `ID ${ing.source_id}`)
+    }
+  }
+  return { compatibile: mancanti.length === 0, mancanti }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ricostruisce un WorkInSchema da un record DB (per import da altro metodo)
+// Ritorna null se ci sono dipendenze work mancanti nello schema corrente
+// ─────────────────────────────────────────────────────────────────────────────
+export function ricostruisciWorkInSchema(
+  dbWork: any,
+  crmItems: CrmItem[],
+  workColsFlat: WorkInSchema[],
+  workCols: WorkInSchema[][]
+): WorkInSchema | null {
+  const ingredienti: any[] = dbWork.ingredienti ?? []
+  const srcs: SorgenteSel[] = []
+  const vols: Ingrediente[] = []
+  const seenMix = new Set<string>()
+
+  for (const ing of ingredienti) {
+    if (ing.source_type === 'crm') {
+      const crm = crmItems.find(c => c.id === ing.source_id)
+      if (!crm) continue // sarà segnalato da verificaCompatibilitaCrm
+
+      if (crm.mix_id) {
+        if (seenMix.has(crm.mix_id)) continue // già aggiunto come mix
+        seenMix.add(crm.mix_id)
+        srcs.push({
+          id: crm.mix_id,
+          nome: crm.mix ?? crm.nome,
+          cv: crm.cv,
+          tipo: 'mix',
+          concVariabile: crm.concVariabile,
+        })
+      } else {
+        srcs.push({
+          id: String(crm.id),
+          nome: crm.nome,
+          cv: crm.cv,
+          tipo: 'sng',
+          concVariabile: crm.concVariabile,
+        })
+      }
+      vols.push({
+        nome: crm.mix_id ? (crm.mix ?? crm.nome) : crm.nome,
+        vol: ing.volume_prelievo_ml ?? 0,
+        concTarget: ing.conc_target_mgL ?? undefined,
+        dilFactor: ing.fattore_diluizione ?? undefined,
+        modo: ing.modo_calcolo ?? 'conc',
+      })
+    } else if (ing.source_type === 'work') {
+      // Cerca la work dipendente nello schema corrente
+      let found: WorkInSchema | undefined
+      let foundColIdx = -1
+      for (let ci = 0; ci < workCols.length; ci++) {
+        const w = workCols[ci].find(w => w.dbId === ing.source_id)
+        if (w) { found = w; foundColIdx = ci; break }
+      }
+      if (!found) return null // dipendenza mancante
+      srcs.push({
+        id: found.id,
+        nome: found.nome,
+        cv: found.concVariabile ? 1 : 0,
+        tipo: 'work',
+        colSrc: foundColIdx,
+      })
+      vols.push({
+        nome: found.nome,
+        vol: ing.volume_prelievo_ml ?? 0,
+        concTarget: ing.conc_target_mgL ?? undefined,
+        dilFactor: ing.fattore_diluizione ?? undefined,
+        modo: ing.modo_calcolo ?? 'conc',
+      })
+    }
+  }
+
+  const id = Math.random().toString(36).slice(2, 10) // id locale
+  return {
+    id,
+    dbId: dbWork.id,
+    nome: dbWork.nome,
+    conc: dbWork.concentrazione,
+    concVariabile: !!dbWork.conc_variabile,
+    unitaConc: dbWork.unita_conc ?? 'mg/L',
+    volFin: dbWork.volume_ml ?? 0,
+    solv: dbWork.solvente ?? '',
+    validitaMesi: dbWork.validita_mesi,
+    op: dbWork.operatore ?? '',
+    srcs,
+    vols,
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

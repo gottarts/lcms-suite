@@ -24,6 +24,7 @@ import {
   salvaWorkNelDb, getCompsFromWork, computeConnections,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
+import { ImportaWorkDialog } from './ImportaWorkDialog'
 import { schemaCalApi, workApi } from '../../lib/api'
 import { RicaricaDialog } from '../work/RicaricaDialog'
 import { SlidePanel } from '@/components/shared/SlidePanel'
@@ -645,6 +646,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
   const [blockedMap, setBlockedMap] = useState<Map<number, boolean>>(new Map())
   const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
   useEffect(() => {
@@ -811,6 +813,18 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       while (cols.length > 1 && cols[cols.length - 1].length === 0) cols.pop()
       return cols
     })
+  }, [])
+
+  // ── Importa Work esistente ─────────────────────────────────────────────────
+  const handleImportWork = useCallback((work: WorkInSchema, colIdx: number) => {
+    setWorkCols(prev => {
+      const cols = prev.map(c => [...c])
+      while (cols.length <= colIdx) cols.push([])
+      cols[colIdx] = [...cols[colIdx], work]
+      if (cols.length <= colIdx + 1) cols.push([])
+      return cols
+    })
+    setImportOpen(false)
   }, [])
 
   // ── Step bar ──────────────────────────────────────────────────────────────
@@ -987,6 +1001,14 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
               color: selSrcs.size === 0 ? C.page.th : '#fff',
             }}
           >+ Crea Work</button>
+          <button
+            onClick={() => setImportOpen(true)}
+            style={{
+              padding:'7px 18px', borderRadius:8, border:`1px solid ${C.work.border}`,
+              cursor:'pointer', fontSize:13, fontWeight:700,
+              background:'transparent', color: C.work.border,
+            }}
+          >Importa Work</button>
         </div>
       </div>
 
@@ -999,6 +1021,16 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
         onClose={() => setModalOpen(false)}
         onSave={handleSaveWork}
         saving={saving}
+      />
+
+      {/* ── Dialog importa Work ── */}
+      <ImportaWorkDialog
+        open={importOpen}
+        metodoId={metodoId}
+        crmItems={crmItems}
+        workCols={workCols}
+        onClose={() => setImportOpen(false)}
+        onImported={handleImportWork}
       />
 
       {/* ── Drawer dettaglio Work ── */}

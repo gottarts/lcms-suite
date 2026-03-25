@@ -442,4 +442,53 @@ export function registerWorkIpc(): void {
 
     return { ok: true, new_work_id: Number(newId) }
   })
+
+  // ── LIST-FOR-IMPORT: works importabili in un metodo (non già collegate) ──
+  ipcMain.handle('work:list-for-import', (_, metodoId: string) => {
+    const db = getDb()
+    const works = db.prepare(`
+      SELECT w.*,
+        (SELECT GROUP_CONCAT(wm.metodo_id) FROM work_metodi wm WHERE wm.work_id = w.id) AS metodi_csv,
+        (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti
+      FROM work w
+      WHERE (w.archiviato = 0 OR w.archiviato IS NULL)
+        AND NOT EXISTS (
+          SELECT 1 FROM work_metodi wm2
+          WHERE wm2.work_id = w.id AND wm2.metodo_id = ?
+        )
+      ORDER BY w.created_at DESC
+    `).all(metodoId) as any[]
+
+    const stmtIngr = db.prepare(`
+      SELECT wi.*,
+        CASE
+          WHEN wi.source_type = 'crm'  THEN (SELECT nome FROM composti WHERE id = wi.source_id)
+          WHEN wi.source_type = 'work' THEN (SELECT nome FROM work    WHERE id = wi.source_id)
+        END AS source_nome
+      FROM work_ingredienti wi
+      WHERE wi.work_id = ?
+    `)
+
+    const stmtMetodi = db.prepare(`
+      SELECT m.id, m.nome FROM metodi m
+      JOIN work_metodi wm ON wm.metodo_id = m.id
+      WHERE wm.work_id = ?
+    `)
+
+    for (const w of works) {
+      w.ingredienti = stmtIngr.all(w.id)
+      w.metodi = stmtMetodi.all(w.id) as Array<{ id: string; nome: string }>
+      w.metodi_ids = w.metodi_csv ? w.metodi_csv.split(',') : []
+      delete w.metodi_csv
+    }
+    return works
+  })
+
+  // ── ADD-TO-METODO: collega una work esistente a un metodo ─────────────────
+  ipcMain.handle('work:add-to-metodo', (_, workId: number, metodoId: string) => {
+    getDb().prepare(
+      'INSERT OR IGNORE INTO work_metodi (work_id, metodo_id) VALUES (?, ?)'
+    ).run(workId, metodoId)
+    return { ok: true }
+  })
 }
