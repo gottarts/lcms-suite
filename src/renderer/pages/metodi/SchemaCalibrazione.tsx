@@ -24,7 +24,8 @@ import {
   salvaWorkNelDb, getCompsFromWork, computeConnections,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
-import { schemaCalApi } from '../../lib/api'
+import { schemaCalApi, workApi } from '../../lib/api'
+import { RicaricaDialog } from '../work/RicaricaDialog'
 import { SlidePanel } from '@/components/shared/SlidePanel'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
@@ -115,11 +116,14 @@ interface ColonneWorkProps {
   onOpenDrawer: (w: WorkInSchema, colIdx: number) => void
   onAddCol: () => void
   registerCardRef: RegisterCardRef
+  blockedMap: Map<number, boolean>
+  onRicaricaWork: (dbId: number) => void
 }
 
 function ColonneWork({
   workCols, selSrcs, hasCon,
   onToggleWork, onDeleteWork, onOpenDrawer, onAddCol, registerCardRef,
+  blockedMap, onRicaricaWork,
 }: ColonneWorkProps) {
   return (
     <div style={{ display:'flex', flexDirection:'row', flexShrink:0,
@@ -172,13 +176,14 @@ function ColonneWork({
               )}
 
               {works.map((w, wi) => {
-                const canBeSrc = !hasCon
-                const isSel    = selSrcs.has(w.id)
-                const usedVol  = w.vols.reduce((a, v) => a + v.vol, 0)
-                const solvVol  = Math.max(0, w.volFin - usedVol)
-                const neg      = usedVol > w.volFin
-                const isInter  = ci > 0
-                const col      = isInter ? C.inter : C.work
+                const canBeSrc   = !hasCon
+                const isSel      = selSrcs.has(w.id)
+                const isBloccata = w.dbId ? (blockedMap.get(w.dbId) ?? false) : false
+                const usedVol    = w.vols.reduce((a, v) => a + v.vol, 0)
+                const solvVol    = Math.max(0, w.volFin - usedVol)
+                const neg        = usedVol > w.volFin
+                const isInter    = ci > 0
+                const col        = isInter ? C.inter : C.work
 
                 return (
                   <div
@@ -224,9 +229,29 @@ function ColonneWork({
                       title="Dettaglio"
                     >⊙</button>
 
+                    {/* Pulsante Ricarica (lotti dismessi) */}
+                    {isBloccata && w.dbId && (
+                      <button
+                        onClick={e => { e.stopPropagation(); onRicaricaWork(w.dbId!) }}
+                        style={{
+                          position:'absolute', bottom:7, right:7,
+                          padding:'1px 8px', borderRadius:4,
+                          border:'1px solid #fb923c',
+                          background:'#fff7ed', color:'#ea580c',
+                          cursor:'pointer', fontSize:9, fontWeight:700,
+                        }}
+                        title="Lotti CRM dismessi — aggiorna la work"
+                      >Ricarica ↻</button>
+                    )}
+
                     {/* Contenuto card */}
-                    <div style={{ fontSize:12, fontWeight:700, color:col.text,
+                    <div style={{ fontSize:12, fontWeight:700, color: isBloccata ? '#b45309' : col.text,
                                   paddingRight:40 }}>{w.nome}</div>
+                    {isBloccata && (
+                      <div style={{ fontSize:9, color:'#dc2626', fontWeight:600, marginTop:1 }}>
+                        ⚠ Lotti CRM dismessi
+                      </div>
+                    )}
                     <div style={{ fontSize:10, color:C.page.t2, marginTop:2,
                                   fontFamily:'IBM Plex Mono, monospace' }}>
                       {w.concVariabile ? 'variabile' : (w.conc ? `${w.conc} mg/L` : '—')}
@@ -618,6 +643,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [drawerCol,    setDrawerCol]    = useState(0)
   const [schemaLoaded, setSchemaLoaded] = useState(false)
   const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
+  const [blockedMap, setBlockedMap] = useState<Map<number, boolean>>(new Map())
+  const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
   useEffect(() => {
@@ -638,6 +665,26 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     }, 500)
     return () => clearTimeout(timer)
   }, [workCols, removedCon, removedMix, metodoId, schemaLoaded])
+
+  // ── Controlla quali work hanno lotti CRM dismessi ────────────────────────────
+  useEffect(() => {
+    if (!schemaLoaded) return
+    const allDbIds = workCols.flatMap(col =>
+      col.map(w => w.dbId).filter((id): id is number => id != null)
+    )
+    if (allDbIds.length === 0) { setBlockedMap(new Map()); return }
+    let cancelled = false
+    Promise.all(allDbIds.map(id => workApi.get(id))).then(results => {
+      if (cancelled) return
+      const map = new Map<number, boolean>()
+      for (const w of results) {
+        if (w?.id != null) map.set(w.id, !!w.bloccata)
+      }
+      setBlockedMap(map)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schemaLoaded, workCols])
 
   // ── Ricarica / Reset schema ─────────────────────────────────────────────────
   const handleReloadSchema = useCallback(async () => {
@@ -892,6 +939,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onOpenDrawer={(w, ci) => { setDrawerWork(w); setDrawerCol(ci) }}
             onAddCol={() => setWorkCols(prev => [...prev, []])}
             registerCardRef={registerCardRef}
+            blockedMap={blockedMap}
+            onRicaricaWork={setRicaricaSchemaWorkId}
           />
         </div>
       )}
@@ -963,6 +1012,21 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           onDelete={handleDeleteWork}
         />
       )}
+
+      {/* ── Dialog ricarica lotti work ── */}
+      <RicaricaDialog
+        workId={ricaricaSchemaWorkId}
+        onClose={() => setRicaricaSchemaWorkId(null)}
+        onSuccess={newWorkId => {
+          // Aggiorna dbId nella colonna per puntare alla nuova work
+          if (ricaricaSchemaWorkId != null) {
+            setWorkCols(prev => prev.map(col =>
+              col.map(w => w.dbId === ricaricaSchemaWorkId ? { ...w, dbId: newWorkId } : w)
+            ))
+          }
+          setRicaricaSchemaWorkId(null)
+        }}
+      />
 
       {/* ── Dialog conferma ricarica / reset ── */}
       <ConfirmDialog

@@ -2,11 +2,9 @@
 
  
 
-calcoli delle work:
-atenzione perche se le mix hanno concentrazioni diverse il form deve chiedere non concentrazione target ma diluizione desiderata. Adesso chiede target funziona se si sceglie la target unica, se si sceglie per mix (col toggle valori per sorgente) il calcolo è sbagliato. bisogna revisionare tutto il sistema di calcolo in tal senso.
 
  
-nello schema ce scritto qualcosa sopra analiti...
+
 
 
 alcune work vivono su piu metodi e sono uguali. bisogna far si che ci sia il modo di riciamarle negli schemi di altri metodi, che ci sia una condivisione delle work (se il metodo ha gli stessi crm per quella work)
@@ -20,7 +18,9 @@ capire gestione lotto nealla preparazione work.
  ## importante
 
 
- bisognera creare un archivio di schemi calibrazione. In piu bisognera differenziare tra scehmi per destinazione d'uso (le stesse di db composti) cioe se e uno schema per taratura, qc, taratura+qc o IS. Magari con scelta con menu a tendina. Quando si salva lo schema deve poer essere richiamabile (Magari da metodi) se uno schema va in disuso deve essere archiviabile e consultabile ma congelato.
+ bisognera creare un archivio di schemi calibrazione. 
+ 
+ In piu bisognera differenziare tra scehmi per destinazione d'uso (le stesse di db composti) cioe se e uno schema per taratura, qc, taratura+qc o IS. Magari con scelta con menu a tendina. Quando si salva lo schema deve poer essere richiamabile (Magari da metodi) se uno schema va in disuso deve essere archiviabile e consultabile ma congelato.
 
 
 

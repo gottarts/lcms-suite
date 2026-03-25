@@ -268,6 +268,12 @@ export function GrigliaAnalitiCrm({
                               {crm.cv ? `${crm.cv} mg/L` : '—'}
                               {crm.forma ? ` · ${crm.forma}` : ''}
                             </div>
+                            {crm.lotto && (
+                              <div style={{ fontSize:9, color:C.page.t2,
+                                            fontFamily:'IBM Plex Mono, monospace' }}>
+                                {crm.lotto}
+                              </div>
+                            )}
                             {crm.scadenza_prodotto && (
                               <div style={{ fontSize:9, color:C.page.th,
                                             fontFamily:'IBM Plex Mono, monospace' }}>

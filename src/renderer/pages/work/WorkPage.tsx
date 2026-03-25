@@ -7,8 +7,9 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Search, FlaskConical } from 'lucide-react'
+import { Plus, Search, FlaskConical, AlertCircle } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import { RicaricaDialog } from './RicaricaDialog'
 
 export function WorkPage() {
   const navigate = useNavigate()
@@ -18,6 +19,7 @@ export function WorkPage() {
   const [editWork, setEditWork] = useState<any>(null)
   const [drawerId, setDrawerId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [ricaricaWorkId, setRicaricaWorkId] = useState<number | null>(null)
 
   const load = async () => {
     const data = await workApi.list()
@@ -91,6 +93,7 @@ export function WorkPage() {
               onClick={() => setDrawerId(w.id)}
               onPrepara={() => setDrawerId(w.id)}
               onGoSchema={w.primo_metodo_id ? () => navigate('/metodi', { state: { schemaMetodoId: w.primo_metodo_id } }) : undefined}
+              onRicarica={() => setRicaricaWorkId(w.id)}
             />
           ))}
         </div>
@@ -119,6 +122,12 @@ export function WorkPage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />
+
+      <RicaricaDialog
+        workId={ricaricaWorkId}
+        onClose={() => setRicaricaWorkId(null)}
+        onSuccess={() => { setRicaricaWorkId(null); load() }}
+      />
     </div>
   )
 }
@@ -132,9 +141,10 @@ const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
   non_preparata:{ label: 'Non preparata',className: 'text-muted-foreground' },
 }
 
-function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void }) {
+function WorkCard({ work, onClick, onPrepara, onGoSchema, onRicarica }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void; onRicarica?: () => void }) {
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
+  const isBloccata = !!work.bloccata
   const statoLab = work.stato_lab as string | null | undefined
   const statoBadge = statoLab ? STATO_LAB_BADGE[statoLab] : null
 
@@ -154,6 +164,11 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="font-heading font-semibold text-sm leading-tight">{work.nome}</div>
         <div className="flex flex-col items-end gap-1 shrink-0">
+          {isBloccata && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-300 text-red-700 bg-red-50 flex items-center gap-1">
+              <AlertCircle className="h-2.5 w-2.5" />CRM dismessi
+            </Badge>
+          )}
           {isIntermedia && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-700 bg-purple-50">
               Intermedia
@@ -197,15 +212,31 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick
           <div className="col-span-2 truncate">Op: {work.operatore}</div>
         )}
       </div>
-      {(onPrepara || onGoSchema) && (
+      {(onPrepara || onGoSchema || onRicarica) && (
         <div className="flex gap-1 mt-2 pt-2 border-t border-border/50" onClick={e => e.stopPropagation()}>
           {onPrepara && work.validita_mesi && (
-            <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 flex-1" onClick={onPrepara}>
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[10px] px-2 flex-1"
+              onClick={onPrepara}
+              disabled={isBloccata}
+              title={isBloccata ? 'Work bloccata: uno o più lotti CRM sono stati dismessi' : undefined}
+            >
               <FlaskConical className="h-3 w-3 mr-1" />
               {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}
             </Button>
           )}
-          {onGoSchema && (
+          {isBloccata && onRicarica && (
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[10px] px-2 flex-1 border-orange-300 text-orange-700 hover:bg-orange-50"
+              onClick={onRicarica}
+              title="Aggiorna i lotti dismessi e crea una nuova work"
+            >
+              Ricarica lotti
+            </Button>
+          )}
+          {!isBloccata && onGoSchema && (
             <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 flex-1" onClick={onGoSchema}>
               Schema ↗
             </Button>

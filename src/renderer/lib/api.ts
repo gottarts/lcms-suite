@@ -111,6 +111,12 @@ export const workApi = {
     api.invoke('work:prepara', data) as Promise<any>,
   preparazioniList: (workId: number) =>
     api.invoke('work:preparazioni-list', workId) as Promise<any[]>,
+  archivia: (id: number, motivo: string) =>
+    api.invoke('work:archivia', id, motivo) as Promise<{ ok: boolean }>,
+  checkLotStatus: (workId: number) =>
+    api.invoke('work:check-lot-status', workId) as Promise<any[]>,
+  ricarica: (params: { old_work_id: number; nuovi_ingredienti: Array<{ old_source_id: number; new_source_id: number }>; metodi_ids: string[] }) =>
+    api.invoke('work:ricarica', params) as Promise<{ ok: boolean; new_work_id: number }>,
 }
 
 export const queryApi = {

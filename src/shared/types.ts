@@ -235,6 +235,11 @@ export interface Work {
   note: string | null
   livello: number               // 0 = Work, 1+ = Intermedia
   created_at: string
+  // Archivio
+  archiviato?: number
+  archiviato_at?: string | null
+  archiviato_motivo?: string | null
+  sostituito_da_id?: number | null
   // Joined/computed
   n_ingredienti?: number
   n_metodi?: number
@@ -242,6 +247,8 @@ export interface Work {
   metodi_ids?: string[]
   ultima_preparazione?: WorkPreparazione | null
   stato_lab?: StatoLab | null
+  bloccata?: boolean            // true se almeno 1 CRM ingrediente è dismesso
+  n_ingredienti_bloccati?: number
 }
 
 export interface WorkIngrediente {
@@ -253,8 +260,27 @@ export interface WorkIngrediente {
   fattore_diluizione: number | null
   conc_target_mgL: number | null
   modo_calcolo: 'conc' | 'dil' | null
+  lotto_usato: string | null          // snapshot lotto alla creazione
   // Joined
   source_nome?: string
+  source_lotto?: string | null        // lotto attuale da composti
+  source_dismissione?: string | null  // data_dismissione attuale da composti
+}
+
+export interface WorkIngredienteLotStatus {
+  id: number
+  source_id: number
+  nome: string
+  lotto_usato: string | null
+  lotto_corrente: string | null
+  data_dismissione: string | null
+  stato: 'ok' | 'auto' | 'ambiguo' | 'mancante'
+  sostituti: Array<{
+    id: number
+    lotto: string | null
+    concentrazione: number | null
+    unita_conc: string
+  }>
 }
 
 

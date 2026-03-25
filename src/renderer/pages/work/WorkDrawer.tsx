@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
-import { Pencil, Trash2, FlaskConical, ChevronDown, ChevronUp } from 'lucide-react'
+import { Pencil, Trash2, FlaskConical, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
 import { workApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 
@@ -79,6 +79,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
 
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
+  const isBloccata = !!work.bloccata
   const statoLab = work.stato_lab as string | null | undefined
   const statoBadge = statoLab ? STATO_LAB_BADGE[statoLab] : null
 
@@ -111,6 +112,14 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
             <Trash2 className="h-3.5 w-3.5 mr-1" /> Elimina
           </Button>
         </div>
+
+        {/* Banner bloccata */}
+        {isBloccata && (
+          <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>Uno o più lotti CRM sono stati dismessi. Le preparazioni sono bloccate.</span>
+          </div>
+        )}
 
         {/* Badge stato */}
         <div className="flex gap-2 flex-wrap">
@@ -216,6 +225,8 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                 size="sm"
                 variant="outline"
                 onClick={() => { setPrepData(new Date().toISOString().slice(0, 10)); setPrepForm(true) }}
+                disabled={isBloccata}
+                title={isBloccata ? 'Work bloccata: uno o più lotti CRM sono stati dismessi' : undefined}
               >
                 <FlaskConical className="h-3.5 w-3.5 mr-1" />
                 {work.ultima_preparazione ? 'Rinnova preparazione' : 'Registra preparazione'}
@@ -350,46 +361,70 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                 <p className="text-xs text-muted-foreground italic">
                   {compSearch ? 'Nessun composto corrisponde al filtro' : 'Nessun composto trovato'}
                 </p>
-              ) : filtered.map((ing: any, i: number) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '5px 8px', borderBottom: '1px solid rgba(0,0,0,.04)', fontSize: 11,
-                }}>
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{ing.source_nome ?? `ID ${ing.source_id}`}</div>
-                    {ing.source_type === 'crm' && ing.source_lotto && (
-                      <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
-                        Lotto: {ing.source_lotto}
+              ) : filtered.map((ing: any, i: number) => {
+                const isDismesso = ing.source_type === 'crm' && ing.source_dismissione != null
+                return (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                    padding: '5px 8px', borderBottom: '1px solid rgba(0,0,0,.04)', fontSize: 11,
+                    background: isDismesso ? 'rgba(239,68,68,0.04)' : undefined,
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {ing.source_nome ?? `ID ${ing.source_id}`}
+                        {isDismesso && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 600, color: '#dc2626',
+                            background: '#fee2e2', border: '1px solid #fca5a5',
+                            borderRadius: 3, padding: '0 4px',
+                          }}>
+                            DISMESSO
+                          </span>
+                        )}
                       </div>
-                    )}
-                    <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
-                      {ing.source_type === 'work' ? '↳ Work' : (ing.source_mix ?? 'CRM')}
+                      {ing.source_type === 'crm' && (
+                        <>
+                          {isDismesso && ing.lotto_usato && (
+                            <div style={{ fontSize: 10, color: '#dc2626', fontFamily: 'IBM Plex Mono, monospace' }}>
+                              Lotto usato: {ing.lotto_usato}
+                            </div>
+                          )}
+                          {!isDismesso && ing.source_lotto && (
+                            <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
+                              Lotto: {ing.source_lotto}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
+                        {ing.source_type === 'work' ? '↳ Work' : (ing.source_mix ?? 'CRM')}
+                      </div>
+                    </div>
+                    <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fontWeight: 500, color: 'hsl(var(--muted-foreground))' }}>
+                      {ing.conc_target_mgL != null
+                        ? `${ing.conc_target_mgL} mg/L`
+                        : ing.fattore_diluizione != null
+                          ? `÷${ing.fattore_diluizione}`
+                          : '—'}
                     </div>
                   </div>
-                  <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fontWeight: 500, color: 'hsl(var(--muted-foreground))' }}>
-                    {ing.conc_target_mgL != null
-                      ? `${ing.conc_target_mgL} mg/L`
-                      : ing.fattore_diluizione != null
-                        ? `÷${ing.fattore_diluizione}`
-                        : '—'}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </>
           )
         })()}
 
         {/* Metodi associati */}
-        {work.metodi && work.metodi.length > 0 && (
+        {work.metodi_ids && work.metodi_ids.length > 0 && (
           <>
             <Separator />
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Metodi associati ({work.metodi.length})
+              Metodi associati ({work.metodi_ids.length})
             </div>
             <div className="flex flex-wrap gap-1">
-              {work.metodi.map((m: any) => (
-                <Badge key={m.id} variant="outline" className="text-xs">
-                  {m.nome}
+              {work.metodi_ids.map((mid: string) => (
+                <Badge key={mid} variant="outline" className="text-xs font-mono">
+                  {mid}
                 </Badge>
               ))}
             </div>
