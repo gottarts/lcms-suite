@@ -160,11 +160,10 @@ export function GrigliaAnalitiCrm({
   }
 
   // Separatori tra gruppi
-  const nSoloSng  = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
-  const nEntrambi = analiti.filter(a =>  a.mixId && a.sngIds.length > 0).length
-  const nConCrm   = analiti.filter(a =>  a.mixId || a.sngIds.length > 0).length
-  const hasMixOnly  = analiti.some(a => a.mixId && a.sngIds.length === 0)
+  const nSoloSng    = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
+  const nConMix     = analiti.filter(a =>  a.mixId).length
   const hasSenzaCrm = analiti.some(a => !a.mixId && a.sngIds.length === 0)
+  const hasConMix   = nConMix > 0
 
   // Posizione verticale assoluta di ogni mix (top e height in px)
   const mixTopPx: Record<string, number>    = {}
@@ -173,9 +172,8 @@ export function GrigliaAnalitiCrm({
   for (let i = 0; i < analiti.length; i++) {
     const a = analiti[i]
     // Separatori aggiungono 9px (height:1 + margin:4px*2)
-    const hasSep = (i === nSoloSng && nSoloSng > 0 && nEntrambi > 0) ||
-                   (i === nSoloSng + nEntrambi && hasMixOnly) ||
-                   (i === nConCrm && nConCrm > 0 && hasSenzaCrm)
+    const hasSep = (i === nSoloSng && nSoloSng > 0 && hasConMix) ||
+                   (i === nSoloSng + nConMix && nConMix > 0 && hasSenzaCrm)
     if (hasSep) cumY += 9
     const h = rowHeight(a)
     if (a.mixId) {
@@ -231,17 +229,14 @@ export function GrigliaAnalitiCrm({
         {/* Colonna Analiti + Singoli (scorrono insieme) */}
         <div style={{ display:'flex', flexDirection:'column', flexShrink:0 }}>
           {analiti.map((a, i) => {
-            const isSepSngEnt = i === nSoloSng && nSoloSng > 0 && nEntrambi > 0
-            const isSepEntMix = i === nSoloSng + nEntrambi &&
-                                analiti.filter(x => x.mixId && x.sngIds.length === 0).length > 0
-            const isSepSenzaCrm = i === nConCrm && nConCrm > 0 &&
-                                  analiti.filter(x => !x.mixId && x.sngIds.length === 0).length > 0
+            const isSepSngMix  = i === nSoloSng && nSoloSng > 0 && hasConMix
+            const isSepSenzaCrm = i === nSoloSng + nConMix && nConMix > 0 && hasSenzaCrm
             const senzaCrm = !a.mixId && a.sngIds.length === 0
             const h = rowHeight(a)
 
             return (
               <div key={a.nome}>
-                {(isSepSngEnt || isSepEntMix || isSepSenzaCrm) && (
+                {(isSepSngMix || isSepSenzaCrm) && (
                   <div style={{ height:1, background:C.page.brd2, margin:'4px 0' }} />
                 )}
 

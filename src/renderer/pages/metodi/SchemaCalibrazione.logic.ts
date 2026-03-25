@@ -109,13 +109,21 @@ export function useSchemaData(metodoId: string) {
         isIS:   isMap.get(row.nome) ?? false,
       }))
 
-      // Ordine: solo-singoli → entrambi → solo-mix → senza CRM (in coda)
-      const conCrm   = analitiCalc.filter(a => a.mixId || a.sngIds.length > 0)
+      // Ordine: solo-singoli → [per ciascun mix: entrambi-del-mix → solo-mix] → senza CRM
+      const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
+      const conMix   = analitiCalc.filter(a =>  a.mixId)
       const senzaCrm = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0)
-      const soloSng  = conCrm.filter(a => !a.mixId)
-      const entrambi = conCrm.filter(a =>  a.mixId && a.sngIds.length > 0)
-      const soloMix  = conCrm.filter(a =>  a.mixId && a.sngIds.length === 0)
-      setAnaliti([...soloSng, ...entrambi, ...soloMix, ...senzaCrm])
+      // Raggruppa per mixId; dentro ogni gruppo: prima chi ha anche singoli
+      const mixOrder: string[] = []
+      for (const a of conMix) {
+        if (!mixOrder.includes(a.mixId!)) mixOrder.push(a.mixId!)
+      }
+      const mixGrouped: AnalitoItem[] = []
+      for (const mid of mixOrder) {
+        const gruppo = conMix.filter(a => a.mixId === mid)
+        mixGrouped.push(...gruppo.filter(a => a.sngIds.length > 0), ...gruppo.filter(a => a.sngIds.length === 0))
+      }
+      setAnaliti([...soloSng, ...mixGrouped, ...senzaCrm])
     } catch (e: any) {
       setError(e?.message ?? 'Errore caricamento dati')
     } finally {

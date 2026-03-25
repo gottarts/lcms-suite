@@ -2,8 +2,17 @@
 
  
 
+c'e un problema bug nella griglia schemi calibrazione.
+Quando una analita ha sia crm mix che crm singoli (caso in cui operatore deve correggere manualmente) bisogna cambiare approccio... 
+Adesso la gliglia mette questi analiti prima degli analiti con solo crm mix. questo rompe completamente la griglia nei casi gli analiti (con mix e singoli) sono piu di uno e hanno crm mix diversi. Poiche lo schema forza lo spostamento delle chips mix costringendo a avvicinare chips di crm mix diversi (vicini solo perche associati a analiti con crm mix e singoli che vengono spostati forzatamente vicini e sopra i analiti con solo crm mix ) . In realta a questo punto bisogna eliminare questa regola e e mettere:
+-sopra solo puri
+-poi le mix
+quando i composti hanno sia mix che singoli bisogna semplicemnte inserire la chips dei singoli nella apposita colonna senza forzare lo spostamento dell'analita in alto rispetto alla sua posizione rispetto alla chips mix. 
+magari nell'ordinare gli analiti associati a ciascuna mix sarebbe meglio mettere per primi come ordine (in ciascun blocco crm mix) glia analiti che hanno anche i crm singoli.
 
- 
+
+
+
 
 
 
