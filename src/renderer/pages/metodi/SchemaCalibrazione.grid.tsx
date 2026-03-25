@@ -93,8 +93,28 @@ export function GrigliaAnalitiCrm({
     if (!c.mix_id) sngById.set(String(c.id), c)
   }
 
-  // Stima altezza minima mix basata sui chip (simula flex-wrap)
-  const mixPerRowH: Record<string, number> = {}
+  // Stima altezza reale di una card singolo in base al contenuto
+  const sngCardH = (crm: CrmItem): number => {
+    let h = 14 + 10 // riga cv/forma + padding top+bottom
+    if (crm.lotto)                h += 13
+    if (crm.scadenza_prodotto)    h += 13
+    if (crm.ultima_rivalidazione) h += 13
+    return h
+  }
+
+  // Stima altezza naturale di una cella singoli (padding cella + cards + gap)
+  const sngCellH = (a: AnalitoItem): number => {
+    if (a.sngIds.length === 0) return ROW
+    const cards = a.sngIds
+      .map(id => sngById.get(id))
+      .filter((c): c is CrmItem => !!c)
+    const totalCards = cards.reduce((s, c) => s + sngCardH(c), 0)
+    const gaps       = Math.max(0, cards.length - 1) * 3 // gap:3 tra cards
+    return totalCards + gaps + 6 // padding cella 3px top + 3px bottom
+  }
+
+  // Fase 1: altezza totale del contenuto della chips mix (simula flex-wrap)
+  const mixChipsH: Record<string, number> = {}
   for (const [mixId, comps] of mixAllComps.entries()) {
     const nAna = (mixAnaliti.get(mixId) ?? []).length
     if (nAna === 0) continue
@@ -107,14 +127,36 @@ export function GrigliaAnalitiCrm({
       if (rw > 0 && rw + 2 + cw > CHIP_AREA) { cr++; rw = cw }
       else { rw += (rw > 0 ? 2 : 0) + cw }
     }
-    const minH = 62 + cr * 18 + 20 // header + chip rows + padding/offset + buffer
-    mixPerRowH[mixId] = Math.ceil(minH / nAna)
+    mixChipsH[mixId] = 62 + cr * 18 + 20 // header + chip rows + padding — totale (non per-riga)
   }
 
-  // altezza riga = max(base singoli, quota proporzionale mix)
-  const rowHeight = (a: AnalitoItem) => {
-    const baseH = Math.max(1, a.sngIds.length) * ROW
-    return a.mixId && mixPerRowH[a.mixId] ? Math.max(baseH, mixPerRowH[a.mixId]) : baseH
+  // Fase 2: altezze righe per ogni analita del mix
+  // Se la somma delle altezze naturali (nSingoli * ROW) < altezza chips → scala proporzionalmente
+  const mixRowHeights = new Map<string, number[]>()
+  for (const [mixId, anaArr] of mixAnaliti.entries()) {
+    const chipH = mixChipsH[mixId] ?? 0
+    const naturals = anaArr.map(nome => {
+      const a = analiti.find(x => x.nome === nome)
+      return a ? Math.max(ROW, sngCellH(a)) : ROW
+    })
+    const sumNat = naturals.reduce((s, h) => s + h, 0)
+    if (sumNat >= chipH) {
+      mixRowHeights.set(mixId, naturals)
+    } else {
+      // Scala proporzionalmente: la somma deve coprire chipH
+      const scale = chipH / sumNat
+      mixRowHeights.set(mixId, naturals.map(h => Math.round(h * scale)))
+    }
+  }
+
+  // altezza riga: per analiti con mix usa mixRowHeights, altrimenti altezza reale singoli
+  const rowHeight = (a: AnalitoItem): number => {
+    if (!a.mixId) return Math.max(ROW, sngCellH(a))
+    const anaArr  = mixAnaliti.get(a.mixId) ?? []
+    const idx     = anaArr.indexOf(a.nome)
+    const heights = mixRowHeights.get(a.mixId)
+    if (heights && idx >= 0) return heights[idx]
+    return Math.max(1, a.sngIds.length) * ROW
   }
 
   // Separatori tra gruppi
