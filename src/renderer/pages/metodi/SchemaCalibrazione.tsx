@@ -191,7 +191,7 @@ function ColonneWork({
                     ref={el => registerCardRef(w.id, el)}
                     onClick={() => canBeSrc && onToggleWork(w, ci)}
                     style={{
-                      borderRadius:10, padding:'8px 12px', position:'relative',
+                      borderRadius:10, padding:`8px 12px ${isBloccata ? 28 : 8}px`, position:'relative',
                       background: isSel ? (isInter ? '#ddd4f5' : '#f5e8c8') : col.bg,
                       border:`1.5px solid ${col.border}`,
                       borderLeft:`3px solid ${col.border}`,
