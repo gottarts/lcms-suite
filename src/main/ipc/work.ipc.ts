@@ -289,7 +289,9 @@ export function registerWorkIpc(): void {
 
   // ── DELETE ────────────────────────────────────────────────────────────────
   ipcMain.handle('work:delete', (_, id: number) => {
-    getDb().prepare('DELETE FROM work WHERE id = ?').run(id)
+    const db = getDb()
+    db.prepare('UPDATE work SET sostituito_da_id = NULL WHERE sostituito_da_id = ?').run(id)
+    db.prepare('DELETE FROM work WHERE id = ?').run(id)
     return { ok: true }
   })
 
