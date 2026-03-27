@@ -247,7 +247,8 @@ export interface Work {
   metodi_ids?: string[]
   ultima_preparazione?: WorkPreparazione | null
   stato_lab?: StatoLab | null
-  bloccata?: boolean            // true se almeno 1 CRM ingrediente è dismesso
+  bloccata?: boolean            // true se almeno 1 CRM ingrediente è dismesso o ambiguo
+  motivo_blocco?: 'dismesso' | 'ambiguo' | null
   n_ingredienti_bloccati?: number
 }
 

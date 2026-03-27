@@ -36,6 +36,14 @@ export function registerWorkIpc(): void {
           JOIN composti c ON c.id = wi.source_id
           WHERE wi.work_id = w.id AND wi.source_type = 'crm' AND c.data_dismissione IS NOT NULL
         ) AS n_ingredienti_bloccati,
+        (SELECT COUNT(*)
+          FROM work_ingredienti wi
+          JOIN composti c ON c.id = wi.source_id
+          WHERE wi.work_id = w.id
+            AND wi.source_type = 'crm'
+            AND c.data_dismissione IS NULL
+            AND (SELECT COUNT(*) FROM composti c3 WHERE c3.nome = c.nome AND c3.data_dismissione IS NULL) > 1
+        ) AS n_ingredienti_ambigui,
         (SELECT wp.id         FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
         (SELECT wp.data_prep  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
         (SELECT wp.note       FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
@@ -56,11 +64,14 @@ export function registerWorkIpc(): void {
         created_at: w._up_created_at,
       } : null
       const { _up_id, _up_data_prep, _up_note, _up_operatore, _up_created_at, ...rest } = w
+      const nBloccati = w.n_ingredienti_bloccati as number
+      const nAmbigui  = w.n_ingredienti_ambigui  as number
       return {
         ...rest,
         ultima_preparazione: ultimaPrep,
         stato_lab: calcolaStatoLab(ultimaPrep, w.validita_mesi),
-        bloccata: (w.n_ingredienti_bloccati as number) > 0,
+        bloccata: nBloccati > 0 || nAmbigui > 0,
+        motivo_blocco: nBloccati > 0 ? 'dismesso' : nAmbigui > 0 ? 'ambiguo' : null,
       }
     })
   })
@@ -104,7 +115,15 @@ export function registerWorkIpc(): void {
         CASE
           WHEN wi.source_type = 'crm' THEN (SELECT unita_conc FROM composti WHERE id = wi.source_id)
           ELSE NULL
-        END AS source_unita_conc
+        END AS source_unita_conc,
+        CASE
+          WHEN wi.source_type = 'crm' THEN (
+            SELECT COUNT(*) FROM composti c3
+            WHERE c3.nome = (SELECT nome FROM composti WHERE id = wi.source_id)
+              AND c3.data_dismissione IS NULL
+          )
+          ELSE NULL
+        END AS n_lotti_validi_stesso_nome
       FROM work_ingredienti wi
       WHERE wi.work_id = ?
     `).all(id)
@@ -119,9 +138,14 @@ export function registerWorkIpc(): void {
     work.ultima_preparazione = ultimaPrep ?? null
     work.stato_lab = calcolaStatoLab(ultimaPrep, work.validita_mesi)
 
-    work.bloccata = (work.ingredienti as any[]).some(
+    const nBloccati = (work.ingredienti as any[]).filter(
       (i: any) => i.source_type === 'crm' && i.source_dismissione !== null
-    )
+    ).length
+    const nAmbigui = (work.ingredienti as any[]).filter(
+      (i: any) => i.source_type === 'crm' && i.source_dismissione === null && (i.n_lotti_validi_stesso_nome as number) > 1
+    ).length
+    work.bloccata     = nBloccati > 0 || nAmbigui > 0
+    work.motivo_blocco = nBloccati > 0 ? 'dismesso' : nAmbigui > 0 ? 'ambiguo' : null
 
     return work
   })

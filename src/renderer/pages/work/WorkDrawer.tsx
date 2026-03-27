@@ -16,6 +16,7 @@ interface WorkDrawerProps {
   onClose: () => void
   onEdit: (work: any) => void
   onDelete: (id: number) => void
+  onVaiASchema?: (metodoId: string) => void
 }
 
 const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
@@ -162,7 +163,7 @@ function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchem
 
 // ── Componente principale ────────────────────────────────────────────────────
 
-export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProps) {
+export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema }: WorkDrawerProps) {
   const [work, setWork]           = useState<any>(null)
   const [workChain, setWorkChain] = useState<Map<number, any>>(new Map())
   const [storico, setStorico]     = useState<any[]>([])
@@ -361,9 +362,25 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
 
         {/* Banner bloccata */}
         {isBloccata && (
-          <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>Uno o più lotti CRM sono stati dismessi. Le preparazioni sono bloccate.</span>
+          <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                {work.motivo_blocco === 'ambiguo'
+                  ? 'Più lotti disponibili per uno o più CRM. Scegli il lotto corretto nello Schema.'
+                  : 'Uno o più CRM sono stati dismessi. Aggiorna i lotti nello Schema.'}
+              </span>
+            </div>
+            {onVaiASchema && work.metodi_ids?.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-orange-400 text-orange-800 hover:bg-orange-100 h-7 text-xs w-full"
+                onClick={() => onVaiASchema(work.metodi_ids[0])}
+              >
+                Vai allo Schema ↗
+              </Button>
+            )}
           </div>
         )}
 
@@ -472,7 +489,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                 variant="outline"
                 onClick={() => { setPrepData(new Date().toISOString().slice(0, 10)); setPrepForm(true) }}
                 disabled={isBloccata}
-                title={isBloccata ? 'Work bloccata: uno o più lotti CRM sono stati dismessi' : undefined}
+                title={isBloccata ? (work.motivo_blocco === 'ambiguo' ? 'Più lotti disponibili: vai allo Schema per scegliere' : 'Work bloccata: uno o più lotti CRM sono stati dismessi') : undefined}
               >
                 <FlaskConical className="h-3.5 w-3.5 mr-1" />
                 {work.ultima_preparazione ? 'Rinnova preparazione' : 'Registra preparazione'}

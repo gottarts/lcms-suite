@@ -2,16 +2,8 @@
 
  
 
-2026-03-25-feat-gestione-lotti-work-resoconto-sessione
-
-2026-03-25-feat-work-sharing-resoconto-sessione
-
-Questi resoconti hanno note per future sessioni da implementare in via prioritaria...
-
 Lo schema di uso deve essere che operatore puo creare una preparazione work se lo schema ha tutti i crm attivi con lotti validi e definiti. se ci sono ambiguita (piu lotti validi o lotto originale dismesso e aggiunta di un nuovo lotto) loperatore deve andare in schemi e creare una nuova work. A quel puonto la vecchia work card viene archiviata (con tutto il suo storico di preparazioni sorgenti e lotti)
  
-
-le chips schemi calibrazione e il drawer ci sono incongruenze ad esempio i crm mix devono avere forma commerciale e lotto sia nella grid che nel drawer. Omogenizzare
 
 
 quando si importa una mix con composti mancanti rispetto allo schema sarebbe il caso di mettere (nella chips del work e nei dettagli catena tracciabilita e compsoti) anche gli analiti che non sono nello schema magari evidenziandoli in qualche modo nel drawer (adesso la work importata ha solo le concentrazioni dei composti dello schema in cui viene importato ed elimina completamente gli altri)
