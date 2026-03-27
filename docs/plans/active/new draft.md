@@ -8,13 +8,20 @@
 
 Questi resoconti hanno note per future sessioni da implementare in via prioritaria...
 
+Lo schema di uso deve essere che operatore puo creare una preparazione work se lo schema ha tutti i crm attivi con lotti validi e definiti. se ci sono ambiguita (piu lotti validi o lotto originale dismesso e aggiunta di un nuovo lotto) loperatore deve andare in schemi e creare una nuova work. A quel puonto la vecchia work card viene archiviata (con tutto il suo storico di preparazioni sorgenti e lotti)
+ 
+
+le chips schemi calibrazione e il drawer ci sono incongruenze ad esempio i crm mix devono avere forma commerciale e lotto sia nella grid che nel drawer. Omogenizzare
 
 
-alcune work vivono su piu metodi e sono uguali. bisogna far si che ci sia il modo di riciamarle negli schemi di altri metodi, che ci sia una condivisione delle work (se il metodo ha gli stessi crm per quella work)
+quando si importa una mix con composti mancanti rispetto allo schema sarebbe il caso di mettere (nella chips del work e nei dettagli catena tracciabilita e compsoti) anche gli analiti che non sono nello schema magari evidenziandoli in qualche modo nel drawer (adesso la work importata ha solo le concentrazioni dei composti dello schema in cui viene importato ed elimina completamente gli altri)
 
-capire gestione lotto nealla preparazione work. 
- Forse anche in schema calibraioni si possono rimettere i lotti. che succede se un crm cambia lotto e il vecchio viene dismesso? sarebbe il caso se ci sono queste vaariazioni che il work nella pagina workpage venga bloccato in maniera che l operatore non possa fare preparazioni con lo schema con lotti errati o modificati o scaduti. 
- Lo schema di uso deve essere che operatore puo creare una preparazione work se lo schema ha tutti i crm attivi con lotti validi e definiti. se ci sono ambiguita (piu lotti validi o lotto originale dismesso e aggiunta di un nuovo lotto) loperatore deve andare in schemi e creare una nuova work. A quel puonto la vecchia work card viene archiviata (con tutto il suo storico di preparazioni sorgenti e lotti)
+
+
+
+
+
+ 
  
 
 

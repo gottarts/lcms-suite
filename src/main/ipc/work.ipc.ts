@@ -452,12 +452,8 @@ export function registerWorkIpc(): void {
         (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti
       FROM work w
       WHERE (w.archiviato = 0 OR w.archiviato IS NULL)
-        AND NOT EXISTS (
-          SELECT 1 FROM work_metodi wm2
-          WHERE wm2.work_id = w.id AND wm2.metodo_id = ?
-        )
       ORDER BY w.created_at DESC
-    `).all(metodoId) as any[]
+    `).all() as any[]
 
     const stmtIngr = db.prepare(`
       SELECT wi.*,
