@@ -54,7 +54,7 @@ export function useSchemaData(metodoId: string) {
           id:               r.id,
           nome:             r.nome ?? '',
           mix_id:           r.mix_id ?? null,
-          mix:              r.mix ?? null,
+          mix:              r.forma_commerciale ?? r.mix ?? null,
           concentrazione:   r.concentrazione ?? null,
           unita_conc:       r.unita_conc ?? 'mg/L',
           forma:            r.forma ?? null,

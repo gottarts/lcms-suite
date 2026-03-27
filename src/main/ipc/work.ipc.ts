@@ -98,7 +98,7 @@ export function registerWorkIpc(): void {
           ELSE NULL
         END AS source_mix_id,
         CASE
-          WHEN wi.source_type = 'crm' THEN (SELECT mix FROM composti WHERE id = wi.source_id)
+          WHEN wi.source_type = 'crm' THEN (SELECT COALESCE(forma_commerciale, mix) FROM composti WHERE id = wi.source_id)
           ELSE NULL
         END AS source_mix_nome,
         CASE
