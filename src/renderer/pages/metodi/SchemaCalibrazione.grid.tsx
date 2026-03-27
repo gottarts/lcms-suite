@@ -432,6 +432,12 @@ export function GrigliaAnalitiCrm({
                 <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
                   {info?.produttore ?? ''}
                 </div>
+                {info?.lotto && (
+                  <div style={{ fontSize:9, color:C.page.t2, marginTop:1,
+                                fontFamily:'IBM Plex Mono, monospace' }}>
+                    {info.lotto}
+                  </div>
+                )}
                 <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                               fontFamily:'IBM Plex Mono, monospace' }}>
                   {(mixCvSets.get(a.mixId)?.size ?? 0) <= 1 && info?.cv ? `${info.cv} mg/L` : ''}

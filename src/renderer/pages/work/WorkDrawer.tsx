@@ -295,6 +295,13 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
                               background: src.tipo === 'mix' ? C.mix.border : C.sng.border }} />
                 <div>
                   <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{src.nome}</div>
+                  {src.tipo === 'mix' && (() => {
+                    const lotto = crmItems.find(c => c.mix_id === src.id)?.lotto
+                    return lotto
+                      ? <div style={{ fontSize:9, color:C.page.t2,
+                                      fontFamily:'IBM Plex Mono, monospace' }}>{lotto}</div>
+                      : null
+                  })()}
                   <div style={{ fontSize:10, color:C.page.th }}>
                     {src.concVariabile ? (
                       <>
