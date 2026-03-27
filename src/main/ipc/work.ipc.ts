@@ -88,7 +88,23 @@ export function registerWorkIpc(): void {
         CASE
           WHEN wi.source_type = 'crm' THEN (SELECT forma_commerciale FROM composti WHERE id = wi.source_id)
           ELSE NULL
-        END AS source_mix
+        END AS source_mix,
+        CASE
+          WHEN wi.source_type = 'crm' THEN (SELECT concentrazione FROM composti WHERE id = wi.source_id)
+          ELSE NULL
+        END AS source_cv,
+        CASE
+          WHEN wi.source_type = 'crm' THEN (SELECT mix_id FROM composti WHERE id = wi.source_id)
+          ELSE NULL
+        END AS source_mix_id,
+        CASE
+          WHEN wi.source_type = 'crm' THEN (SELECT mix FROM composti WHERE id = wi.source_id)
+          ELSE NULL
+        END AS source_mix_nome,
+        CASE
+          WHEN wi.source_type = 'crm' THEN (SELECT unita_conc FROM composti WHERE id = wi.source_id)
+          ELSE NULL
+        END AS source_unita_conc
       FROM work_ingredienti wi
       WHERE wi.work_id = ?
     `).all(id)

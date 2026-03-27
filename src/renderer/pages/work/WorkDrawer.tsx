@@ -7,6 +7,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Pencil, Trash2, FlaskConical, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
 import { workApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
+import { getCompsFromWork } from '../metodi/SchemaCalibrazione.logic'
+import type { WorkInSchema, SorgenteSel, Ingrediente, CrmItem } from '../metodi/SchemaCalibrazione.types'
+import { C } from '../metodi/SchemaCalibrazione.types'
 
 interface WorkDrawerProps {
   workId: number | null
@@ -28,18 +31,166 @@ function scadenzaDate(dataPrepISO: string, validita_mesi: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+// ── Ricostruzione WorkInSchema da record DB ──────────────────────────────────
+
+function buildCrmItems(allDbWorks: Map<number, any>): CrmItem[] {
+  const map = new Map<number, CrmItem>()
+  for (const dbW of allDbWorks.values()) {
+    for (const ing of dbW.ingredienti ?? []) {
+      if (ing.source_type === 'crm' && !map.has(ing.source_id)) {
+        map.set(ing.source_id, {
+          id:                   ing.source_id,
+          nome:                 ing.source_nome ?? '',
+          mix_id:               ing.source_mix_id ?? null,
+          mix:                  ing.source_mix_nome ?? null,
+          concentrazione:       ing.source_cv ?? null,
+          unita_conc:           ing.source_unita_conc ?? 'mg/L',
+          forma:                null,
+          lotto:                ing.source_lotto ?? null,
+          produttore:           null,
+          scadenza_prodotto:    null,
+          ultima_rivalidazione: null,
+          cv:                   ing.source_cv ?? 0,
+          concVariabile:        false, // calcolato sotto
+          isIS:                 false,
+        })
+      }
+    }
+  }
+  // Imposta concVariabile per mix con componenti a cv diversi
+  const mixCvSets = new Map<string, Set<number>>()
+  for (const item of map.values()) {
+    if (item.mix_id) {
+      const s = mixCvSets.get(item.mix_id) ?? new Set<number>()
+      s.add(item.cv)
+      mixCvSets.set(item.mix_id, s)
+    }
+  }
+  return Array.from(map.values()).map(item => ({
+    ...item,
+    concVariabile: item.mix_id ? (mixCvSets.get(item.mix_id)?.size ?? 0) > 1 : false,
+  }))
+}
+
+const buildWorkSchemaCache = new Map<number, WorkInSchema>()
+
+function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchema {
+  if (buildWorkSchemaCache.has(dbWork.id)) return buildWorkSchemaCache.get(dbWork.id)!
+
+  const srcs: SorgenteSel[] = []
+  const vols: Ingrediente[] = []
+  const seenMix = new Set<string>()
+
+  for (const ing of dbWork.ingredienti ?? []) {
+    if (ing.source_type === 'crm') {
+      if (ing.source_mix_id) {
+        if (seenMix.has(ing.source_mix_id)) continue
+        seenMix.add(ing.source_mix_id)
+        // Calcola concVariabile per questo mix
+        const mixComps = (dbWork.ingredienti as any[]).filter(
+          (i: any) => i.source_type === 'crm' && i.source_mix_id === ing.source_mix_id
+        )
+        const cvSet = new Set(mixComps.map((i: any) => i.source_cv ?? 0))
+        srcs.push({
+          id:           ing.source_mix_id,
+          nome:         ing.source_mix_nome ?? ing.source_nome ?? '',
+          cv:           ing.source_cv ?? 0,
+          tipo:         'mix',
+          concVariabile: cvSet.size > 1,
+        })
+        vols.push({
+          nome:       ing.source_mix_nome ?? ing.source_nome ?? '',
+          vol:        ing.volume_prelievo_ml ?? 0,
+          concTarget: ing.conc_target_mgL ?? undefined,
+          dilFactor:  ing.fattore_diluizione ?? undefined,
+          modo:       ing.modo_calcolo ?? 'conc',
+        })
+      } else {
+        srcs.push({
+          id:           String(ing.source_id),
+          nome:         ing.source_nome ?? '',
+          cv:           ing.source_cv ?? 0,
+          tipo:         'sng',
+          concVariabile: false,
+        })
+        vols.push({
+          nome:       ing.source_nome ?? '',
+          vol:        ing.volume_prelievo_ml ?? 0,
+          concTarget: ing.conc_target_mgL ?? undefined,
+          dilFactor:  ing.fattore_diluizione ?? undefined,
+          modo:       ing.modo_calcolo ?? 'conc',
+        })
+      }
+    } else if (ing.source_type === 'work') {
+      const srcDbWork = allDbWorks.get(ing.source_id)
+      if (!srcDbWork) continue
+      const srcWis = buildWorkSchema(srcDbWork, allDbWorks)
+      srcs.push({
+        id:    srcWis.id,
+        nome:  srcWis.nome,
+        cv:    srcWis.concVariabile ? 0 : (srcWis.conc ?? 0),
+        tipo:  'work',
+        colSrc: 0,
+      })
+      vols.push({
+        nome:       srcWis.nome,
+        vol:        ing.volume_prelievo_ml ?? 0,
+        concTarget: ing.conc_target_mgL ?? undefined,
+        dilFactor:  ing.fattore_diluizione ?? undefined,
+        modo:       ing.modo_calcolo ?? 'conc',
+      })
+    }
+  }
+
+  const wis: WorkInSchema = {
+    id:           String(dbWork.id),
+    dbId:         dbWork.id,
+    nome:         dbWork.nome,
+    conc:         dbWork.concentrazione,
+    concVariabile: !!dbWork.conc_variabile,
+    unitaConc:    dbWork.unita_conc ?? 'mg/L',
+    volFin:       dbWork.volume_ml ?? 0,
+    solv:         dbWork.solvente ?? '',
+    validitaMesi: dbWork.validita_mesi,
+    op:           dbWork.operatore ?? '',
+    srcs,
+    vols,
+  }
+  buildWorkSchemaCache.set(dbWork.id, wis)
+  return wis
+}
+
+// ── Componente principale ────────────────────────────────────────────────────
+
 export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProps) {
-  const [work, setWork] = useState<any>(null)
-  const [storico, setStorico] = useState<any[]>([])
+  const [work, setWork]           = useState<any>(null)
+  const [workChain, setWorkChain] = useState<Map<number, any>>(new Map())
+  const [storico, setStorico]     = useState<any[]>([])
   const [storicoOpen, setStoricoOpen] = useState(false)
-  const [prepForm, setPrepForm] = useState(false)
-  const [prepData, setPrepData] = useState('')
-  const [prepNote, setPrepNote] = useState('')
-  const [prepOp,   setPrepOp]   = useState('')
-  const [saving, setSaving] = useState(false)
+  const [prepForm, setPrepForm]   = useState(false)
+  const [prepData, setPrepData]   = useState('')
+  const [prepNote, setPrepNote]   = useState('')
+  const [prepOp,   setPrepOp]     = useState('')
+  const [saving, setSaving]       = useState(false)
   const [compSearch, setCompSearch] = useState('')
 
-  const reload = (id: number) => workApi.get(id).then(setWork)
+  async function loadChain(id: number, map: Map<number, any>) {
+    if (map.has(id)) return
+    const w = await workApi.get(id)
+    if (!w) return
+    map.set(id, w)
+    for (const ing of w.ingredienti ?? []) {
+      if (ing.source_type === 'work') await loadChain(ing.source_id, map)
+    }
+  }
+
+  const reload = async (id: number) => {
+    buildWorkSchemaCache.clear()
+    const map = new Map<number, any>()
+    await loadChain(id, map)
+    setWorkChain(map)
+    setWork(map.get(id) ?? null)
+  }
 
   useEffect(() => {
     if (workId) {
@@ -53,6 +204,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
       setCompSearch('')
     } else {
       setWork(null)
+      setWorkChain(new Map())
     }
   }, [workId])
 
@@ -77,11 +229,98 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
 
   if (!work) return null
 
-  const isTracciata = !!work.validita_mesi
+  const isTracciata  = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
-  const isBloccata = !!work.bloccata
-  const statoLab = work.stato_lab as string | null | undefined
-  const statoBadge = statoLab ? STATO_LAB_BADGE[statoLab] : null
+  const isBloccata   = !!work.bloccata
+  const statoLab     = work.stato_lab as string | null | undefined
+  const statoBadge   = statoLab ? STATO_LAB_BADGE[statoLab] : null
+
+  // ── Costruzione WorkInSchema ─────────────────────────────────────────────
+  buildWorkSchemaCache.clear()
+  const crmItems   = buildCrmItems(workChain)
+  const workSchema = buildWorkSchema(work, workChain)
+  const workCols: WorkInSchema[][] = [Array.from(workChain.keys()).map(id => {
+    const dbW = workChain.get(id)!
+    return buildWorkSchema(dbW, workChain)
+  })]
+
+  const usedVol = workSchema.vols.reduce((a, v) => a + v.vol, 0)
+  const solvVol = Math.max(0, workSchema.volFin - usedVol)
+  const neg     = usedVol > workSchema.volFin
+  const allComps = getCompsFromWork(workSchema, workCols, crmItems)
+  const comps    = compSearch
+    ? allComps.filter(c => c.nome.toLowerCase().includes(compSearch.toLowerCase()))
+    : allComps
+
+  const col = isIntermedia ? C.inter : C.work
+
+  // ── ChainNode ────────────────────────────────────────────────────────────
+  function ChainNode({ w, ci, depth = 0 }: { w: WorkInSchema; ci: number; depth?: number }) {
+    const c = ci > 0 ? C.inter : C.work
+    return (
+      <>
+        <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11,
+                      paddingLeft: depth * 16 }}>
+          <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
+                        background:c.border }} />
+          <div>
+            <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{w.nome}</div>
+            <div style={{ fontSize:10, color:C.page.th }}>
+              {w.conc ? `${w.conc} mg/L` : ''}{w.volFin ? ` · ${w.volFin} mL` : ''}
+            </div>
+          </div>
+        </div>
+        {w.srcs.map(src => {
+          if (src.tipo === 'work') {
+            let srcWork: WorkInSchema | undefined
+            for (const col2 of workCols) { srcWork = col2.find(x => x.id === src.id); if (srcWork) break }
+            if (srcWork) {
+              const srcCi = workCols.findIndex(col2 => col2.some(x => x.id === src.id))
+              return (
+                <div key={src.id}>
+                  <div style={{ width:1, height:10, background:C.page.brd,
+                                marginLeft: depth * 16 + 3 }} />
+                  <ChainNode w={srcWork} ci={srcCi} depth={depth + 1} />
+                </div>
+              )
+            }
+          }
+          return (
+            <div key={src.id}>
+              <div style={{ width:1, height:10, background:C.page.brd,
+                            marginLeft: depth * 16 + 3 }} />
+              <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11,
+                            paddingLeft:(depth + 1) * 16 }}>
+                <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
+                              background: src.tipo === 'mix' ? C.mix.border : C.sng.border }} />
+                <div>
+                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{src.nome}</div>
+                  <div style={{ fontSize:10, color:C.page.th }}>
+                    {src.concVariabile ? (
+                      <>
+                        <span style={{ fontStyle:'italic' }}>variabile</span>
+                        {(() => {
+                          const mixComps = crmItems.filter(c => c.mix_id === src.id)
+                          if (mixComps.length === 0) return null
+                          const tip = mixComps.map(c => `${c.nome} · ${c.cv} ${c.unita_conc}`).join('\n')
+                          return (
+                            <span title={tip} style={{ marginLeft:4, cursor:'help', opacity:0.6 }}>ⓘ</span>
+                          )
+                        })()}
+                        {' · CRM'}
+                      </>
+                    ) : (
+                      `${src.cv} mg/L · CRM`
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </>
+    )
+  }
 
   const Field = ({ label, value }: { label: string; value?: string | number | null }) => {
     if (value == null || value === '') return null
@@ -287,132 +526,152 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete }: WorkDrawerProp
           </>
         )}
 
-        {/* Sorgenti / Tracciabilità */}
-        {work.ingredienti && work.ingredienti.length > 0 && (
+        {/* Tabella volumi */}
+        {workSchema.vols.length > 0 && (
           <>
             <Separator />
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Sorgenti / Tracciabilità
-            </div>
+            <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
+                          textTransform:'uppercase', letterSpacing:'0.08em',
+                          marginBottom:6 }}>Volumi di prelievo</div>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <thead>
+                <tr>
+                  {['Sorgente', 'Diluizione', 'Preleva (mL)'].map(h => (
+                    <th key={h} style={{ textAlign:'left', fontSize:10, fontWeight:700,
+                                        color:C.page.th, textTransform:'uppercase',
+                                        letterSpacing:'0.06em', padding:'3px 6px',
+                                        borderBottom:`1px solid ${C.page.brd}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {workSchema.vols.map((v, i) => (
+                  <tr key={i} style={{ background:col.bg }}>
+                    <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                  fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
+                      {v.nome}
+                    </td>
+                    <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                  fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
+                      {v.dilFactor ? `÷${v.dilFactor}` : (v.concTarget ? `${v.concTarget} mg/L` : '—')}
+                    </td>
+                    <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                  fontSize:11, fontWeight:700,
+                                  borderBottom:`1px solid rgba(0,0,0,.04)` }}>
+                      {v.vol.toFixed(3)}
+                    </td>
+                  </tr>
+                ))}
+                {/* Riga solvente / warning */}
+                <tr style={{ color:neg ? '#a32d2d' : C.page.th, fontStyle:'italic' }}>
+                  {neg ? (
+                    <td colSpan={2} style={{ padding:'4px 6px', fontSize:11,
+                                             fontWeight:700, fontStyle:'normal',
+                                             fontFamily:'IBM Plex Mono, monospace' }}>
+                      ⚠ Prelievi ({usedVol.toFixed(3)} mL) superano il volume finale
+                    </td>
+                  ) : (
+                    <>
+                      <td style={{ padding:'4px 6px', fontSize:11,
+                                   fontFamily:'IBM Plex Mono, monospace' }}>
+                        {workSchema.solv || 'Solvente'} (completamento)
+                      </td>
+                      <td style={{ padding:'4px 6px', fontSize:11,
+                                   fontFamily:'IBM Plex Mono, monospace' }}>—</td>
+                    </>
+                  )}
+                  <td style={{ padding:'4px 6px', fontSize:11,
+                               fontFamily:'IBM Plex Mono, monospace',
+                               color: neg ? '#a32d2d' : C.page.th }}>
+                    {neg ? '—' : solvVol.toFixed(3)}
+                  </td>
+                </tr>
+                {/* Riga totale */}
+                <tr style={{ fontWeight:700, borderTop:`2px solid ${C.page.brd}`,
+                             color: neg ? '#a32d2d' : undefined }}>
+                  <td style={{ padding:'4px 6px', fontSize:11,
+                               fontFamily:'IBM Plex Mono, monospace' }}>Totale prelievi</td>
+                  <td />
+                  <td style={{ padding:'4px 6px', fontSize:11,
+                               fontFamily:'IBM Plex Mono, monospace' }}>
+                    {usedVol.toFixed(3)}
+                  </td>
+                </tr>
+                {!neg && (
+                  <tr style={{ fontWeight:700 }}>
+                    <td style={{ padding:'4px 6px', fontSize:11,
+                                 fontFamily:'IBM Plex Mono, monospace' }}>Volume finale</td>
+                    <td />
+                    <td style={{ padding:'4px 6px', fontSize:11,
+                                 fontFamily:'IBM Plex Mono, monospace' }}>
+                      {workSchema.volFin.toFixed(3)}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {/* Catena tracciabilità */}
+        {workSchema.srcs.length > 0 && (
+          <>
+            <Separator />
+            <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
+                          textTransform:'uppercase', letterSpacing:'0.08em',
+                          marginBottom:6 }}>Catena di tracciabilità</div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-              {/* Nodo root: la work stessa */}
-              <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11 }}>
-                <div style={{ width:8, height:8, borderRadius:'50%', background:'#BA7517', flexShrink:0 }} />
-                <div>
-                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{work.nome}</div>
-                  <div style={{ fontSize:10, color:'hsl(var(--muted-foreground))' }}>
-                    {work.concentrazione != null ? `${work.concentrazione} mg/L` : ''}
-                    {work.volume_ml ? ` · ${work.volume_ml} mL` : ''}
-                  </div>
-                </div>
-              </div>
-              {/* Sorgenti dirette */}
-              {work.ingredienti.map((ing: any, i: number) => (
-                <div key={i}>
-                  <div style={{ width:1, height:10, background:'hsl(var(--border))', marginLeft:3 }} />
-                  <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, paddingLeft:16 }}>
-                    <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
-                                  background: ing.source_type === 'crm' ? '#3B6D11' : '#BA7517' }} />
-                    <div>
-                      <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>
-                        {ing.source_nome ?? `ID ${ing.source_id}`}
-                      </div>
-                      <div style={{ fontSize:10, color:'hsl(var(--muted-foreground))' }}>
-                        {ing.source_type === 'crm'
-                          ? `${ing.source_mix ?? 'CRM'}${ing.source_lotto ? ` · Lotto: ${ing.source_lotto}` : ''}`
-                          : '↳ Work'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <ChainNode w={workSchema} ci={isIntermedia ? 1 : 0} />
             </div>
           </>
         )}
 
-        {/* Composizione */}
-        {work.ingredienti && work.ingredienti.length > 0 && (() => {
-          const filtered = compSearch
-            ? work.ingredienti.filter((ing: any) =>
-                (ing.source_nome ?? '').toLowerCase().includes(compSearch.toLowerCase())
-              )
-            : work.ingredienti
-          return (
-            <>
-              <Separator />
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Composizione ({work.ingredienti.length})
+        {/* Lista composti */}
+        {workSchema.srcs.length > 0 && (
+          <>
+            <Separator />
+            <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
+                          textTransform:'uppercase', letterSpacing:'0.08em',
+                          marginBottom:6 }}>
+              Composti ({allComps.length})
+            </div>
+            <input
+              placeholder="Filtra composti..."
+              value={compSearch}
+              onChange={e => setCompSearch(e.target.value)}
+              style={{
+                width:'100%', padding:'6px 9px',
+                border:`1px solid ${C.page.brd}`,
+                borderRadius:8, fontSize:12, fontFamily:'Lato, sans-serif',
+                outline:'none',
+                background:'hsl(var(--background))',
+                color:'hsl(var(--foreground))',
+                marginBottom:8,
+              }}
+            />
+            {comps.length === 0 ? (
+              <div style={{ fontSize:11, color:C.page.th, fontStyle:'italic' }}>
+                {compSearch ? 'Nessun composto corrisponde al filtro' : 'Nessun composto trovato'}
               </div>
-              <input
-                placeholder="Filtra composti..."
-                value={compSearch}
-                onChange={e => setCompSearch(e.target.value)}
-                style={{
-                  width: '100%', padding: '6px 9px',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: 5, fontSize: 12,
-                  fontFamily: 'Lato, sans-serif',
-                  outline: 'none',
-                  background: 'hsl(var(--background))',
-                  color: 'hsl(var(--foreground))',
-                }}
-              />
-              {filtered.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">
-                  {compSearch ? 'Nessun composto corrisponde al filtro' : 'Nessun composto trovato'}
-                </p>
-              ) : filtered.map((ing: any, i: number) => {
-                const isDismesso = ing.source_type === 'crm' && ing.source_dismissione != null
-                return (
-                  <div key={i} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                    padding: '5px 8px', borderBottom: '1px solid rgba(0,0,0,.04)', fontSize: 11,
-                    background: isDismesso ? 'rgba(239,68,68,0.04)' : undefined,
-                  }}>
-                    <div>
-                      <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {ing.source_nome ?? `ID ${ing.source_id}`}
-                        {isDismesso && (
-                          <span style={{
-                            fontSize: 9, fontWeight: 600, color: '#dc2626',
-                            background: '#fee2e2', border: '1px solid #fca5a5',
-                            borderRadius: 3, padding: '0 4px',
-                          }}>
-                            DISMESSO
-                          </span>
-                        )}
-                      </div>
-                      {ing.source_type === 'crm' && (
-                        <>
-                          {isDismesso && ing.lotto_usato && (
-                            <div style={{ fontSize: 10, color: '#dc2626', fontFamily: 'IBM Plex Mono, monospace' }}>
-                              Lotto usato: {ing.lotto_usato}
-                            </div>
-                          )}
-                          {!isDismesso && ing.source_lotto && (
-                            <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
-                              Lotto: {ing.source_lotto}
-                            </div>
-                          )}
-                        </>
-                      )}
-                      <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
-                        {ing.source_type === 'work' ? '↳ Work' : (ing.source_mix ?? 'CRM')}
-                      </div>
-                    </div>
-                    <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fontWeight: 500, color: 'hsl(var(--muted-foreground))' }}>
-                      {ing.conc_target_mgL != null
-                        ? `${ing.conc_target_mgL} mg/L`
-                        : ing.fattore_diluizione != null
-                          ? `÷${ing.fattore_diluizione}`
-                          : '—'}
-                    </div>
-                  </div>
-                )
-              })}
-            </>
-          )
-        })()}
+            ) : comps.map((c, i) => (
+              <div key={i} style={{
+                display:'flex', justifyContent:'space-between', alignItems:'center',
+                padding:'5px 8px', borderBottom:`1px solid rgba(0,0,0,.04)`,
+                fontSize:11,
+              }}>
+                <div>
+                  <div style={{ fontWeight:500, color:C.page.t1 }}>{c.nome}</div>
+                  <div style={{ fontSize:10, color:C.page.th,
+                                fontFamily:'IBM Plex Mono, monospace' }}>{c.srcPath}</div>
+                </div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:11,
+                              color:C.page.t2, fontWeight:500 }}>
+                  {c.concInWork.toFixed(4)} {c.unita}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
 
         {/* Metodi associati */}
         {work.metodi_ids && work.metodi_ids.length > 0 && (
