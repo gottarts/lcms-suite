@@ -518,12 +518,6 @@ export function registerWorkIpc(): void {
         )
       }
 
-      // Collega ai metodi
-      for (const mid of params.metodi_ids) {
-        db.prepare('INSERT OR IGNORE INTO work_metodi (work_id, metodo_id) VALUES (?, ?)')
-          .run(newId, mid)
-      }
-
       // Archivia la vecchia work
       db.prepare(`
         UPDATE work SET
@@ -533,16 +527,35 @@ export function registerWorkIpc(): void {
           sostituito_da_id = ?
         WHERE id = ?
       `).run(newId, newId, params.old_work_id)
+
+      // Aggiorna schema_json e collega work_metodi SOLO per i metodi dove la vecchia work era presente
+      // (evita di propagare entries spurie in work_metodi)
+      for (const mid of params.metodi_ids) {
+        const schemaRow = db.prepare('SELECT schema_json FROM schema_calibrazione WHERE metodo_id = ?').get(mid) as any
+        if (!schemaRow) continue
+        const schema = JSON.parse(schemaRow.schema_json)
+        let changed = false
+        for (const col of schema.workCols ?? []) {
+          for (const w of col) {
+            if (w.dbId === params.old_work_id) { w.dbId = Number(newId); changed = true }
+          }
+        }
+        if (changed) {
+          db.prepare("UPDATE schema_calibrazione SET schema_json = ?, updated_at = datetime('now') WHERE metodo_id = ?")
+            .run(JSON.stringify(schema), mid)
+          db.prepare('INSERT OR IGNORE INTO work_metodi (work_id, metodo_id) VALUES (?, ?)').run(newId, mid)
+        }
+        // else: la vecchia work non era nel schema di questo metodo → non creare link spuri
+      }
     })()
 
     return { ok: true, new_work_id: Number(newId) }
   })
 
   // ── LIST-FOR-IMPORT: works importabili in un metodo ──
-  // Regola: work non archiviata, non già collegata al metodo corrente,
-  // appartenente a un metodo che condivide almeno un analita con il metodo corrente.
-  // Il check è a livello di metodo (non di ingredienti) per coprire anche work
-  // che usano work intermedie come sorgenti.
+  // Regola: work non archiviata, appartenente a un metodo che condivide almeno un analita
+  // con il metodo corrente. Il check "già nel schema" è delegato al renderer (schemaDbIds).
+  // Non si esclude tramite work_metodi perché entries spurie bloccherebbero work importabili.
   ipcMain.handle('work:list-for-import', (_, metodoId: string) => {
     const db = getDb()
     const works = db.prepare(`
@@ -555,9 +568,8 @@ export function registerWorkIpc(): void {
       JOIN metodo_analiti ma_cur   ON LOWER(ma_cur.nome) = LOWER(ma_other.nome)
                                    AND ma_cur.metodo_id = ?
       WHERE (w.archiviato = 0 OR w.archiviato IS NULL)
-        AND w.id NOT IN (SELECT work_id FROM work_metodi WHERE metodo_id = ?)
       ORDER BY w.created_at DESC
-    `).all(metodoId, metodoId) as any[]
+    `).all(metodoId) as any[]
 
     const stmtIngr = db.prepare(`
       SELECT wi.*,
