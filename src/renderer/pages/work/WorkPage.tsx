@@ -7,7 +7,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Search, FlaskConical, AlertCircle } from 'lucide-react'
+import { Plus, Search, FlaskConical, AlertCircle, Archive } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 export function WorkPage() {
@@ -19,15 +19,20 @@ export function WorkPage() {
   const [editWork, setEditWork] = useState<any>(null)
   const [drawerId, setDrawerId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
-  const load = async () => {
-    const [data, metodi] = await Promise.all([workApi.list(), metodiApi.list()])
+  const [mostraArchivio, setMostraArchivio] = useState(false)
+
+  const load = async (archivio = false) => {
+    const [data, metodi] = await Promise.all([
+      archivio ? workApi.listArchivio() : workApi.list(),
+      metodiApi.list(),
+    ])
     setWorks(data)
     const nomi: Record<string, string> = {}
     for (const m of metodi) { if (m.id) nomi[m.id] = m.nome ?? m.id }
     setMetodiNomi(nomi)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(mostraArchivio) }, [mostraArchivio])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return works
@@ -44,7 +49,7 @@ export function WorkPage() {
       await workApi.delete(deleteId)
       setDeleteId(null)
       setDrawerId(null)
-      load()
+      load(mostraArchivio)
     }
   }
 
@@ -60,9 +65,19 @@ export function WorkPage() {
         <h2 className="font-heading text-lg font-semibold">Work Solutions</h2>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{filtered.length} work</span>
-          <Button size="sm" onClick={() => { setEditWork(null); setFormOpen(true) }}>
-            <Plus className="h-4 w-4 mr-1" /> Nuova Work
+          <Button
+            size="sm"
+            variant={mostraArchivio ? 'secondary' : 'outline'}
+            onClick={() => { setMostraArchivio(v => !v); setSearch('') }}
+          >
+            <Archive className="h-4 w-4 mr-1" />
+            {mostraArchivio ? 'Archiviate' : 'Archivio'}
           </Button>
+          {!mostraArchivio && (
+            <Button size="sm" onClick={() => { setEditWork(null); setFormOpen(true) }}>
+              <Plus className="h-4 w-4 mr-1" /> Nuova Work
+            </Button>
+          )}
         </div>
       </div>
 
@@ -79,11 +94,19 @@ export function WorkPage() {
       {filtered.length === 0 ? (
         <div className="text-center text-muted-foreground py-16 text-sm">
           <FlaskConical className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p>Nessuna Work trovata.</p>
-          <p className="text-xs mt-1 opacity-70">
-            Le Work vengono create dallo Schema Calibrazione nel modulo Metodi,<br/>
-            oppure manualmente con il pulsante &quot;Nuova Work&quot;.
-          </p>
+          <p>{mostraArchivio ? 'Nessuna Work archiviata.' : 'Nessuna Work trovata.'}</p>
+          {!mostraArchivio && (
+            <p className="text-xs mt-1 opacity-70">
+              Le Work vengono create dallo Schema Calibrazione nel modulo Metodi,<br/>
+              oppure manualmente con il pulsante &quot;Nuova Work&quot;.
+            </p>
+          )}
+        </div>
+      ) : mostraArchivio ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filtered.map(w => (
+            <WorkCardArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} />
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -103,7 +126,7 @@ export function WorkPage() {
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditWork(null) }}
         work={editWork}
-        onSave={load}
+        onSave={() => load(mostraArchivio)}
       />
 
       <WorkDrawer
@@ -125,6 +148,39 @@ export function WorkPage() {
         onCancel={() => setDeleteId(null)}
       />
 
+    </div>
+  )
+}
+
+// ─── Card Work Archiviata ─────────────────────────────────────────────────────
+
+function WorkCardArchivio({ work, metodiNomi, onClick }: { work: any; metodiNomi: Record<string, string>; onClick: () => void }) {
+  return (
+    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 opacity-75 cursor-pointer hover:shadow-md transition-shadow" onClick={onClick}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="font-heading font-semibold text-sm leading-tight">{work.nome}</div>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 text-muted-foreground">
+          <Archive className="h-2.5 w-2.5 mr-1" />
+          Archiviata
+        </Badge>
+      </div>
+      {work.archiviato_at && (
+        <div className="text-xs text-muted-foreground mb-1">
+          {formatDate(work.archiviato_at.slice(0, 10))}
+        </div>
+      )}
+      {work.archiviato_motivo && (
+        <div className="text-xs text-muted-foreground italic truncate">{work.archiviato_motivo}</div>
+      )}
+      {work.metodi_ids && work.metodi_ids.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {work.metodi_ids.map((mid: string) => (
+            <Badge key={mid} variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+              {metodiNomi[mid] ?? mid}
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -97,6 +97,8 @@ export const anagraficheApi = {
 export const workApi = {
   list: () =>
     api.invoke('work:list') as Promise<any[]>,
+  listArchivio: () =>
+    api.invoke('work:list-archivio') as Promise<any[]>,
   get: (id: number) =>
     api.invoke('work:get', id) as Promise<any>,
   create: (data: Record<string, unknown>) =>

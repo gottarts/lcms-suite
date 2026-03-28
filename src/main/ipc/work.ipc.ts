@@ -85,6 +85,29 @@ export function registerWorkIpc(): void {
     })
   })
 
+  // ── LIST ARCHIVIO: work archiviate ───────────────────────────────────────
+  ipcMain.handle('work:list-archivio', () => {
+    const db = getDb()
+    const works = db.prepare(`
+      SELECT w.*,
+        (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti,
+        (SELECT COUNT(*) FROM work_metodi WHERE work_id = w.id)      AS n_metodi,
+        (SELECT metodo_id FROM work_metodi WHERE work_id = w.id LIMIT 1) AS primo_metodo_id,
+        (SELECT GROUP_CONCAT(metodo_id) FROM work_metodi WHERE work_id = w.id) AS _metodi_ids_raw
+      FROM work w
+      WHERE w.archiviato = 1
+      ORDER BY w.archiviato_at DESC
+    `).all() as any[]
+
+    return works.map((w: any) => {
+      const { _metodi_ids_raw, ...rest } = w
+      return {
+        ...rest,
+        metodi_ids: _metodi_ids_raw ? _metodi_ids_raw.split(',') : [],
+      }
+    })
+  })
+
   // ── GET: singola work con ingredienti e metodi ────────────────────────────
   ipcMain.handle('work:get', (_, id: number) => {
     const db = getDb()

@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
-import { Pencil, Trash2, FlaskConical, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
+import { Pencil, Trash2, FlaskConical, ChevronDown, ChevronUp, AlertCircle, ExternalLink } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { workApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { getCompsFromWork } from '../metodi/SchemaCalibrazione.logic'
@@ -361,6 +362,23 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema, me
           </Button>
         </div>
 
+        {/* Metodi associati */}
+        {work.metodi_ids && work.metodi_ids.length > 0 && (
+          <>
+            <Separator />
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Metodi associati ({work.metodi_ids.length})
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {work.metodi_ids.map((mid: string) => (
+                <Badge key={mid} variant="outline" className="text-xs">
+                  {metodiNomi?.[mid] ?? mid}
+                </Badge>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Banner bloccata */}
         {isBloccata && (
           <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800 space-y-2">
@@ -403,7 +421,40 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema, me
           <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>Uno o più CRM usati in questa work risultano scaduti. Verifica lo stato nel DB Composti.</span>
+              <div className="flex flex-col gap-1.5">
+                <span>Uno o più CRM usati in questa work risultano scaduti. Verifica lo stato nel DB Composti.</span>
+                {onVaiASchema && work.metodi_ids && work.metodi_ids.length > 0 && (
+                  work.metodi_ids.length === 1 ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="self-start h-7 text-xs border-yellow-400 text-yellow-800 hover:bg-yellow-100"
+                      onClick={() => onVaiASchema(work.metodi_ids[0])}
+                    >
+                      <ExternalLink className="h-3 w-3 mr-1" /> Vai a schema
+                    </Button>
+                  ) : (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="self-start h-7 text-xs border-yellow-400 text-yellow-800 hover:bg-yellow-100"
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" /> Vai a schema
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {work.metodi_ids.map((mid: string) => (
+                          <DropdownMenuItem key={mid} onClick={() => onVaiASchema(mid)}>
+                            {metodiNomi?.[mid] ?? mid}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -721,22 +772,6 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema, me
           </>
         )}
 
-        {/* Metodi associati */}
-        {work.metodi_ids && work.metodi_ids.length > 0 && (
-          <>
-            <Separator />
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Metodi associati ({work.metodi_ids.length})
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {work.metodi_ids.map((mid: string) => (
-                <Badge key={mid} variant="outline" className="text-xs font-mono">
-                  {mid}
-                </Badge>
-              ))}
-            </div>
-          </>
-        )}
 
       </div>
     </SlidePanel>
