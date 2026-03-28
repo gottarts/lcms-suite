@@ -1057,11 +1057,16 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
         workId={ricaricaSchemaWorkId}
         onClose={() => setRicaricaSchemaWorkId(null)}
         onSuccess={newWorkId => {
-          // Aggiorna dbId nella colonna per puntare alla nuova work
+          // Aggiorna dbId nella colonna per puntare alla nuova work e salva subito
+          // (senza attendere il debounce, per evitare di perdere la modifica se l'utente naviga via)
           if (ricaricaSchemaWorkId != null) {
-            setWorkCols(prev => prev.map(col =>
-              col.map(w => w.dbId === ricaricaSchemaWorkId ? { ...w, dbId: newWorkId } : w)
-            ))
+            setWorkCols(prev => {
+              const updated = prev.map(col =>
+                col.map(w => w.dbId === ricaricaSchemaWorkId ? { ...w, dbId: newWorkId } : w)
+              )
+              schemaCalApi.save(metodoId, updated, Array.from(removedCon), Array.from(removedMix))
+              return updated
+            })
           }
           setRicaricaSchemaWorkId(null)
         }}

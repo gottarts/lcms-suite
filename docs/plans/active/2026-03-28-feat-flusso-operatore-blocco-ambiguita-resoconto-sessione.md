@@ -60,65 +60,81 @@ Sessione di design e implementazione del flusso operatore per la gestione delle 
 
 ---
 
-## Analisi critica del sistema di gestione Work — problemi aperti
+## Analisi critica del sistema di gestione Work — stato aggiornato
 
-Questa sezione è una riflessione estesa sui limiti architetturali e di UX del sistema attuale, emersi durante la sessione di design. Servirà come base per una revisione futura più profonda.
+Questa sezione è una riflessione estesa sui limiti architetturali e di UX del sistema. Aggiornata dopo le sessioni del 2026-03-28.
 
-### 1. Il concetto di "ambiguità" è opaco per l'operatore
+> **Legenda stato:** ✅ Risolto · ⚠️ Parzialmente risolto · 🔴 Aperto
 
-Il sistema rileva l'ambiguità (≥2 lotti non dismessi con lo stesso nome in `composti`) e blocca la work, ma **non mostra all'operatore quali CRM specifici sono ambigui né quali lotti esistono**. Il banner dice genericamente "Più lotti disponibili per uno o più CRM. Vai allo Schema per scegliere." — ma nello Schema non c'è nessun indicatore visivo che dica "questo CRM ha un'ambiguità". L'operatore deve intuirlo.
+---
 
-**Soluzione ipotetica:** Il banner dovrebbe elencare i nomi dei CRM ambigui con i lotti disponibili. Nello Schema, le card dei CRM ambigui dovrebbero essere evidenziate.
+### 1. Il concetto di "ambiguità" blocca work in modo fuorviante ✅ Rimosso
 
-### 2. Lo Schema non mostra lo stato delle work collegate
+Il sistema bloccava le work per "ambiguità CRM" (≥2 lotti attivi con lo stesso nome). Questa condizione era un falso positivo: `work_ingredienti.source_id` identifica già univocamente il CRM scelto dall'operatore alla creazione.
 
-Quando un operatore apre SchemaCalibrazione per risolvere un'ambiguità, **non vede** quale work è bloccata, né quando è stata preparata l'ultima volta, né se è in scadenza. Le card work nello schema non hanno indicatori di stato. L'operatore lavora "alla cieca" sullo stato di laboratorio delle work.
+**Stato:** Rimosso completamente nella sessione `2026-03-28-rimozione-ambiguita-warning-crm-scaduti`. Il campo `motivo_blocco` ora ha solo valori `'dismesso' | null`. Aggiunto in sostituzione un **warning non bloccante** per CRM scaduti (`ha_crm_scaduti`): badge giallo in WorkCard, banner giallo in WorkDrawer. L'operatore può ancora preparare la work ma viene avvisato.
 
-**Soluzione ipotetica:** Le work card nello schema dovrebbero mostrare il badge stato (`attiva | in_scadenza | scaduta | bloccata`) e l'ultima data di preparazione, caricati live da `work:get`.
+---
 
-### 3. La relazione schema→work non è esplicita nel DB
+### 2. Lo Schema non mostra lo stato delle work collegate 🔴 Aperto
 
-La corrispondenza tra una colonna dello schema e il `dbId` di una work è salvata **solo nel JSON blob** di `schema_calibrazione`. Non esiste una FK che dica "la colonna X dello schema corrisponde alla work Y". Se il JSON viene corrotto o riscritto, la relazione è persa silenziosamente. Il `dbId` nello schema può puntare a una work archiviata senza che il sistema se ne accorga.
+Quando un operatore apre SchemaCalibrazione per risolvere un problema, non vede quale work è bloccata, né quando è stata preparata l'ultima volta, né se ha CRM scaduti. Le work card nello schema non hanno indicatori di stato.
 
-**Conseguenza pratica:** Dopo l'archiviazione automatica implementata oggi, il `dbId` nello schema rimane il vecchio ID archiviato, non viene aggiornato al nuovo. Lo schema deve essere ricaricato/resalvato per aggiornare il `dbId`. Se non lo fa, la prossima volta che l'operatore apre lo schema vedrà lo stesso `dbId` che punta a una work archiviata.
+**Soluzione ipotetica:** Le work card nello schema dovrebbero mostrare il badge stato e l'ultima data di preparazione, caricati live da `work:get`.
 
-**Soluzione ipotetica:** Dopo `salvaWorkNelDb`, il chiamante deve aggiornare `w.dbId = newId` e richiamere `schema-cal:save`. Verificare che questo avvenga nel flusso attuale di `SchemaCalibrazione.tsx`.
+---
 
-### 4. `salvaWorkNelDb` crea sempre una nuova work, anche senza necessità
+### 3. La relazione schema→work non è esplicita nel DB — race condition sul salvataggio dbId ✅ Risolto (parzialmente)
 
-La funzione `salvaWorkNelDb` chiama sempre `work:create` anche quando `w.dbId` esiste e la work non è bloccata (modifica parametri senza cambiare i CRM). Il risultato è un **duplicato** della work con un nuovo ID, non un aggiornamento in-place. La vecchia work rimane attiva con il vecchio set di parametri.
+La corrispondenza schema→work è salvata solo nel JSON blob di `schema_calibrazione`. Il `dbId` nello schema può puntare a una work archiviata se il salvataggio non avviene correttamente dopo la sostituzione.
 
-Questo è un bug preesistente non affrontato in questa sessione. Il sistema non ha mai avuto un `work:update` invocato da `salvaWorkNelDb`.
+**Stato:** Il rischio race-condition è risolto nella sessione `2026-03-28-fix-dbid-schema-ricarica`: `RicaricaDialog.onSuccess` ora chiama `schemaCalApi.save` **immediatamente** dentro l'updater di `setWorkCols`, senza dipendere dal debounce da 500ms.
 
-**Soluzione ipotetica:** Distinguere il caso "modifica parametri (nome, volume, solvente)" da "cambio CRM". Il primo caso dovrebbe chiamare `work:update(dbId, ...)`, il secondo creare una nuova work e archiviare la vecchia.
+**Ancora aperto:** Il path di archiviazione in `salvaWorkNelDb` (linee 263–269 di `SchemaCalibrazione.logic.ts`) è **dead code**: `handleSaveWork` crea sempre work con `Omit<..., 'dbId'>`, quindi `w.dbId` è sempre undefined e il blocco non si attiva mai. La relazione schema→work rimane implicita nel JSON senza FK DB.
 
-### 5. Work condivise tra metodi complicano il flusso di blocco
+---
 
-Una work può essere associata a più metodi via `work_metodi`. Il blocco (`bloccata`) è calcolato sui CRM ingredienti indipendentemente dal metodo. Se un CRM è ambiguo per il metodo A ma non per il metodo B (perché lo schema del metodo B non usa quel CRM), la work risulta comunque bloccata per entrambi i metodi.
+### 4. `salvaWorkNelDb` crea sempre una nuova work, anche senza necessità 🔴 Aperto
 
-Il pulsante "Vai allo Schema ↗" naviga a `metodi_ids[0]` — il primo metodo in lista. Se la work è condivisa tra più metodi, l'operatore potrebbe essere portato al metodo sbagliato.
+La funzione chiama sempre `work:create` anche quando la work non è bloccata (modifica parametri senza cambiare CRM). Il risultato è un **duplicato** con nuovo ID, non un aggiornamento in-place. La vecchia work rimane attiva.
 
-**Soluzione ipotetica:** Se la work ha più metodi, mostrare una lista di metodi da cui scegliere prima di navigare allo schema.
+**Soluzione ipotetica:** Distinguere "modifica parametri" (→ `work:update`) da "cambio CRM" (→ crea nuova + archivia vecchia).
 
-### 6. Il backend `work:ricarica` esiste ma non ha più UI
+---
 
-Con la rimozione di `RicaricaDialog`, il handler `work:ricarica` in `work.ipc.ts` è diventato codice morto. È ancora funzionale e potrebbe essere utile in futuro (es. per una feature di "aggiornamento rapido lotti" senza passare per lo schema). Per ora non va rimosso, ma va documentato come non usato dalla UI.
+### 5. Work condivise tra metodi complicano il flusso di blocco 🔴 Aperto
 
-### 7. Nessun vincolo che garantisca "una work per slot di schema"
+Il blocco (`bloccata`) è calcolato sui CRM ingredienti indipendentemente dal metodo. Il pulsante "Vai allo Schema ↗" naviga a `metodi_ids[0]` — se la work è condivisa tra più metodi, l'operatore potrebbe essere portato al metodo sbagliato.
 
-Il sistema non impone che ci sia **al massimo una work attiva** per colonna/livello di schema per un dato metodo. Nulla impedisce di avere 3 work lv0 attive per il metodo X. La logica "archivia la vecchia" implementata oggi aiuta, ma è opt-in (dipende dall'utente che passa dallo schema) e non è un vincolo DB.
+**Soluzione ipotetica:** Mostrare una lista di metodi da scegliere prima di navigare allo schema.
 
-### 8. L'operatore non riceve feedback sullo stato della work PRIMA di tentare la preparazione
+---
 
-Il flusso ideale sarebbe: operatore apre WorkDrawer → vede subito badge prominente con stato CRM → sa se può preparare o no. Attualmente il banner bloccata è presente, ma l'esperienza di scoprire che una work è bloccata solo quando si clicca "Registra preparazione" (pulsante disabilitato con tooltip) non è ottimale. Il controllo avviene al caricamento del drawer, quindi tecnicamente il banner è visibile — ma potrebbe essere reso più prominente o anticipato nella WorkCard.
+### 6. `work:ricarica` IPC e `RicaricaDialog` ⚠️ Parzialmente risolto
+
+`RicaricaDialog` è stato rimosso da `WorkPage`/`WorkDrawer` (rimpiazzato dal flusso schema-centrico). Tuttavia **è ancora presente e attivo in `SchemaCalibrazione.tsx`** per il caso in cui l'utente voglia aggiornare i lotti di una work direttamente dallo schema senza ricrearla da zero. Il handler `work:ricarica` in `work.ipc.ts` è quindi ancora usato.
+
+**Stato attuale:** Non è dead code. Va documentato che il flusso corretto per l'operatore (blocco CRM dismesso) passa per lo schema, ma `RicaricaDialog` rimane come shortcut per il chimico che gestisce lo schema.
+
+---
+
+### 7. Nessun vincolo "una work per slot di schema" 🔴 Aperto
+
+Il sistema non impone al massimo una work attiva per colonna/livello per un dato metodo. La logica "archivia la vecchia" è opt-in e non è un vincolo DB.
+
+---
+
+### 8. Feedback stato work prima di tentare la preparazione ⚠️ Parzialmente risolto
+
+**Stato:** Il banner bloccata (rosso) e il warning scaduti (giallo) sono visibili in WorkDrawer al caricamento. Il badge in WorkCard anticipa lo stato prima di aprire il drawer. Il flusso è migliorato rispetto alla situazione iniziale, ma le work card nello schema non rispecchiano ancora lo stato lab.
 
 ---
 
 ## Note per sessioni future
 
-- **Priorità alta**: verificare che dopo `salvaWorkNelDb` il `dbId` venga aggiornato nello schema JSON e richiamato `schema-cal:save`. Se non avviene, lo schema continua a puntare alla work archiviata.
-- **Priorità media**: aggiungere la lista dei CRM ambigui nel banner bloccata (nome CRM + lotti disponibili, caricati da `work:check-lot-status`).
-- **Priorità media**: mostrare il badge stato work (bloccata / in scadenza) nelle card work di SchemaCalibrazione.
-- **Bug preesistente da risolvere**: `salvaWorkNelDb` crea duplicati invece di aggiornare work non bloccate con `dbId` esistente.
-- **Codice morto**: `work:ricarica` IPC e `RicaricaDialog.tsx` — decidere se rimuovere o mantenere per uso futuro.
+- **Chiuso**: race condition dbId dopo `RicaricaDialog` (risolto con save esplicito).
+- **Chiuso**: falso blocco "ambiguo" (rimosso; sostituito da warning scaduti non bloccante).
+- **Aperto — priorità media**: mostrare badge stato work (bloccata / scaduta) nelle card work di SchemaCalibrazione.
+- **Aperto — bug preesistente**: `salvaWorkNelDb` crea duplicati invece di aggiornare work non bloccate con `dbId` esistente.
+- **Aperto — dead code**: path archiviazione in `salvaWorkNelDb` (linee 263–269) non viene mai raggiunto nel flusso corrente.
 - **Riferimento piano sessione**: `docs/plans/active/2026-03-28-feat-flusso-operatore-blocco-ambiguita-plan.md`
