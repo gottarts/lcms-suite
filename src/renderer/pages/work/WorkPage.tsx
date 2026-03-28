@@ -129,7 +129,7 @@ export function WorkPage() {
               onClick={() => setDrawerId(w.id)}
               onPrepara={() => setDrawerId(w.id)}
               onGoSchema={w.primo_metodo_id ? () => navigate('/metodi', { state: { schemaMetodoId: w.primo_metodo_id } }) : undefined}
-              onAddToSchema={!w.primo_metodo_id ? () => setAddToSchemaWork({ id: w.id, nome: w.nome }) : undefined}
+              onAddToSchema={() => setAddToSchemaWork({ id: w.id, nome: w.nome })}
             />
           ))}
         </div>
@@ -333,7 +333,7 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema }: { wor
               size="sm" variant="outline"
               className="h-6 text-[10px] px-2 flex-1 border-blue-300 text-blue-700 hover:bg-blue-50"
               onClick={onAddToSchema}
-              title="Aggiungi questa work a un metodo di calibrazione"
+              title="Aggiungi questa work a un metodo"
             >
               + Metodo ↗
             </Button>

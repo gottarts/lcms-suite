@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// AggiungiASchemaDialog.tsx — Dialog per aggiungere una work orfana a uno schema
+// AggiungiASchemaDialog.tsx — Dialog per aggiungere una work a uno schema
 //
-// Usato da WorkPage quando una work non è collegata ad alcun metodo
-// (primo_metodo_id = null). A differenza di ImportaWorkDialog, non filtra per
-// analiti condivisi: la work può entrare in qualsiasi schema.
+// Usato da WorkPage per aggiungere qualsiasi work a un metodo di calibrazione.
+// Filtra i metodi per analiti condivisi (metodi:list-for-work) ed esclude quelli
+// a cui la work è già associata (work_metodi via workApi.get().metodi_ids).
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -85,13 +85,19 @@ export function AggiungiASchemaDialog({ open, workId, workNome, onClose }: Props
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Carica metodi con analiti condivisi con la work
+  // Carica metodi con analiti condivisi con la work, esclusi quelli già associati
   useEffect(() => {
     if (!open || !workId) return
     setSelectedMetodoId('')
     setSchemaState(null)
     setError(null)
-    metodiApi.listForWork(workId).then(setMetodi).catch(() => setMetodi([]))
+    Promise.all([
+      metodiApi.listForWork(workId),
+      workApi.get(workId),
+    ]).then(([all, dbWork]) => {
+      const assoc = new Set<string>((dbWork?.metodi_ids ?? []))
+      setMetodi(all.filter((m: any) => !assoc.has(m.id)))
+    }).catch(() => setMetodi([]))
   }, [open, workId])
 
   // Carica schema del metodo selezionato
