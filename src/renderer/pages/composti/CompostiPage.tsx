@@ -358,7 +358,7 @@ export function CompostiPage() {
   const [filtroMetodi, setFiltroMetodi] = useState<string[]>([])
   const [filtroAttenzione, setFiltroAttenzione] = useState(false)
   const [filtroInScadenza, setFiltroInScadenza] = useState(false)
-  const [mostraDismessi, setMostraDismessi] = useState(false)
+  const [mostraDismessi, setMostraDismessi] = useState((location.state as any)?.mostraDismessi === true)
   const [mostraDaAprire, setMostraDaAprire] = useState(true)
   const [nascondiScaduti, setNascondiScaduti] = useState(false)
   const [soloIncompleti, setSoloIncompleti] = useState(false)

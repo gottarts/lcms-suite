@@ -117,6 +117,8 @@ export const workApi = {
     api.invoke('work:check-lot-status', workId) as Promise<any[]>,
   ricarica: (params: { old_work_id: number; nuovi_ingredienti: Array<{ old_source_id: number; new_source_id: number }>; metodi_ids: string[] }) =>
     api.invoke('work:ricarica', params) as Promise<{ ok: boolean; new_work_id: number }>,
+  setSostituitoDa: (oldId: number, newId: number) =>
+    api.invoke('work:set-sostituito-da', oldId, newId) as Promise<{ ok: boolean }>,
   listForImport: (metodoId: string) =>
     api.invoke('work:list-for-import', metodoId) as Promise<any[]>,
   addToMetodo: (workId: number, metodoId: string) =>

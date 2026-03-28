@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { workApi } from '@/lib/api'
 
@@ -9,6 +10,7 @@ interface RicaricaDialogProps {
 }
 
 export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogProps) {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [lotStatus, setLotStatus] = useState<any[]>([])
@@ -187,12 +189,24 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                 </div>
                 {lotStatus.filter(i => i.stato === 'mancante').map(ing => (
                   <div key={ing.source_id} style={{
-                    fontSize: 11, padding: '4px 8px', marginBottom: 2,
+                    fontSize: 11, padding: '6px 8px', marginBottom: 4,
                     borderRadius: 4, background: '#fef2f2', border: '1px solid #fca5a5',
                   }}>
-                    <span style={{ fontWeight: 500 }}>{ing.nome}</span>
-                    <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>
-                      Nessun lotto attivo nel DB. Inserire un nuovo lotto prima di procedere.
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontWeight: 500 }}>{ing.nome}</span>
+                      <button
+                        onClick={() => { onClose(); navigate('/composti', { state: { searchFilter: ing.nome, mostraDismessi: true } }) }}
+                        style={{
+                          fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                          border: '1px solid #fca5a5', background: '#fff',
+                          color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                        }}
+                      >
+                        Vai al DB Composti →
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#dc2626', marginTop: 3 }}>
+                      Nessun lotto attivo nel DB. Aggiungere un nuovo lotto nel DB Composti, poi riaprire questo dialog.
                     </div>
                   </div>
                 ))}

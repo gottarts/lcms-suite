@@ -660,6 +660,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
   const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean }>>(new Map())
   const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
+  const recentlyArchivedByCol = useRef<Map<number, number>>(new Map()) // colIdx → old dbId (per link sostituito_da_id)
   const [importOpen, setImportOpen] = useState(false)
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
@@ -799,6 +800,15 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       console.error('Errore salvataggio Work nel DB:', e)
     }
 
+    // Se nella stessa colonna era stata appena archiviata una work, linkala come sostituita
+    if (dbId) {
+      const oldDbId = recentlyArchivedByCol.current.get(tgtCol)
+      if (oldDbId) {
+        workApi.setSostituitoDa(oldDbId, dbId).catch(() => {})
+        recentlyArchivedByCol.current.delete(tgtCol)
+      }
+    }
+
     const finalWork: WorkInSchema = dbId ? { ...work, dbId } : work
 
     // Inserisce nella colonna target
@@ -825,6 +835,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       // Archivia il record DB se la work aveva un dbId (evita orfani nel DB)
       if (w?.dbId) {
         workApi.archivia(w.dbId, 'Rimossa dallo schema').catch(() => {})
+        recentlyArchivedByCol.current.set(colIdx, w.dbId)
       }
       cols[colIdx].splice(workIdx, 1)
       if (wid) setSelSrcs(p => { const m = new Map(p); m.delete(wid); return m })

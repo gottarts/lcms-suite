@@ -403,6 +403,14 @@ export function registerWorkIpc(): void {
     return { ok: true }
   })
 
+  // ── SET-SOSTITUITO-DA: imposta il link di tracciabilità sulla work archiviata
+  ipcMain.handle('work:set-sostituito-da', (_, oldId: number, newId: number) => {
+    getDb().prepare(`
+      UPDATE work SET sostituito_da_id = ? WHERE id = ?
+    `).run(newId, oldId)
+    return { ok: true }
+  })
+
   // ── CHECK-LOT-STATUS: verifica stato lotti ingredienti di una work ────────
   ipcMain.handle('work:check-lot-status', (_, workId: number) => {
     const db = getDb()

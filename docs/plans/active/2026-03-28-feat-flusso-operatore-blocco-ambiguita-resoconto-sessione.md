@@ -140,17 +140,23 @@ Scegli il metodo:
 
 ---
 
-### 6. `work:ricarica` IPC e `RicaricaDialog` ⚠️ Parzialmente risolto
+### 6. `work:ricarica` IPC e `RicaricaDialog` ✅ Risolto
 
-`RicaricaDialog` è stato rimosso da `WorkPage`/`WorkDrawer` (rimpiazzato dal flusso schema-centrico). Tuttavia **è ancora presente e attivo in `SchemaCalibrazione.tsx`** per il caso in cui l'utente voglia aggiornare i lotti di una work direttamente dallo schema senza ricrearla da zero. Il handler `work:ricarica` in `work.ipc.ts` è quindi ancora usato.
+`RicaricaDialog` rimane in `SchemaCalibrazione.tsx` come shortcut per il chimico che aggiorna i lotti direttamente dallo schema. Il caso AMBIGUO (scelta dropdown) e AUTO erano già funzionanti. Il caso **MANCANTE** (nessun lotto sostituto nel DB) era un vicolo cieco: il pulsante "Conferma e Ricarica" era disabilitato senza azione possibile.
 
-**Stato attuale:** Non è dead code. Il flusso corretto per l'operatore (blocco CRM dismesso) passa per lo schema, ma `RicaricaDialog` rimane come shortcut per il chimico che gestisce lo schema.
+**Risolto nella sessione `2026-03-28-fix-ricaricadialog-mancante-traceability`.**
+
+**Implementazione:** Per ogni ingrediente in stato MANCANTE, il dialog ora mostra un pulsante "Vai al DB Composti →" che chiude il dialog e naviga a `/composti` con `searchFilter = nome_composto` e `mostraDismessi: true` (così la tabella non risulta vuota). `CompostiPage` ora legge anche `mostraDismessi` dall'`location.state` alla navigazione.
 
 ---
 
-### 7. Nessun vincolo "una work per slot di schema" 🔴 Aperto
+### 7. Nessun vincolo "una work per slot di schema" ✅ Risolto (livello applicativo)
 
-Il sistema non impone al massimo una work attiva per colonna/livello per un dato metodo. La logica "archivia la vecchia" è opt-in e non è un vincolo DB. Problema architetturale rinviato.
+Il DB non ha vincoli di unicità per slot — problema architetturale rinviato. Risolto il problema concreto: quando il chimico elimina una work dallo schema e ne crea una nuova nella stessa colonna, la work archiviata non aveva `sostituito_da_id` impostato, spezzando la catena di tracciabilità.
+
+**Risolto nella sessione `2026-03-28-fix-ricaricadialog-mancante-traceability`.**
+
+**Implementazione:** Aggiunto IPC `work:set-sostituito-da` e `workApi.setSostituitoDa()`. In `SchemaCalibrazione.tsx`, un `useRef` (`recentlyArchivedByCol`) traccia la work appena archiviata per colonna. Quando viene creata una nuova work nella stessa colonna e si ottiene il `dbId`, viene chiamato `setSostituitoDa(oldId, newId)` per aggiornare il link sulla work archiviata. La catena `sostituito_da_id` è ora mantenuta anche nel flusso manuale delete+create.
 
 ---
 
@@ -168,6 +174,8 @@ Il sistema non impone al massimo una work attiva per colonna/livello per un dato
 - **Chiuso**: work orfane nel DB all'eliminazione dallo schema.
 - **Chiuso**: dead code in `salvaWorkNelDb` (linee 263–269 rimosse).
 - **Chiuso**: picker metodo per work condivise in WorkDrawer.
+- **Chiuso**: caso MANCANTE in `RicaricaDialog` ora guida l'utente al DB Composti con filtro dismessi attivo.
+- **Chiuso**: `sostituito_da_id` ora mantenuto nel flusso manuale delete+create tramite `recentlyArchivedByCol` ref.
 - **Aperto — bug preesistente**: `salvaWorkNelDb` chiama sempre `work:create` anche se la work non è bloccata. Se l'operatore modifica solo i parametri (non i CRM), viene creato un nuovo record invece di aggiornare quello esistente. Fix richiede: distinguere "modifica parametri" (→ `work:update`) da "cambio CRM" (→ crea nuova + archivia vecchia). Non implementato perché il path di edit in-place non è esposto nell'UI corrente.
-- **Aperto — architetturale**: nessun vincolo DB "una work attiva per slot di schema".
+- **Aperto — architetturale**: nessun vincolo DB "una work attiva per slot di schema" (vincolo applicativo aggiunto, ma non a livello DB).
 - **Riferimento piano sessione**: `docs/plans/active/2026-03-28-feat-flusso-operatore-blocco-ambiguita-plan.md`
