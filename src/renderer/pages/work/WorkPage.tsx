@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { workApi, metodiApi } from '@/lib/api'
 import { WorkDrawer } from './WorkDrawer'
 import { WorkForm } from './WorkForm'
+import { AggiungiASchemaDialog } from './AggiungiASchemaDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +22,7 @@ export function WorkPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [archiviaId, setArchiviaId] = useState<number | null>(null)
   const [mostraArchivio, setMostraArchivio] = useState(false)
+  const [addToSchemaWork, setAddToSchemaWork] = useState<{ id: number; nome: string } | null>(null)
 
   const load = async (archivio = false) => {
     const [data, metodi] = await Promise.all([
@@ -127,6 +129,7 @@ export function WorkPage() {
               onClick={() => setDrawerId(w.id)}
               onPrepara={() => setDrawerId(w.id)}
               onGoSchema={w.primo_metodo_id ? () => navigate('/metodi', { state: { schemaMetodoId: w.primo_metodo_id } }) : undefined}
+              onAddToSchema={!w.primo_metodo_id ? () => setAddToSchemaWork({ id: w.id, nome: w.nome }) : undefined}
             />
           ))}
         </div>
@@ -167,6 +170,13 @@ export function WorkPage() {
         variant="default"
         onConfirm={handleArchivia}
         onCancel={() => setArchiviaId(null)}
+      />
+
+      <AggiungiASchemaDialog
+        open={addToSchemaWork !== null}
+        workId={addToSchemaWork?.id ?? null}
+        workNome={addToSchemaWork?.nome ?? ''}
+        onClose={() => setAddToSchemaWork(null)}
       />
 
     </div>
@@ -215,7 +225,7 @@ const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
   non_preparata:{ label: 'Non preparata',className: 'text-muted-foreground' },
 }
 
-function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void }) {
+function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void; onAddToSchema?: () => void }) {
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
   const isBloccata = !!work.bloccata
@@ -294,7 +304,7 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick
           <div className="col-span-2 truncate">Op: {work.operatore}</div>
         )}
       </div>
-      {(onPrepara || onGoSchema) && (
+      {(onPrepara || onGoSchema || onAddToSchema) && (
         <div className="flex gap-1 mt-2 pt-2 border-t border-border/50" onClick={e => e.stopPropagation()}>
           {onPrepara && work.validita_mesi && (
             <Button
@@ -316,6 +326,16 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick
               title={isBloccata ? 'Vai allo Schema per aggiornare i lotti e creare una nuova work' : undefined}
             >
               {isBloccata ? 'Aggiorna Schema ↗' : 'Schema ↗'}
+            </Button>
+          )}
+          {onAddToSchema && (
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[10px] px-2 flex-1 border-blue-300 text-blue-700 hover:bg-blue-50"
+              onClick={onAddToSchema}
+              title="Aggiungi questa work a uno schema di calibrazione"
+            >
+              + Schema ↗
             </Button>
           )}
         </div>
