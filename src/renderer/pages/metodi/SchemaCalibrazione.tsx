@@ -786,7 +786,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
   const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean }>>(new Map())
   const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
-  const recentlyArchivedByCol = useRef<Map<number, number>>(new Map()) // colIdx → old dbId (per link sostituito_da_id)
   const [importOpen, setImportOpen] = useState(false)
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
@@ -926,14 +925,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       console.error('Errore salvataggio Work nel DB:', e)
     }
 
-    // Se nella stessa colonna era stata appena archiviata una work, linkala come sostituita
-    if (dbId) {
-      const oldDbId = recentlyArchivedByCol.current.get(tgtCol)
-      if (oldDbId) {
-        workApi.setSostituitoDa(oldDbId, dbId).catch(() => {})
-        recentlyArchivedByCol.current.delete(tgtCol)
-      }
-    }
 
     const finalWork: WorkInSchema = dbId ? { ...work, dbId } : work
 
@@ -959,14 +950,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       const w    = cols[colIdx]?.[workIdx]
       const wid  = w?.id
       if (w?.dbId) {
-        if (w.isImported) {
-          // Work importata: rimuovi solo il link al metodo, non archiviare
-          workApi.removeFromMetodo(w.dbId, metodoId).catch(() => {})
-        } else {
-          // Work nativa: archivia (soft-delete) per traceabilità
-          workApi.archivia(w.dbId, 'Rimossa dallo schema').catch(() => {})
-          recentlyArchivedByCol.current.set(colIdx, w.dbId)
-        }
+        // Rimuovi solo il link al metodo — non archiviare mai dallo schema
+        workApi.removeFromMetodo(w.dbId, metodoId).catch(() => {})
       }
       cols[colIdx].splice(workIdx, 1)
       if (wid) setSelSrcs(p => { const m = new Map(p); m.delete(wid); return m })
@@ -981,7 +966,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setWorkCols(prev => {
       const cols = prev.map(c => [...c])
       while (cols.length <= colIdx) cols.push([])
-      cols[colIdx] = [...cols[colIdx], { ...work, isImported: true }]
+      cols[colIdx] = [...cols[colIdx], { ...work }]
       if (cols.length <= colIdx + 1) cols.push([])
       return cols
     })

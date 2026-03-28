@@ -19,6 +19,7 @@ export function WorkPage() {
   const [editWork, setEditWork] = useState<any>(null)
   const [drawerId, setDrawerId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [archiviaId, setArchiviaId] = useState<number | null>(null)
   const [mostraArchivio, setMostraArchivio] = useState(false)
 
   const load = async (archivio = false) => {
@@ -50,6 +51,15 @@ export function WorkPage() {
       setDeleteId(null)
       setDrawerId(null)
       load(mostraArchivio)
+    }
+  }
+
+  const handleArchivia = async () => {
+    if (archiviaId !== null) {
+      await workApi.archivia(archiviaId, 'Archiviata manualmente')
+      setArchiviaId(null)
+      setDrawerId(null)
+      load(false)
     }
   }
 
@@ -134,6 +144,7 @@ export function WorkPage() {
         onClose={() => setDrawerId(null)}
         onEdit={handleEdit}
         onDelete={id => { setDrawerId(null); setDeleteId(id) }}
+        onArchivia={!mostraArchivio ? id => { setDrawerId(null); setArchiviaId(id) } : undefined}
         onVaiASchema={(metodoId) => { setDrawerId(null); navigate('/metodi', { state: { schemaMetodoId: metodoId } }) }}
         metodiNomi={metodiNomi}
       />
@@ -146,6 +157,16 @@ export function WorkPage() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
+      />
+
+      <ConfirmDialog
+        open={archiviaId !== null}
+        title="Archivia Work"
+        message="Vuoi archiviare questa Work? Rimarrà consultabile nell'archivio ma non comparirà più nella lista attiva."
+        confirmLabel="Archivia"
+        variant="default"
+        onConfirm={handleArchivia}
+        onCancel={() => setArchiviaId(null)}
       />
 
     </div>

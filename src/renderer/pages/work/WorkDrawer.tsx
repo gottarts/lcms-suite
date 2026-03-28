@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
-import { Pencil, Trash2, FlaskConical, ChevronDown, ChevronUp, AlertCircle, ExternalLink } from 'lucide-react'
+import { Pencil, Trash2, Archive, FlaskConical, ChevronDown, ChevronUp, AlertCircle, ExternalLink } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { workApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
@@ -17,6 +17,7 @@ interface WorkDrawerProps {
   onClose: () => void
   onEdit: (work: any) => void
   onDelete: (id: number) => void
+  onArchivia?: (id: number) => void
   onVaiASchema?: (metodoId: string) => void
   metodiNomi?: Record<string, string>
 }
@@ -165,7 +166,7 @@ function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchem
 
 // ── Componente principale ────────────────────────────────────────────────────
 
-export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema, metodiNomi }: WorkDrawerProps) {
+export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVaiASchema, metodiNomi }: WorkDrawerProps) {
   const [work, setWork]           = useState<any>(null)
   const [workChain, setWorkChain] = useState<Map<number, any>>(new Map())
   const [storico, setStorico]     = useState<any[]>([])
@@ -353,13 +354,18 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema, me
       <div className="space-y-4">
 
         {/* Azioni */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => onEdit(work)}>
             <Pencil className="h-3.5 w-3.5 mr-1" /> Modifica
           </Button>
           <Button size="sm" variant="outline" className="text-destructive" onClick={() => onDelete(work.id)}>
             <Trash2 className="h-3.5 w-3.5 mr-1" /> Elimina
           </Button>
+          {onArchivia && (
+            <Button size="sm" variant="outline" className="text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => onArchivia(work.id)}>
+              <Archive className="h-3.5 w-3.5 mr-1" /> Archivia
+            </Button>
+          )}
         </div>
 
         {/* Metodi associati */}

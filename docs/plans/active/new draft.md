@@ -2,17 +2,11 @@
 
  
 
-2026-03-28-feat-flusso-operatore-blocco-ambiguita-resoconto-sessione
-Analisi critica del sistema di gestione Work — problemi aperti
-(rispetto a tutti gli 8 punti e chiaro che ci vuole una semplificazione. Lasciando perdere il caso estremo dei lotti dismessi, in caso di ambiguita come avere piu lotti del crm la cosa è gia gestita dallo schema  in quanto l operatore scegli il crm da usare. anche il meccanismo attuale di eliminazione in caso di presenza di piu tipi di crm mix o soluiozne è inutile poi che l operatore seleziona volutamente il crm che vuole usare per creare la work. dico giusto se dico che questo meccanismo dell ambiguita e superfluo dato il flow di utilizzo attuale? per di piu le chips delle work hanno il tasto di ricarica lotti. ricordarsi che quando si ricarica un lotto si sta creando una nuova mix in realta e quindi devono cambiare le informazioni della chips e nei drawer. l unica ambiguita sensata è la presenza nella work di crm scaduti. ecco in quel caso sarebbe il caso di segnalarlo)
- 
-
-
-quando si importa una mix con composti mancanti rispetto allo schema sarebbe il caso di mettere (nella chips del work e nei dettagli catena tracciabilita e compsoti) anche gli analiti che non sono nello schema magari evidenziandoli in qualche modo nel drawer (adesso la work importata ha solo le concentrazioni dei composti dello schema in cui viene importato ed elimina completamente gli altri)
+ce un problema con l'archiviazione... 
 
 
 
-
+mettere il collegamento al db composti anche per la colonna anliti del scehma calibrazione. se lanalita ha i crm attivi visualizzare la tabella coi composti non dismessi. se il composto ha solo crm dismessi o inesitenti puntare alla tabella con il filtro mostra dismessi attivo.
 
 
  

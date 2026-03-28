@@ -538,17 +538,26 @@ export function registerWorkIpc(): void {
     return { ok: true, new_work_id: Number(newId) }
   })
 
-  // ── LIST-FOR-IMPORT: works importabili in un metodo (non già collegate) ──
+  // ── LIST-FOR-IMPORT: works importabili in un metodo ──
+  // Regola: work non archiviata, non già collegata al metodo corrente,
+  // appartenente a un metodo che condivide almeno un analita con il metodo corrente.
+  // Il check è a livello di metodo (non di ingredienti) per coprire anche work
+  // che usano work intermedie come sorgenti.
   ipcMain.handle('work:list-for-import', (_, metodoId: string) => {
     const db = getDb()
     const works = db.prepare(`
-      SELECT w.*,
+      SELECT DISTINCT w.*,
         (SELECT GROUP_CONCAT(wm.metodo_id) FROM work_metodi wm WHERE wm.work_id = w.id) AS metodi_csv,
         (SELECT COUNT(*) FROM work_ingredienti WHERE work_id = w.id) AS n_ingredienti
       FROM work w
+      JOIN work_metodi wm_other ON wm_other.work_id = w.id
+      JOIN metodo_analiti ma_other ON ma_other.metodo_id = wm_other.metodo_id
+      JOIN metodo_analiti ma_cur   ON LOWER(ma_cur.nome) = LOWER(ma_other.nome)
+                                   AND ma_cur.metodo_id = ?
       WHERE (w.archiviato = 0 OR w.archiviato IS NULL)
+        AND w.id NOT IN (SELECT work_id FROM work_metodi WHERE metodo_id = ?)
       ORDER BY w.created_at DESC
-    `).all() as any[]
+    `).all(metodoId, metodoId) as any[]
 
     const stmtIngr = db.prepare(`
       SELECT wi.*,
