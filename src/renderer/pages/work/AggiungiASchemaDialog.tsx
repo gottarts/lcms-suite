@@ -85,14 +85,14 @@ export function AggiungiASchemaDialog({ open, workId, workNome, onClose }: Props
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Carica metodi all'apertura
+  // Carica metodi con analiti condivisi con la work
   useEffect(() => {
-    if (!open) return
+    if (!open || !workId) return
     setSelectedMetodoId('')
     setSchemaState(null)
     setError(null)
-    metodiApi.list().then(setMetodi).catch(() => setMetodi([]))
-  }, [open])
+    metodiApi.listForWork(workId).then(setMetodi).catch(() => setMetodi([]))
+  }, [open, workId])
 
   // Carica schema del metodo selezionato
   useEffect(() => {

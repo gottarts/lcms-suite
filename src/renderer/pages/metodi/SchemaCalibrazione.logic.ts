@@ -333,8 +333,9 @@ export function verificaCompatibilitaCrm(
 
   for (const ing of (dbWork.ingredienti ?? [])) {
     if (ing.source_type === 'crm' && !crmIds.has(ing.source_id)) {
-      if (!mancanti.includes(ing.source_nome ?? `ID ${ing.source_id}`))
-        mancanti.push(ing.source_nome ?? `ID ${ing.source_id}`)
+      const label = ing.source_mix_nome ?? ing.source_nome ?? `ID ${ing.source_id}`
+      if (!mancanti.includes(label))
+        mancanti.push(label)
     }
   }
   return { compatibile: mancanti.length === 0, mancanti }
@@ -366,6 +367,12 @@ export function ricostruisciWorkInSchema(
           if (!seenExtraMix.has(ing.source_mix_id)) {
             seenExtraMix.add(ing.source_mix_id)
             extraSrcs.push({ id: ing.source_mix_id, nome: ing.source_mix_nome ?? ing.source_nome ?? '', tipo: 'mix' })
+          }
+        } else if (ing.source_mix_nome) {
+          const key = `fc:${ing.source_mix_nome}`
+          if (!seenExtraMix.has(key)) {
+            seenExtraMix.add(key)
+            extraSrcs.push({ id: key, nome: ing.source_mix_nome, tipo: 'mix' })
           }
         } else {
           extraSrcs.push({ id: String(ing.source_id), nome: ing.source_nome ?? `ID ${ing.source_id}`, tipo: 'sng' })

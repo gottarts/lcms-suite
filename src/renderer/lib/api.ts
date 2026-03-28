@@ -10,6 +10,7 @@ export const strumentiApi = {
 
 export const metodiApi = {
   list: () => api.invoke('metodi:list') as Promise<any[]>,
+  listForWork: (workId: number) => api.invoke('metodi:list-for-work', workId) as Promise<any[]>,
   get: (id: string) => api.invoke('metodi:get', id) as Promise<any>,
   create: (data: Record<string, unknown>) => api.invoke('metodi:create', data) as Promise<any>,
   update: (id: string, data: Record<string, unknown>) => api.invoke('metodi:update', id, data) as Promise<any>,

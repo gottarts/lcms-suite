@@ -11,6 +11,20 @@ export function registerMetodiIpc(): void {
     ).all()
   })
 
+  ipcMain.handle('metodi:list-for-work', (_, workId: number) => {
+    return getDb().prepare(
+      `SELECT DISTINCT m.*, s.codice AS strumento_codice
+       FROM metodi m
+       LEFT JOIN strumenti s ON s.id = m.strumento_id
+       JOIN metodo_analiti ma ON ma.metodo_id = m.id
+       JOIN work_ingredienti wi
+         ON wi.work_id = ?
+         AND wi.source_type = 'crm'
+         AND LOWER((SELECT nome FROM composti WHERE id = wi.source_id)) = LOWER(ma.nome)
+       ORDER BY m.nome`
+    ).all(workId)
+  })
+
   ipcMain.handle('metodi:get', (_, id: string) => {
     const metodo = getDb().prepare(
       `SELECT m.*, s.codice AS strumento_codice
