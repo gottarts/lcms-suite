@@ -286,6 +286,16 @@ function ColonneWork({
                           borderRadius:4, padding:'2px 6px',
                         }}>{s.nome}</span>
                       ))}
+                      {(w.extraSrcs ?? []).map(s => (
+                        <span key={s.id} style={{
+                          fontSize:9, fontFamily:'IBM Plex Mono, monospace',
+                          background:'#fef3c7', color:'#92400e',
+                          border:'1px solid #f59e0b',
+                          borderRadius:4, padding:'2px 6px',
+                        }} title="Presente nella work ma non in questo schema">
+                          ⚠ {s.nome}
+                        </span>
+                      ))}
                     </div>
 
                     {/* Tabella volumi mini */}
@@ -364,6 +374,16 @@ interface DrawerProps {
 
 function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDelete }: DrawerProps) {
   const [search, setSearch] = useState('')
+  const [dbWork, setDbWork] = useState<any>(null)
+
+  useEffect(() => {
+    if (work?.dbId) {
+      workApi.get(work.dbId).then(setDbWork).catch(() => setDbWork(null))
+    } else {
+      setDbWork(null)
+    }
+  }, [work?.dbId])
+
   if (!work) return null
 
   const isInter  = colIdx > 0
@@ -375,6 +395,32 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
   const comps    = search
     ? allComps.filter(c => c.nome.toLowerCase().includes(search.toLowerCase()))
     : allComps
+
+  // Composti extra: presenti nella work DB ma non coperti dai crmItems dello schema
+  const crmIdSet = new Set(crmItems.map(c => c.id))
+  const extraComps: Array<{ nome: string; concInWork: number; unita: string; srcNome: string }> = []
+  if (dbWork?.ingredienti) {
+    const seenExtraMixComp = new Set<string>()
+    for (const ing of dbWork.ingredienti as any[]) {
+      if (ing.source_type !== 'crm') continue
+      if (crmIdSet.has(ing.source_id)) continue
+      // Calcola concentrazione nella work
+      let concInWork: number
+      if (ing.modo_calcolo === 'dil' && ing.fattore_diluizione) {
+        concInWork = (ing.source_cv ?? 0) / ing.fattore_diluizione
+      } else if (ing.modo_calcolo === 'conc' && ing.conc_target_mgL != null) {
+        concInWork = ing.conc_target_mgL
+      } else {
+        concInWork = ing.source_cv ?? 0
+      }
+      const srcNome = ing.source_mix_nome ?? ing.source_mix_id ?? (ing.source_nome ?? '')
+      const key = ing.source_mix_id ? `mix:${ing.source_mix_id}:${ing.source_id}` : `sng:${ing.source_id}`
+      if (!seenExtraMixComp.has(key)) {
+        seenExtraMixComp.add(key)
+        extraComps.push({ nome: ing.source_nome ?? `ID ${ing.source_id}`, concInWork, unita: ing.source_unita_conc ?? 'mg/L', srcNome })
+      }
+    }
+  }
 
   const workIdx = workCols[colIdx]?.findIndex(x => x.id === work.id) ?? -1
 
@@ -582,6 +628,19 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                         marginBottom:6 }}>Catena di tracciabilità</div>
           <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
             <ChainNode w={work} ci={colIdx} />
+            {(work.extraSrcs ?? []).map(s => (
+              <div key={s.id} style={{ display:'flex', alignItems:'center', gap:8,
+                                       fontSize:11, paddingLeft:16 }}>
+                <div style={{ width:8, height:8, borderRadius:2, flexShrink:0,
+                              background:'#f59e0b' }} />
+                <div>
+                  <div style={{ fontFamily:'IBM Plex Mono, monospace', color:'#92400e' }}>
+                    ⚠ {s.nome}
+                  </div>
+                  <div style={{ fontSize:9, color:'#b45309' }}>fuori schema</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -592,7 +651,7 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
           <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
                         textTransform:'uppercase', letterSpacing:'0.08em',
                         marginBottom:6 }}>
-            Composti ({allComps.length})
+            Composti ({allComps.length}{extraComps.length > 0 ? ` + ${extraComps.length} fuori schema` : ''})
           </div>
           <input
             placeholder="Filtra composti..."
@@ -625,6 +684,32 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
               </div>
             </div>
           ))}
+          {extraComps.length > 0 && (
+            <>
+              <div style={{ fontSize:10, fontWeight:700, color:'#92400e',
+                            textTransform:'uppercase', letterSpacing:'0.08em',
+                            marginTop:10, marginBottom:4 }}>
+                Non in questo schema ({extraComps.length})
+              </div>
+              {extraComps.map((c, i) => (
+                <div key={i} style={{
+                  display:'flex', justifyContent:'space-between', alignItems:'center',
+                  padding:'5px 8px', background:'#fffbeb',
+                  borderBottom:'1px solid #fde68a', fontSize:11,
+                }}>
+                  <div>
+                    <div style={{ fontWeight:500, color:'#92400e' }}>⚠ {c.nome}</div>
+                    <div style={{ fontSize:10, color:'#b45309',
+                                  fontFamily:'IBM Plex Mono, monospace' }}>{c.srcNome}</div>
+                  </div>
+                  <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:11,
+                                color:'#92400e', fontWeight:500 }}>
+                    {c.concInWork.toFixed(4)} {c.unita}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
       </div>

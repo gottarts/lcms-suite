@@ -37,6 +37,7 @@ export interface WorkInSchema {
   op: string
   srcs: SorgenteSel[]
   vols: Ingrediente[]
+  extraSrcs?: Array<{ id: string; nome: string; tipo: 'mix' | 'sng' }>
 }
 
 export interface CrmItem {

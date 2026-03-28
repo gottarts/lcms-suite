@@ -354,11 +354,24 @@ export function ricostruisciWorkInSchema(
   const srcs: SorgenteSel[] = []
   const vols: Ingrediente[] = []
   const seenMix = new Set<string>()
+  const extraSrcs: Array<{ id: string; nome: string; tipo: 'mix' | 'sng' }> = []
+  const seenExtraMix = new Set<string>()
 
   for (const ing of ingredienti) {
     if (ing.source_type === 'crm') {
       const crm = crmItems.find(c => c.id === ing.source_id)
-      if (!crm) continue // sarà segnalato da verificaCompatibilitaCrm
+      if (!crm) {
+        // Compound non in schema corrente: raccogliamo come "extra"
+        if (ing.source_mix_id) {
+          if (!seenExtraMix.has(ing.source_mix_id)) {
+            seenExtraMix.add(ing.source_mix_id)
+            extraSrcs.push({ id: ing.source_mix_id, nome: ing.source_mix_nome ?? ing.source_nome ?? '', tipo: 'mix' })
+          }
+        } else {
+          extraSrcs.push({ id: String(ing.source_id), nome: ing.source_nome ?? `ID ${ing.source_id}`, tipo: 'sng' })
+        }
+        continue
+      }
 
       if (crm.mix_id) {
         if (seenMix.has(crm.mix_id)) continue // già aggiunto come mix
@@ -426,6 +439,7 @@ export function ricostruisciWorkInSchema(
     op: dbWork.operatore ?? '',
     srcs,
     vols,
+    extraSrcs: extraSrcs.length > 0 ? extraSrcs : undefined,
   }
 }
 
