@@ -40,9 +40,9 @@ export function GrigliaAnalitiCrm({
 }: GrigliaProps) {
   const navigate = useNavigate()
 
-  const goToComposto = (nome: string) => {
+  const goToComposto = (nome: string, mostraDismessi: boolean) => {
     onClose()
-    navigate('/composti', { state: { searchFilter: nome } })
+    navigate('/composti', { state: { searchFilter: nome, mostraDismessi } })
   }
 
   // mix_id → array nomi analiti (usato per layout righe)
@@ -252,11 +252,21 @@ export function GrigliaAnalitiCrm({
                       border:`1px ${senzaCrm ? 'dashed' : (a.isIS ? 'dashed' : 'solid')} ${senzaCrm ? C.page.brd : C.ana.border}`,
                       opacity: senzaCrm ? 0.4 : (a.isIS ? 0.68 : 1),
                       borderRadius:8, padding:'4px 8px', fontSize:11,
-                      fontFamily:'IBM Plex Mono, monospace', whiteSpace:'nowrap',
-                      overflow:'hidden', textOverflow:'ellipsis', width:'100%',
+                      fontFamily:'IBM Plex Mono, monospace', width:'100%',
                       color: senzaCrm ? C.page.th : undefined,
+                      display:'flex', alignItems:'center', justifyContent:'space-between', gap:4,
                     }}>
-                      {a.nome}{a.isIS ? ' [IS]' : ''}{senzaCrm ? ' ·' : ''}
+                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>
+                        {a.nome}{a.isIS ? ' [IS]' : ''}{senzaCrm ? ' ·' : ''}
+                      </span>
+                      <button
+                        onClick={e => { e.stopPropagation(); goToComposto(a.nome, senzaCrm) }}
+                        title="Apri nel DB Composti"
+                        style={{
+                          flexShrink:0, background:'none', border:'none', cursor:'pointer',
+                          padding:'0 1px', fontSize:10, opacity:0.55, color:'inherit', lineHeight:1,
+                        }}
+                      >↗</button>
                     </div>
                   </div>
 
@@ -327,7 +337,7 @@ export function GrigliaAnalitiCrm({
                           {!isRem && (
                             <div style={{ display:'flex', gap:3, flexShrink:0 }}>
                               <button
-                                onClick={e => { e.stopPropagation(); goToComposto(crm.nome) }}
+                                onClick={e => { e.stopPropagation(); goToComposto(crm.nome, false) }}
                                 style={{
                                   width:15, height:15, borderRadius:3,
                                   border:`1px solid ${C.page.brd}`,
@@ -401,7 +411,7 @@ export function GrigliaAnalitiCrm({
                   <div style={{ position:'absolute', top:4, right:4,
                                 display:'flex', gap:3, zIndex:3 }}>
                     <button
-                      onClick={e => { e.stopPropagation(); goToComposto(a.mixId!) }}
+                      onClick={e => { e.stopPropagation(); goToComposto(a.mixId!, false) }}
                       style={{
                         width:15, height:15, borderRadius:3,
                         border:`1px solid ${C.page.brd}`,
