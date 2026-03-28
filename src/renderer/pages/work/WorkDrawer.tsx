@@ -365,11 +365,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema }: 
           <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800 space-y-2">
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>
-                {work.motivo_blocco === 'ambiguo'
-                  ? 'Più lotti disponibili per uno o più CRM. Scegli il lotto corretto nello Schema.'
-                  : 'Uno o più CRM sono stati dismessi. Aggiorna i lotti nello Schema.'}
-              </span>
+              <span>Uno o più CRM sono stati dismessi. Aggiorna i lotti nello Schema.</span>
             </div>
             {onVaiASchema && work.metodi_ids?.length > 0 && (
               <Button
@@ -381,6 +377,16 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema }: 
                 Vai allo Schema ↗
               </Button>
             )}
+          </div>
+        )}
+
+        {/* Banner CRM scaduti (warning, non blocco) */}
+        {!isBloccata && !!work.ha_crm_scaduti && (
+          <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Uno o più CRM usati in questa work risultano scaduti. Verifica lo stato nel DB Composti.</span>
+            </div>
           </div>
         )}
 
@@ -489,7 +495,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema }: 
                 variant="outline"
                 onClick={() => { setPrepData(new Date().toISOString().slice(0, 10)); setPrepForm(true) }}
                 disabled={isBloccata}
-                title={isBloccata ? (work.motivo_blocco === 'ambiguo' ? 'Più lotti disponibili: vai allo Schema per scegliere' : 'Work bloccata: uno o più lotti CRM sono stati dismessi') : undefined}
+                title={isBloccata ? 'Work bloccata: uno o più CRM sono stati dismessi' : undefined}
               >
                 <FlaskConical className="h-3.5 w-3.5 mr-1" />
                 {work.ultima_preparazione ? 'Rinnova preparazione' : 'Registra preparazione'}

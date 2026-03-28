@@ -137,6 +137,7 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
   const isBloccata = !!work.bloccata
+  const haScaduti = !!work.ha_crm_scaduti
   const statoLab = work.stato_lab as string | null | undefined
   const statoBadge = statoLab ? STATO_LAB_BADGE[statoLab] : null
 
@@ -159,7 +160,13 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick
           {isBloccata && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-300 text-red-700 bg-red-50 flex items-center gap-1">
               <AlertCircle className="h-2.5 w-2.5" />
-              {work.motivo_blocco === 'ambiguo' ? 'Lotti ambigui' : 'CRM dismessi'}
+              CRM dismessi
+            </Badge>
+          )}
+          {!isBloccata && haScaduti && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
+              <AlertCircle className="h-2.5 w-2.5" />
+              CRM scaduti
             </Badge>
           )}
           {isIntermedia && (
@@ -213,7 +220,7 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema }: { work: any; onClick
               className="h-6 text-[10px] px-2 flex-1"
               onClick={onPrepara}
               disabled={isBloccata}
-              title={isBloccata ? (work.motivo_blocco === 'ambiguo' ? 'Più lotti disponibili: vai allo Schema per scegliere' : 'Work bloccata: uno o più lotti CRM sono stati dismessi') : undefined}
+              title={isBloccata ? 'Work bloccata: uno o più CRM sono stati dismessi' : undefined}
             >
               <FlaskConical className="h-3 w-3 mr-1" />
               {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}

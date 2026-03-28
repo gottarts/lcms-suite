@@ -2,7 +2,9 @@
 
  
 
-Lo schema di uso deve essere che operatore puo creare una preparazione work se lo schema ha tutti i crm attivi con lotti validi e definiti. se ci sono ambiguita (piu lotti validi o lotto originale dismesso e aggiunta di un nuovo lotto) loperatore deve andare in schemi e creare una nuova work. A quel puonto la vecchia work card viene archiviata (con tutto il suo storico di preparazioni sorgenti e lotti)
+2026-03-28-feat-flusso-operatore-blocco-ambiguita-resoconto-sessione
+Analisi critica del sistema di gestione Work — problemi aperti
+(rispetto a tutti gli 8 punti e chiaro che ci vuole una semplificazione. Lasciando perdere il caso estremo dei lotti dismessi, in caso di ambiguita come avere piu lotti del crm la cosa è gia gestita dallo schema  in quanto l operatore scegli il crm da usare. anche il meccanismo attuale di eliminazione in caso di presenza di piu tipi di crm mix o soluiozne è inutile poi che l operatore seleziona volutamente il crm che vuole usare per creare la work. dico giusto se dico che questo meccanismo dell ambiguita e superfluo dato il flow di utilizzo attuale? per di piu le chips delle work hanno il tasto di ricarica lotti. ricordarsi che quando si ricarica un lotto si sta creando una nuova mix in realta e quindi devono cambiare le informazioni della chips e nei drawer. l unica ambiguita sensata è la presenza nella work di crm scaduti. ecco in quel caso sarebbe il caso di segnalarlo)
  
 
 

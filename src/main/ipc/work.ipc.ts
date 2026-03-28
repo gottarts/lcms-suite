@@ -42,8 +42,16 @@ export function registerWorkIpc(): void {
           WHERE wi.work_id = w.id
             AND wi.source_type = 'crm'
             AND c.data_dismissione IS NULL
-            AND (SELECT COUNT(*) FROM composti c3 WHERE c3.nome = c.nome AND c3.data_dismissione IS NULL) > 1
-        ) AS n_ingredienti_ambigui,
+            AND c.scadenza_prodotto IS NOT NULL
+            AND c.scadenza_prodotto < date('now')
+            AND (
+              (SELECT MAX(nuova_scadenza) FROM composti_storia
+               WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) IS NULL
+              OR
+              (SELECT MAX(nuova_scadenza) FROM composti_storia
+               WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) < date('now')
+            )
+        ) AS n_ingredienti_scaduti,
         (SELECT wp.id         FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
         (SELECT wp.data_prep  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
         (SELECT wp.note       FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
@@ -65,13 +73,14 @@ export function registerWorkIpc(): void {
       } : null
       const { _up_id, _up_data_prep, _up_note, _up_operatore, _up_created_at, ...rest } = w
       const nBloccati = w.n_ingredienti_bloccati as number
-      const nAmbigui  = w.n_ingredienti_ambigui  as number
+      const nScaduti  = w.n_ingredienti_scaduti  as number
       return {
         ...rest,
         ultima_preparazione: ultimaPrep,
         stato_lab: calcolaStatoLab(ultimaPrep, w.validita_mesi),
-        bloccata: nBloccati > 0 || nAmbigui > 0,
-        motivo_blocco: nBloccati > 0 ? 'dismesso' : nAmbigui > 0 ? 'ambiguo' : null,
+        bloccata: nBloccati > 0,
+        motivo_blocco: nBloccati > 0 ? 'dismesso' : null,
+        ha_crm_scaduti: nScaduti > 0,
       }
     })
   })
@@ -141,11 +150,26 @@ export function registerWorkIpc(): void {
     const nBloccati = (work.ingredienti as any[]).filter(
       (i: any) => i.source_type === 'crm' && i.source_dismissione !== null
     ).length
-    const nAmbigui = (work.ingredienti as any[]).filter(
-      (i: any) => i.source_type === 'crm' && i.source_dismissione === null && (i.n_lotti_validi_stesso_nome as number) > 1
-    ).length
-    work.bloccata     = nBloccati > 0 || nAmbigui > 0
-    work.motivo_blocco = nBloccati > 0 ? 'dismesso' : nAmbigui > 0 ? 'ambiguo' : null
+    const nScaduti = (db.prepare(`
+      SELECT COUNT(*) AS cnt
+      FROM work_ingredienti wi
+      JOIN composti c ON c.id = wi.source_id
+      WHERE wi.work_id = ?
+        AND wi.source_type = 'crm'
+        AND c.data_dismissione IS NULL
+        AND c.scadenza_prodotto IS NOT NULL
+        AND c.scadenza_prodotto < date('now')
+        AND (
+          (SELECT MAX(nuova_scadenza) FROM composti_storia
+           WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) IS NULL
+          OR
+          (SELECT MAX(nuova_scadenza) FROM composti_storia
+           WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) < date('now')
+        )
+    `).get(id) as any).cnt as number
+    work.bloccata      = nBloccati > 0
+    work.motivo_blocco = nBloccati > 0 ? 'dismesso' : null
+    work.ha_crm_scaduti = nScaduti > 0
 
     return work
   })
