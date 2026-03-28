@@ -117,7 +117,7 @@ interface ColonneWorkProps {
   onOpenDrawer: (w: WorkInSchema, colIdx: number) => void
   onAddCol: () => void
   registerCardRef: RegisterCardRef
-  blockedMap: Map<number, boolean>
+  blockedMap: Map<number, { bloccata: boolean; haScaduti: boolean }>
   onRicaricaWork: (dbId: number) => void
 }
 
@@ -179,7 +179,9 @@ function ColonneWork({
               {works.map((w, wi) => {
                 const canBeSrc   = !hasCon
                 const isSel      = selSrcs.has(w.id)
-                const isBloccata = w.dbId ? (blockedMap.get(w.dbId) ?? false) : false
+                const stateEntry = w.dbId ? (blockedMap.get(w.dbId) ?? null) : null
+                const isBloccata = stateEntry?.bloccata ?? false
+                const haScaduti  = stateEntry?.haScaduti ?? false
                 const usedVol    = w.vols.reduce((a, v) => a + v.vol, 0)
                 const solvVol    = Math.max(0, w.volFin - usedVol)
                 const neg        = usedVol > w.volFin
@@ -251,6 +253,11 @@ function ColonneWork({
                     {isBloccata && (
                       <div style={{ fontSize:9, color:'#dc2626', fontWeight:600, marginTop:1 }}>
                         ⚠ Lotti CRM dismessi
+                      </div>
+                    )}
+                    {haScaduti && !isBloccata && (
+                      <div style={{ fontSize:9, color:'#92400e', fontWeight:600, marginTop:1 }}>
+                        ⚠ CRM scaduti
                       </div>
                     )}
                     <div style={{ fontSize:10, color:C.page.t2, marginTop:2,
@@ -651,7 +658,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [drawerCol,    setDrawerCol]    = useState(0)
   const [schemaLoaded, setSchemaLoaded] = useState(false)
   const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
-  const [blockedMap, setBlockedMap] = useState<Map<number, boolean>>(new Map())
+  const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean }>>(new Map())
   const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
   const [importOpen, setImportOpen] = useState(false)
 
@@ -685,9 +692,9 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     let cancelled = false
     Promise.all(allDbIds.map(id => workApi.get(id))).then(results => {
       if (cancelled) return
-      const map = new Map<number, boolean>()
+      const map = new Map<number, { bloccata: boolean; haScaduti: boolean }>()
       for (const w of results) {
-        if (w?.id != null) map.set(w.id, !!w.bloccata)
+        if (w?.id != null) map.set(w.id, { bloccata: !!w.bloccata, haScaduti: !!w.ha_crm_scaduti })
       }
       setBlockedMap(map)
     }).catch(() => {})
@@ -813,7 +820,12 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const handleDeleteWork = useCallback((colIdx: number, workIdx: number) => {
     setWorkCols(prev => {
       const cols = prev.map(c => [...c])
-      const wid  = cols[colIdx]?.[workIdx]?.id
+      const w    = cols[colIdx]?.[workIdx]
+      const wid  = w?.id
+      // Archivia il record DB se la work aveva un dbId (evita orfani nel DB)
+      if (w?.dbId) {
+        workApi.archivia(w.dbId, 'Rimossa dallo schema').catch(() => {})
+      }
       cols[colIdx].splice(workIdx, 1)
       if (wid) setSelSrcs(p => { const m = new Map(p); m.delete(wid); return m })
       // Rimuovi colonne vuote in coda (mantieni la 0)

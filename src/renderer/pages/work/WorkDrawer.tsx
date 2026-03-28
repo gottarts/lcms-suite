@@ -17,6 +17,7 @@ interface WorkDrawerProps {
   onEdit: (work: any) => void
   onDelete: (id: number) => void
   onVaiASchema?: (metodoId: string) => void
+  metodiNomi?: Record<string, string>
 }
 
 const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
@@ -163,7 +164,7 @@ function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchem
 
 // ── Componente principale ────────────────────────────────────────────────────
 
-export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema }: WorkDrawerProps) {
+export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema, metodiNomi }: WorkDrawerProps) {
   const [work, setWork]           = useState<any>(null)
   const [workChain, setWorkChain] = useState<Map<number, any>>(new Map())
   const [storico, setStorico]     = useState<any[]>([])
@@ -368,14 +369,31 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onVaiASchema }: 
               <span>Uno o più CRM sono stati dismessi. Aggiorna i lotti nello Schema.</span>
             </div>
             {onVaiASchema && work.metodi_ids?.length > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-orange-400 text-orange-800 hover:bg-orange-100 h-7 text-xs w-full"
-                onClick={() => onVaiASchema(work.metodi_ids[0])}
-              >
-                Vai allo Schema ↗
-              </Button>
+              work.metodi_ids.length === 1 ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-orange-400 text-orange-800 hover:bg-orange-100 h-7 text-xs w-full"
+                  onClick={() => onVaiASchema(work.metodi_ids[0])}
+                >
+                  Vai allo Schema ↗
+                </Button>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <div className="text-xs opacity-70">Scegli il metodo:</div>
+                  {(work.metodi_ids as string[]).map((mid: string) => (
+                    <Button
+                      key={mid}
+                      size="sm"
+                      variant="outline"
+                      className="border-orange-400 text-orange-800 hover:bg-orange-100 h-7 text-xs w-full"
+                      onClick={() => onVaiASchema(mid)}
+                    >
+                      {metodiNomi?.[mid] ?? mid} ↗
+                    </Button>
+                  ))}
+                </div>
+              )
             )}
           </div>
         )}

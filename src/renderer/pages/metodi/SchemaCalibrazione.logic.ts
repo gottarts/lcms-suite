@@ -260,15 +260,6 @@ export async function salvaWorkNelDb(
 ): Promise<number | null> {
   if (!w.validitaMesi) return null   // "al momento" → non salvare nel DB
 
-  // Se la work esiste già nel DB e risulta bloccata → l'archiviamo dopo aver creato la nuova
-  let vecchioIdBloccato: number | null = null
-  if (w.dbId) {
-    const vecchia: any = await (window as any).electronAPI.invoke('work:get', w.dbId)
-    if (vecchia?.bloccata) {
-      vecchioIdBloccato = w.dbId
-    }
-  }
-
   // Risolvi gli ingredienti: per i mix usa l'id numerico del primo composto del mix
   const ingredienti = w.vols.flatMap((ing, i) => {
     const src = w.srcs[i]
@@ -326,15 +317,6 @@ export async function salvaWorkNelDb(
 
   const result: any = await (window as any).electronAPI.invoke('work:create', payload)
   const newId: number | null = result?.id ?? null
-
-  // Archivia la vecchia work bloccata se ne esisteva una
-  if (vecchioIdBloccato && newId) {
-    await (window as any).electronAPI.invoke(
-      'work:archivia',
-      vecchioIdBloccato,
-      `Sostituita da work '${w.nome}' — lotti aggiornati`
-    )
-  }
 
   return newId
 }

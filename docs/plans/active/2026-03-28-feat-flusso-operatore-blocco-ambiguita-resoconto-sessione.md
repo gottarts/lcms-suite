@@ -76,37 +76,67 @@ Il sistema bloccava le work per "ambiguità CRM" (≥2 lotti attivi con lo stess
 
 ---
 
-### 2. Lo Schema non mostra lo stato delle work collegate 🔴 Aperto
+### 2. Lo Schema non mostra lo stato delle work collegate ✅ Risolto
 
-Quando un operatore apre SchemaCalibrazione per risolvere un problema, non vede quale work è bloccata, né quando è stata preparata l'ultima volta, né se ha CRM scaduti. Le work card nello schema non hanno indicatori di stato.
+Quando un operatore apre SchemaCalibrazione per risolvere un problema, non vedeva quale work era bloccata né se aveva CRM scaduti. Le work card nello schema non avevano indicatori di stato.
 
-**Soluzione ipotetica:** Le work card nello schema dovrebbero mostrare il badge stato e l'ultima data di preparazione, caricati live da `work:get`.
+**Risolto nella sessione `2026-03-28-fix-criticita-work`.**
+
+**Implementazione:** Il componente `ColonneWork` caricava già i record DB via `workApi.get()` per popolare `blockedMap`. È stato sufficiente estendere il tipo da `Map<number, boolean>` a `Map<number, { bloccata: boolean; haScaduti: boolean }>` e aggiornare sia il `useEffect` di popolamento che il rendering delle card.
+
+**Risultato visivo nelle card dello schema:**
+- Work con CRM dismessi: `⚠ Lotti CRM dismessi` in rosso (`#dc2626`) — la card mostra il nome in arancio e il pulsante "Ricarica ↻" in basso a destra.
+- Work con CRM scaduti (non bloccata): `⚠ CRM scaduti` in arancio scuro (`#92400e`) — l'operatore può ancora preparare la work ma viene avvisato direttamente nella card schema, coerente con il badge già presente in WorkPage.
+- Work senza problemi: nessun badge aggiuntivo.
+
+**Esempio:** Schema con 3 work calibrazione. Work "CAL-5 µg/L" usa il CRM "Pesticidi MIX" scaduto da un mese. La card nello schema ora mostra il badge giallo `⚠ CRM scaduti` senza che l'operatore debba aprire WorkDrawer per scoprirlo.
 
 ---
 
-### 3. La relazione schema→work non è esplicita nel DB — race condition sul salvataggio dbId ✅ Risolto (parzialmente)
+### 3. La relazione schema→work non è esplicita nel DB — race condition sul salvataggio dbId ✅ Risolto
 
 La corrispondenza schema→work è salvata solo nel JSON blob di `schema_calibrazione`. Il `dbId` nello schema può puntare a una work archiviata se il salvataggio non avviene correttamente dopo la sostituzione.
 
 **Stato:** Il rischio race-condition è risolto nella sessione `2026-03-28-fix-dbid-schema-ricarica`: `RicaricaDialog.onSuccess` ora chiama `schemaCalApi.save` **immediatamente** dentro l'updater di `setWorkCols`, senza dipendere dal debounce da 500ms.
 
-**Ancora aperto:** Il path di archiviazione in `salvaWorkNelDb` (linee 263–269 di `SchemaCalibrazione.logic.ts`) è **dead code**: `handleSaveWork` crea sempre work con `Omit<..., 'dbId'>`, quindi `w.dbId` è sempre undefined e il blocco non si attiva mai. La relazione schema→work rimane implicita nel JSON senza FK DB.
+**Dead code rimosso nella sessione `2026-03-28-fix-criticita-work`:** Le righe 263–269 di `salvaWorkNelDb` (blocco `if (w.dbId) { ... vecchioIdBloccato }`) e le righe 330–337 (archivio condizionale post-creazione) sono state rimosse. Erano irraggiungibili: `handleSaveWork` chiama `salvaWorkNelDb(work, ...)` dove `work = { ...data, id }` con `data: Omit<WorkInSchema, 'id' | 'dbId'>`, quindi `w.dbId` era sempre `undefined`.
+
+**Ancora aperto:** La relazione schema→work rimane implicita nel JSON senza FK DB. Problema architetturale rinviato.
 
 ---
 
-### 4. `salvaWorkNelDb` crea sempre una nuova work, anche senza necessità 🔴 Aperto
+### 4. Work orfane nel DB quando eliminate dallo schema ✅ Risolto
 
-La funzione chiama sempre `work:create` anche quando la work non è bloccata (modifica parametri senza cambiare CRM). Il risultato è un **duplicato** con nuovo ID, non un aggiornamento in-place. La vecchia work rimane attiva.
+La funzione `handleDeleteWork` rimuoveva la work dall'array in memoria ma non archiviava il record DB. Il risultato era l'accumulo di record attivi orfani ogni volta che un operatore eliminava e ricreava una work nello schema.
 
-**Soluzione ipotetica:** Distinguere "modifica parametri" (→ `work:update`) da "cambio CRM" (→ crea nuova + archivia vecchia).
+**Risolto nella sessione `2026-03-28-fix-criticita-work`.**
+
+**Implementazione:** In `handleDeleteWork` (`SchemaCalibrazione.tsx`), prima di fare `splice`, si legge la work da rimuovere e, se ha un `dbId`, si chiama `workApi.archivia(w.dbId, 'Rimossa dallo schema')` in fire-and-forget (`.catch(() => {})`). Operazione non bloccante, non impatta la reattività dell'UI.
+
+**Esempio:** Scenario tipico prima del fix: schema con work "CAL-1" (dbId=12). L'operatore la elimina e ricrea con parametri diversi → nasce dbId=13. La work dbId=12 restava attiva nel DB come orfana. Dopo il fix: eliminando "CAL-1" dallo schema, il record dbId=12 viene archiviato con motivo "Rimossa dallo schema". WorkPage non la mostra più.
+
+**Nota:** Il path `salvaWorkNelDb` → `work:create` crea ancora una nuova work ad ogni salvataggio (non fa update in-place). Il fix qui riguarda solo la pulizia al momento della rimozione esplicita dall'utente. Il caso "modifica parametri senza cambiare CRM → work:update" rimane aperto (vedi nota sotto).
 
 ---
 
-### 5. Work condivise tra metodi complicano il flusso di blocco 🔴 Aperto
+### 5. Work condivise tra metodi complicano il flusso di blocco ✅ Risolto
 
-Il blocco (`bloccata`) è calcolato sui CRM ingredienti indipendentemente dal metodo. Il pulsante "Vai allo Schema ↗" naviga a `metodi_ids[0]` — se la work è condivisa tra più metodi, l'operatore potrebbe essere portato al metodo sbagliato.
+Il pulsante "Vai allo Schema ↗" in WorkDrawer navigava sempre a `metodi_ids[0]` — se la work era condivisa tra più metodi, l'operatore veniva portato al metodo sbagliato senza possibilità di scelta.
 
-**Soluzione ipotetica:** Mostrare una lista di metodi da scegliere prima di navigare allo schema.
+**Risolto nella sessione `2026-03-28-fix-criticita-work`.**
+
+**Implementazione:**
+- `WorkPage` ora carica `metodiApi.list()` in parallelo con `workApi.list()` e costruisce la mappa `metodiNomi: Record<string, string>` (id → nome metodo).
+- `WorkDrawer` riceve la prop `metodiNomi?: Record<string, string>`.
+- Nel banner bloccata: se `metodi_ids.length === 1`, comportamento invariato (un solo bottone "Vai allo Schema ↗"). Se `metodi_ids.length > 1`, si renderizza un bottone per ogni metodo con il nome leggibile (`metodiNomi[id]`) e una label "Scegli il metodo:" sopra.
+
+**Esempio:** Work "CAL-10 µg/L" bloccata, usata nei metodi "Metodo Pesticidi A" e "Metodo Pesticidi B". Il banner nel WorkDrawer mostra:
+```
+⚠ Uno o più CRM sono stati dismessi. Aggiorna i lotti nello Schema.
+Scegli il metodo:
+[ Metodo Pesticidi A ↗ ]
+[ Metodo Pesticidi B ↗ ]
+```
 
 ---
 
@@ -114,27 +144,30 @@ Il blocco (`bloccata`) è calcolato sui CRM ingredienti indipendentemente dal me
 
 `RicaricaDialog` è stato rimosso da `WorkPage`/`WorkDrawer` (rimpiazzato dal flusso schema-centrico). Tuttavia **è ancora presente e attivo in `SchemaCalibrazione.tsx`** per il caso in cui l'utente voglia aggiornare i lotti di una work direttamente dallo schema senza ricrearla da zero. Il handler `work:ricarica` in `work.ipc.ts` è quindi ancora usato.
 
-**Stato attuale:** Non è dead code. Va documentato che il flusso corretto per l'operatore (blocco CRM dismesso) passa per lo schema, ma `RicaricaDialog` rimane come shortcut per il chimico che gestisce lo schema.
+**Stato attuale:** Non è dead code. Il flusso corretto per l'operatore (blocco CRM dismesso) passa per lo schema, ma `RicaricaDialog` rimane come shortcut per il chimico che gestisce lo schema.
 
 ---
 
 ### 7. Nessun vincolo "una work per slot di schema" 🔴 Aperto
 
-Il sistema non impone al massimo una work attiva per colonna/livello per un dato metodo. La logica "archivia la vecchia" è opt-in e non è un vincolo DB.
+Il sistema non impone al massimo una work attiva per colonna/livello per un dato metodo. La logica "archivia la vecchia" è opt-in e non è un vincolo DB. Problema architetturale rinviato.
 
 ---
 
-### 8. Feedback stato work prima di tentare la preparazione ⚠️ Parzialmente risolto
+### 8. Feedback stato work prima di tentare la preparazione ✅ Risolto
 
-**Stato:** Il banner bloccata (rosso) e il warning scaduti (giallo) sono visibili in WorkDrawer al caricamento. Il badge in WorkCard anticipa lo stato prima di aprire il drawer. Il flusso è migliorato rispetto alla situazione iniziale, ma le work card nello schema non rispecchiano ancora lo stato lab.
+**Stato:** Il banner bloccata (rosso) e il warning scaduti (giallo) sono visibili in WorkDrawer. Il badge in WorkCard anticipa lo stato. Le work card in SchemaCalibrazione ora mostrano anch'esse i badge stato (fix 2 di questa sessione). Il flusso informativo è coerente su tutta l'applicazione.
 
 ---
 
 ## Note per sessioni future
 
-- **Chiuso**: race condition dbId dopo `RicaricaDialog` (risolto con save esplicito).
-- **Chiuso**: falso blocco "ambiguo" (rimosso; sostituito da warning scaduti non bloccante).
-- **Aperto — priorità media**: mostrare badge stato work (bloccata / scaduta) nelle card work di SchemaCalibrazione.
-- **Aperto — bug preesistente**: `salvaWorkNelDb` crea duplicati invece di aggiornare work non bloccate con `dbId` esistente.
-- **Aperto — dead code**: path archiviazione in `salvaWorkNelDb` (linee 263–269) non viene mai raggiunto nel flusso corrente.
+- **Chiuso**: race condition dbId dopo `RicaricaDialog`.
+- **Chiuso**: falso blocco "ambiguo" (rimosso; sostituito da warning scaduti).
+- **Chiuso**: badge stato work (bloccata / scaduta) nelle card SchemaCalibrazione.
+- **Chiuso**: work orfane nel DB all'eliminazione dallo schema.
+- **Chiuso**: dead code in `salvaWorkNelDb` (linee 263–269 rimosse).
+- **Chiuso**: picker metodo per work condivise in WorkDrawer.
+- **Aperto — bug preesistente**: `salvaWorkNelDb` chiama sempre `work:create` anche se la work non è bloccata. Se l'operatore modifica solo i parametri (non i CRM), viene creato un nuovo record invece di aggiornare quello esistente. Fix richiede: distinguere "modifica parametri" (→ `work:update`) da "cambio CRM" (→ crea nuova + archivia vecchia). Non implementato perché il path di edit in-place non è esposto nell'UI corrente.
+- **Aperto — architetturale**: nessun vincolo DB "una work attiva per slot di schema".
 - **Riferimento piano sessione**: `docs/plans/active/2026-03-28-feat-flusso-operatore-blocco-ambiguita-plan.md`

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { workApi } from '@/lib/api'
+import { workApi, metodiApi } from '@/lib/api'
 import { WorkDrawer } from './WorkDrawer'
 import { WorkForm } from './WorkForm'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -13,14 +13,18 @@ import { formatDate } from '@/lib/utils'
 export function WorkPage() {
   const navigate = useNavigate()
   const [works, setWorks] = useState<any[]>([])
+  const [metodiNomi, setMetodiNomi] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editWork, setEditWork] = useState<any>(null)
   const [drawerId, setDrawerId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const load = async () => {
-    const data = await workApi.list()
+    const [data, metodi] = await Promise.all([workApi.list(), metodiApi.list()])
     setWorks(data)
+    const nomi: Record<string, string> = {}
+    for (const m of metodi) { if (m.id) nomi[m.id] = m.nome ?? m.id }
+    setMetodiNomi(nomi)
   }
 
   useEffect(() => { load() }, [])
@@ -108,6 +112,7 @@ export function WorkPage() {
         onEdit={handleEdit}
         onDelete={id => { setDrawerId(null); setDeleteId(id) }}
         onVaiASchema={(metodoId) => { setDrawerId(null); navigate('/metodi', { state: { schemaMetodoId: metodoId } }) }}
+        metodiNomi={metodiNomi}
       />
 
       <ConfirmDialog
