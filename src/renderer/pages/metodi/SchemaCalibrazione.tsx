@@ -388,9 +388,6 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
 
   const isInter  = colIdx > 0
   const col      = isInter ? C.inter : C.work
-  const usedVol  = work.vols.reduce((a, v) => a + v.vol, 0)
-  const solvVol  = Math.max(0, work.volFin - usedVol)
-  const neg      = usedVol > work.volFin
   const allComps = getCompsFromWork(work, workCols, crmItems)
   const comps    = search
     ? allComps.filter(c => c.nome.toLowerCase().includes(search.toLowerCase()))
@@ -421,6 +418,29 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
       }
     }
   }
+
+  // Righe extra per tabella volumi: sorgenti crm non in schema (una riga per mix, una per singolo)
+  const extraVols: Array<{ nome: string; vol: number; dilFactor?: number; concTarget?: number }> = []
+  if (dbWork?.ingredienti) {
+    const seenExtraVol = new Set<string>()
+    for (const ing of dbWork.ingredienti as any[]) {
+      if (ing.source_type !== 'crm') continue
+      if (crmIdSet.has(ing.source_id)) continue
+      const key = ing.source_mix_id ? `mix:${ing.source_mix_id}` : `sng:${ing.source_id}`
+      if (seenExtraVol.has(key)) continue
+      seenExtraVol.add(key)
+      extraVols.push({
+        nome: ing.source_mix_nome ?? ing.source_nome ?? `ID ${ing.source_id}`,
+        vol: ing.volume_prelievo_ml ?? 0,
+        dilFactor: ing.fattore_diluizione ?? undefined,
+        concTarget: ing.conc_target_mgL ?? undefined,
+      })
+    }
+  }
+
+  const usedVol  = work.vols.reduce((a, v) => a + v.vol, 0) + extraVols.reduce((a, v) => a + v.vol, 0)
+  const solvVol  = Math.max(0, work.volFin - usedVol)
+  const neg      = usedVol > work.volFin
 
   const workIdx = workCols[colIdx]?.findIndex(x => x.id === work.id) ?? -1
 
@@ -497,6 +517,23 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
             </div>
           )
         })}
+        {(w.extraSrcs ?? []).map(s => (
+          <div key={`xs-${s.id}`}>
+            <div style={{ width:1, height:10, background:C.page.brd,
+                          marginLeft: depth * 16 + 3 }} />
+            <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11,
+                          paddingLeft:(depth + 1) * 16 }}>
+              <div style={{ width:8, height:8, borderRadius:2, flexShrink:0,
+                            background:'#f59e0b' }} />
+              <div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', color:'#92400e' }}>
+                  ⚠ {s.nome}
+                </div>
+                <div style={{ fontSize:9, color:'#b45309' }}>fuori schema</div>
+              </div>
+            </div>
+          </div>
+        ))}
       </>
     )
   }
@@ -569,6 +606,23 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                   </td>
                 </tr>
               ))}
+              {extraVols.map((v, i) => (
+                <tr key={`xv-${i}`} style={{ background:'#fffbeb' }}>
+                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                fontSize:11, borderBottom:'1px solid #fde68a', color:'#92400e' }}>
+                    ⚠ {v.nome}
+                  </td>
+                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                fontSize:11, borderBottom:'1px solid #fde68a', color:'#92400e' }}>
+                    {v.dilFactor ? `÷${v.dilFactor}` : (v.concTarget ? `${v.concTarget} mg/L` : '—')}
+                  </td>
+                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
+                                fontSize:11, fontWeight:700, borderBottom:'1px solid #fde68a',
+                                color:'#92400e' }}>
+                    {v.vol.toFixed(3)}
+                  </td>
+                </tr>
+              ))}
               {/* Riga solvente / warning */}
               <tr style={{ color:neg ? '#a32d2d' : C.page.th, fontStyle:'italic' }}>
                 {neg ? (
@@ -628,19 +682,6 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                         marginBottom:6 }}>Catena di tracciabilità</div>
           <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
             <ChainNode w={work} ci={colIdx} />
-            {(work.extraSrcs ?? []).map(s => (
-              <div key={s.id} style={{ display:'flex', alignItems:'center', gap:8,
-                                       fontSize:11, paddingLeft:16 }}>
-                <div style={{ width:8, height:8, borderRadius:2, flexShrink:0,
-                              background:'#f59e0b' }} />
-                <div>
-                  <div style={{ fontFamily:'IBM Plex Mono, monospace', color:'#92400e' }}>
-                    ⚠ {s.nome}
-                  </div>
-                  <div style={{ fontSize:9, color:'#b45309' }}>fuori schema</div>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -917,10 +958,15 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       const cols = prev.map(c => [...c])
       const w    = cols[colIdx]?.[workIdx]
       const wid  = w?.id
-      // Archivia il record DB se la work aveva un dbId (evita orfani nel DB)
       if (w?.dbId) {
-        workApi.archivia(w.dbId, 'Rimossa dallo schema').catch(() => {})
-        recentlyArchivedByCol.current.set(colIdx, w.dbId)
+        if (w.isImported) {
+          // Work importata: rimuovi solo il link al metodo, non archiviare
+          workApi.removeFromMetodo(w.dbId, metodoId).catch(() => {})
+        } else {
+          // Work nativa: archivia (soft-delete) per traceabilità
+          workApi.archivia(w.dbId, 'Rimossa dallo schema').catch(() => {})
+          recentlyArchivedByCol.current.set(colIdx, w.dbId)
+        }
       }
       cols[colIdx].splice(workIdx, 1)
       if (wid) setSelSrcs(p => { const m = new Map(p); m.delete(wid); return m })
@@ -928,14 +974,14 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       while (cols.length > 1 && cols[cols.length - 1].length === 0) cols.pop()
       return cols
     })
-  }, [])
+  }, [metodoId])
 
   // ── Importa Work esistente ─────────────────────────────────────────────────
   const handleImportWork = useCallback((work: WorkInSchema, colIdx: number) => {
     setWorkCols(prev => {
       const cols = prev.map(c => [...c])
       while (cols.length <= colIdx) cols.push([])
-      cols[colIdx] = [...cols[colIdx], work]
+      cols[colIdx] = [...cols[colIdx], { ...work, isImported: true }]
       if (cols.length <= colIdx + 1) cols.push([])
       return cols
     })

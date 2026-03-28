@@ -125,6 +125,8 @@ export const workApi = {
     api.invoke('work:list-for-import', metodoId) as Promise<any[]>,
   addToMetodo: (workId: number, metodoId: string) =>
     api.invoke('work:add-to-metodo', workId, metodoId) as Promise<{ ok: boolean }>,
+  removeFromMetodo: (workId: number, metodoId: string) =>
+    api.invoke('work:remove-from-metodo', workId, metodoId) as Promise<{ ok: boolean }>,
 }
 
 export const queryApi = {

@@ -582,4 +582,12 @@ export function registerWorkIpc(): void {
     ).run(workId, metodoId)
     return { ok: true }
   })
+
+  // ── REMOVE-FROM-METODO: de-linka una work importata da un metodo (senza archiviare) ─
+  ipcMain.handle('work:remove-from-metodo', (_, workId: number, metodoId: string) => {
+    getDb().prepare(
+      'DELETE FROM work_metodi WHERE work_id = ? AND metodo_id = ?'
+    ).run(workId, metodoId)
+    return { ok: true }
+  })
 }
