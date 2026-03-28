@@ -333,9 +333,9 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema }: { wor
               size="sm" variant="outline"
               className="h-6 text-[10px] px-2 flex-1 border-blue-300 text-blue-700 hover:bg-blue-50"
               onClick={onAddToSchema}
-              title="Aggiungi questa work a uno schema di calibrazione"
+              title="Aggiungi questa work a un metodo di calibrazione"
             >
-              + Schema ↗
+              + Metodo ↗
             </Button>
           )}
         </div>

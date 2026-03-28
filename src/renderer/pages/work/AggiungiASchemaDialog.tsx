@@ -196,17 +196,17 @@ export function AggiungiASchemaDialog({ open, workId, workNome, onClose }: Props
         {/* Header */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
-            Aggiungi allo Schema
+            Aggiungi a Metodo
           </div>
           <div style={{ fontSize: 11, color: C.page.t2 }}>
-            Seleziona lo schema di calibrazione per <b>{workNome}</b>
+            Seleziona il metodo di calibrazione per <b>{workNome}</b>
           </div>
         </div>
 
         {/* Selezione metodo */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: C.page.t2, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Schema di calibrazione
+            Metodo di calibrazione
           </div>
           <select
             value={selectedMetodoId}
@@ -295,7 +295,7 @@ export function AggiungiASchemaDialog({ open, workId, workNome, onClose }: Props
               transition: 'opacity .15s',
             }}
           >
-            {saving ? 'Aggiunta in corso...' : 'Aggiungi allo Schema ↗'}
+            {saving ? 'Aggiunta in corso...' : 'Aggiungi a Metodo ↗'}
           </button>
         </div>
       </div>
