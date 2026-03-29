@@ -112,7 +112,6 @@ function ConnectionsOverlay({
 interface ColonneWorkProps {
   workCols: WorkInSchema[][]
   selSrcs: Map<string, SorgenteSel>
-  hasCon: boolean
   onToggleWork: (w: WorkInSchema, colIdx: number) => void
   onDeleteWork: (colIdx: number, workIdx: number) => void
   onOpenDrawer: (w: WorkInSchema, colIdx: number) => void
@@ -123,7 +122,7 @@ interface ColonneWorkProps {
 }
 
 function ColonneWork({
-  workCols, selSrcs, hasCon,
+  workCols, selSrcs,
   onToggleWork, onDeleteWork, onOpenDrawer, onAddCol, registerCardRef,
   blockedMap, onRicaricaWork,
 }: ColonneWorkProps) {
@@ -178,7 +177,6 @@ function ColonneWork({
               )}
 
               {works.map((w, wi) => {
-                const canBeSrc   = !hasCon
                 const isSel      = selSrcs.has(w.id)
                 const stateEntry = w.dbId ? (blockedMap.get(w.dbId) ?? null) : null
                 const isBloccata = stateEntry?.bloccata ?? false
@@ -193,16 +191,16 @@ function ColonneWork({
                   <div
                     key={w.id}
                     ref={el => registerCardRef(w.id, el)}
-                    onClick={() => canBeSrc && onToggleWork(w, ci)}
+                    onClick={() => onToggleWork(w, ci)}
                     style={{
-                      borderRadius:10, padding:`8px 12px ${isBloccata ? 28 : 8}px`, position:'relative',
+                      borderRadius:10, padding:`8px 12px ${(isBloccata || haScaduti) ? 28 : 8}px`, position:'relative',
                       background: isSel ? (isInter ? '#ddd4f5' : '#f5e8c8') : col.bg,
                       border:`1.5px solid ${col.border}`,
                       borderLeft:`3px solid ${col.border}`,
                       boxShadow: isSel
                         ? `0 0 0 3px rgba(155,134,214,.35)`
                         : '0 1px 2px rgba(0,0,0,0.04)',
-                      cursor: canBeSrc ? 'pointer' : 'default',
+                      cursor: 'pointer',
                       outline: isSel ? `2px solid ${col.border}` : undefined,
                       outlineOffset: isSel ? 2 : undefined,
                       transition:'box-shadow .12s, background .1s',
@@ -233,18 +231,19 @@ function ColonneWork({
                       title="Dettaglio"
                     >⊙</button>
 
-                    {/* Pulsante Ricarica (lotti dismessi) */}
-                    {isBloccata && w.dbId && (
+                    {/* Pulsante Ricarica (lotti dismessi o scaduti) */}
+                    {(isBloccata || haScaduti) && w.dbId && (
                       <button
                         onClick={e => { e.stopPropagation(); onRicaricaWork(w.dbId!) }}
                         style={{
                           position:'absolute', bottom:7, right:7,
                           padding:'1px 8px', borderRadius:4,
-                          border:'1px solid #fb923c',
-                          background:'#fff7ed', color:'#ea580c',
+                          border: isBloccata ? '1px solid #fb923c' : '1px solid #d97706',
+                          background: isBloccata ? '#fff7ed' : '#fffbeb',
+                          color: isBloccata ? '#ea580c' : '#b45309',
                           cursor:'pointer', fontSize:9, fontWeight:700,
                         }}
-                        title="Lotti CRM dismessi — aggiorna la work"
+                        title={isBloccata ? 'Lotti CRM dismessi — aggiorna la work' : 'CRM scaduti — aggiorna la work'}
                       >Ricarica ↻</button>
                     )}
 
@@ -776,7 +775,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
 
   // ── Stato principale ──────────────────────────────────────────────────────
   const [selSrcs,      setSelSrcs]      = useState<Map<string, SorgenteSel>>(new Map())
-  const [removedCon,   setRemovedCon]   = useState<Set<string>>(new Set())
   const [removedMix,   setRemovedMix]   = useState<Set<string>>(new Set())
   const [workCols,     setWorkCols]     = useState<WorkInSchema[][]>([[]])
   const [modalOpen,    setModalOpen]    = useState(false)
@@ -784,9 +782,10 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [drawerWork,   setDrawerWork]   = useState<WorkInSchema | null>(null)
   const [drawerCol,    setDrawerCol]    = useState(0)
   const [schemaLoaded, setSchemaLoaded] = useState(false)
-  const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
+  const [confirmReset, setConfirmReset] = useState<'full'|null>(null)
   const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean }>>(new Map())
   const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [importOpen,      setImportOpen]      = useState(false)
   const [scenarOpen,      setScenarOpen]      = useState(false)
   const [scenarioScelto,  setScenarioScelto]  = useState(false)
@@ -794,9 +793,9 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   // Dopo la scelta dello scenario, ricalcola analiti e crmItems escludendo le
   // composizioni (firme) non nello scenario. Tutti i lotti di una composizione
   // ammessa vengono mantenuti (il filtraggio è per firma, non per mix_id singolo).
-  const { analiti, crmItemsFiltrati, removedMixFiltrato } = useMemo(() => {
+  const { analiti, crmItemsFiltrati } = useMemo(() => {
     if (!scenarioScelto || removedMix.size === 0) {
-      return { analiti: analitiAll, crmItemsFiltrati: crmItems, removedMixFiltrato: removedMix }
+      return { analiti: analitiAll, crmItemsFiltrati: crmItems }
     }
     // Calcola le firme ammesse = firme i cui mix_id non sono tutti in removedMix
     const firmeAmmesse = new Set<string>()
@@ -810,13 +809,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     }
     const filtered = crmItems.filter(c => !c.mix_id || mixIdAmmessi.has(c.mix_id))
     const { analiti } = buildAnalitiData(filtered, analitiRows)
-    // removedMix ripulito: rimuove i mix_id che appartengono a firme ammesse
-    // (non devono apparire barrati nella griglia)
-    const removedMixFiltrato = new Set<string>()
-    for (const mid of removedMix) {
-      if (!mixIdAmmessi.has(mid)) removedMixFiltrato.add(mid)
-    }
-    return { analiti, crmItemsFiltrati: filtered, removedMixFiltrato }
+    return { analiti, crmItemsFiltrati: filtered }
   }, [scenarioScelto, removedMix, crmItems, analitiAll, analitiRows, firmaToMixIds])
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
@@ -824,7 +817,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     if (loading || schemaLoaded) return
     schemaCalApi.get(metodoId).then(saved => {
       if (saved?.workCols) setWorkCols(saved.workCols)
-      if (saved?.removedCon) setRemovedCon(new Set(saved.removedCon))
       if (saved?.removedMix) setRemovedMix(new Set(saved.removedMix))
       const giàScelto = !!saved?.scenarioScelto
       setScenarioScelto(giàScelto)
@@ -837,10 +829,10 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   useEffect(() => {
     if (!schemaLoaded) return
     const timer = setTimeout(() => {
-      schemaCalApi.save(metodoId, workCols, Array.from(removedCon), Array.from(removedMix), scenarioScelto)
+      schemaCalApi.save(metodoId, workCols, [], Array.from(removedMix), scenarioScelto)
     }, 500)
     return () => clearTimeout(timer)
-  }, [workCols, removedCon, removedMix, scenarioScelto, metodoId, schemaLoaded])
+  }, [workCols, removedMix, scenarioScelto, metodoId, schemaLoaded])
 
   // ── Controlla quali work hanno lotti CRM dismessi ────────────────────────────
   useEffect(() => {
@@ -862,21 +854,10 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schemaLoaded, workCols])
 
-  // ── Ricarica / Reset schema ─────────────────────────────────────────────────
-  const handleReloadSchema = useCallback(async () => {
-    setSchemaLoaded(false)
-    setWorkCols([[]])
-    setRemovedCon(new Set())
-    setRemovedMix(new Set())
-    setSelSrcs(new Map())
-    await reload()
-    // schemaLoaded=false + loading→false triggera il useEffect che ri-carica dal DB
-  }, [reload])
-
+  // ── Reset schema ────────────────────────────────────────────────────────────
   const handleFullReset = useCallback(async () => {
     await schemaCalApi.save(metodoId, [[]], [], [], false)
     setWorkCols([[]])
-    setRemovedCon(new Set())
     setRemovedMix(new Set())
     setSelSrcs(new Map())
     setScenarioScelto(false)
@@ -885,12 +866,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     await reload()
   }, [metodoId, reload])
 
-  // Duplicato ancora attivo = analita che ha sia mix (non rimosso) che singolo (non rimosso)
-  const hasCon = analiti.some(a =>
-    a.isCon &&
-    a.sngIds.some(id => !removedCon.has(id)) &&
-    a.mixId && !removedMix.has(a.mixId)
-  )
   const tgtCol = targetColIdx(selSrcs)
 
   // ── Toggle selezione sorgenti ──────────────────────────────────────────────
@@ -937,15 +912,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     })
   }, [])
 
-  const removeCon = useCallback((sngId: string) => {
-    setRemovedCon(prev => new Set([...prev, sngId]))
-    setSelSrcs(prev => { const m = new Map(prev); m.delete(sngId); return m })
-  }, [])
-
-  const removeMix = useCallback((mixId: string) => {
-    setRemovedMix(prev => new Set([...prev, mixId]))
-    setSelSrcs(prev => { const m = new Map(prev); m.delete(mixId); return m })
-  }, [])
 
   const handleApplyScenario = useCallback((mixIds: string[]) => {
     const scenarioSet = new Set(mixIds)
@@ -1034,20 +1000,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setImportOpen(false)
   }, [])
 
-  // ── Step bar ──────────────────────────────────────────────────────────────
-  const stepStatus = (() => {
-    if (hasCon)            return 2   // step 2 attivo
-    if (selSrcs.size === 0) return 3  // step 3 attivo
-    return 4                          // step 4 attivo
-  })()
-
-  const steps = [
-    { n: 1, label: 'Lettura CRM' },
-    { n: 2, label: 'Rimuovi CRM indesiderati' },
-    { n: 3, label: 'Seleziona sorgenti' },
-    { n: 4, label: 'Crea Work' },
-  ]
-
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={{
@@ -1085,37 +1037,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
         </div>
       </div>
 
-      {/* ── Step bar ── */}
-      <div style={{ background:C.page.sur, boxShadow:'0 1px 0 rgba(0,0,0,0.06)',
-                    padding:'7px 24px', display:'flex', alignItems:'center',
-                    gap:5, flexShrink:0 }}>
-        {steps.map((s, i) => {
-          const isDone = s.n < stepStatus
-          const isOn   = s.n === stepStatus
-          const color  = isDone ? '#7db85a' : isOn ? '#6ba3d6' : C.page.th
-          return (
-            <div key={s.n} style={{ display:'flex', alignItems:'center', gap:5 }}>
-              {i > 0 && <div style={{ width:24, height:0, borderTop:`1.5px dashed ${C.page.brd}` }} />}
-              <div style={{ display:'flex', alignItems:'center', gap:5,
-                            fontSize:11, color, fontWeight: isOn ? 600 : 400,
-                            whiteSpace:'nowrap' }}>
-                <div style={{
-                  width:20, height:20, borderRadius:'50%',
-                  border: (isDone || isOn) ? `1.5px solid ${color}` : '1.5px dashed #d0d0d0',
-                  background: isDone ? '#7db85a' : isOn ? '#6ba3d6' : 'transparent',
-                  color: (isDone || isOn) ? '#fff' : color,
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  fontSize:10, fontWeight:700,
-                }}>
-                  {isDone ? '✓' : s.n}
-                </div>
-                {s.label}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
       {/* ── Workspace ── */}
       {loading ? (
         <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center',
@@ -1141,12 +1062,9 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             analiti={analiti}
             crmItems={crmItemsFiltrati}
             selSrcs={selSrcs}
-            removedCon={removedCon}
-            removedMix={removedMixFiltrato}
+            removedMix={removedMix}
             onToggleMix={toggleMix}
             onToggleSng={toggleSng}
-            onRemoveCon={removeCon}
-            onRemoveMix={removeMix}
             onClose={onClose}
             registerCardRef={registerCardRef}
             gridBodyRef={gridBodyRef}
@@ -1155,7 +1073,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           <ColonneWork
             workCols={workCols}
             selSrcs={selSrcs}
-            hasCon={hasCon}
             onToggleWork={toggleWork}
             onDeleteWork={handleDeleteWork}
             onOpenDrawer={(w, ci) => { setDrawerWork(w); setDrawerCol(ci) }}
@@ -1172,16 +1089,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                     padding:'10px 24px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          {hasCon && (
-            <span style={{ fontSize:12, color:C.con.text, fontWeight:600 }}>
-              ⚠ Ci sono analiti con sia mix che singolo — elimina quelli non voluti con ×
-            </span>
-          )}
-          <button onClick={() => setConfirmReset('reload')} style={{
-            padding:'5px 12px', borderRadius:8, border:`1px solid ${C.page.brd}`,
-            background:C.page.sur, cursor:'pointer', fontSize:11,
-            fontWeight:500, color:C.page.t2,
-          }}>&#x21bb; Ricarica</button>
           <button onClick={() => setConfirmReset('full')} style={{
             padding:'5px 12px', borderRadius:8, border:`1px solid ${C.con.border}`,
             background:C.page.sur, cursor:'pointer', fontSize:11,
@@ -1279,28 +1186,41 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
               const updated = prev.map(col =>
                 col.map(w => w.dbId === ricaricaSchemaWorkId ? { ...w, dbId: newWorkId } : w)
               )
-              schemaCalApi.save(metodoId, updated, Array.from(removedCon), Array.from(removedMix), scenarioScelto)
+              schemaCalApi.save(metodoId, updated, [], Array.from(removedMix), scenarioScelto)
               return updated
             })
           }
           setRicaricaSchemaWorkId(null)
+          setToastMsg('Work aggiornata. La precedente versione è stata archiviata.')
+          setTimeout(() => setToastMsg(null), 4000)
         }}
       />
 
-      {/* ── Dialog conferma ricarica / reset ── */}
+      {/* ── Toast notifica ── */}
+      {toastMsg && (
+        <div style={{
+          position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
+          background:'#1e293b', color:'#f8fafc', borderRadius:10,
+          padding:'10px 20px', fontSize:13, fontWeight:500,
+          boxShadow:'0 4px 16px rgba(0,0,0,0.25)',
+          zIndex:9999, pointerEvents:'none',
+          display:'flex', alignItems:'center', gap:8,
+        }}>
+          <span style={{ color:'#4ade80', fontSize:16 }}>✓</span>
+          {toastMsg}
+        </div>
+      )}
+
+      {/* ── Dialog conferma reset ── */}
       <ConfirmDialog
         open={confirmReset !== null}
-        title={confirmReset === 'full' ? 'Ricominciare da zero?' : 'Ricaricare lo schema?'}
-        message={confirmReset === 'full'
-          ? 'Tutti i Work e le rimozioni CRM verranno cancellati. I dati CRM verranno ricaricati dal database.'
-          : 'I dati CRM verranno ricaricati dal database e lo schema verrà ripristinato dall\'ultimo salvataggio automatico.'}
-        confirmLabel={confirmReset === 'full' ? 'Ricomincia da zero' : 'Ricarica'}
-        variant={confirmReset === 'full' ? 'danger' : 'default'}
+        title="Ricominciare da zero?"
+        message="Tutti i Work e le rimozioni CRM verranno cancellati. I dati CRM verranno ricaricati dal database."
+        confirmLabel="Ricomincia da zero"
+        variant="danger"
         onConfirm={() => {
-          const mode = confirmReset
           setConfirmReset(null)
-          if (mode === 'full') handleFullReset()
-          else handleReloadSchema()
+          handleFullReset()
         }}
         onCancel={() => setConfirmReset(null)}
       />

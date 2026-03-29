@@ -23,12 +23,9 @@ interface GrigliaProps {
   analiti: AnalitoItem[]
   crmItems: CrmItem[]
   selSrcs: Map<string, SorgenteSel>
-  removedCon: Set<string>    // id singoli rimossi
-  removedMix: Set<string>    // mix_id mix rimossi
+  removedMix: Set<string>    // mix_id mix esclusi dallo scenario
   onToggleMix: (mixId: string) => void
   onToggleSng: (sngId: string) => void
-  onRemoveCon: (sngId: string) => void
-  onRemoveMix: (mixId: string) => void
   onClose: () => void        // per chiudere lo schema prima di navigare
   registerCardRef: RegisterCardRef
   gridBodyRef?: React.RefObject<HTMLDivElement | null>
@@ -36,8 +33,8 @@ interface GrigliaProps {
 }
 
 export function GrigliaAnalitiCrm({
-  analiti, crmItems, selSrcs, removedCon, removedMix,
-  onToggleMix, onToggleSng, onRemoveCon, onRemoveMix, onClose, registerCardRef, gridBodyRef,
+  analiti, crmItems, selSrcs, removedMix,
+  onToggleMix, onToggleSng, onClose, registerCardRef, gridBodyRef,
   onOpenScenar,
 }: GrigliaProps) {
   const navigate = useNavigate()
@@ -298,26 +295,20 @@ export function GrigliaAnalitiCrm({
                     {a.sngIds.map(sngId => {
                       const crm   = sngById.get(sngId)
                       if (!crm) return null
-                      const isRem = removedCon.has(sngId)
                       const isSel = selSrcs.has(sngId)
-                      // duplicato attivo = ha anche un mix non rimosso
-                      const isCon = a.isCon && !!a.mixId && !removedMix.has(a.mixId)
                       return (
                         <div
                           key={sngId}
                           ref={el => registerCardRef(sngId, el)}
-                          onClick={() => !isRem && onToggleSng(sngId)}
+                          onClick={() => onToggleSng(sngId)}
                           style={{
                             borderRadius:10, padding:'5px 8px',
-                            background: isRem ? C.page.sur
-                              : (isCon ? C.con.bg : (isSel ? '#c8e8a8' : C.sng.bg)),
-                            border:`1.5px solid ${isCon ? C.con.border : C.sng.border}`,
-                            borderLeft:`3px solid ${isCon ? C.con.border : C.sng.border}`,
+                            background: isSel ? '#c8e8a8' : C.sng.bg,
+                            border:`1.5px solid ${C.sng.border}`,
+                            borderLeft:`3px solid ${C.sng.border}`,
                             borderStyle: a.isIS ? 'dashed' : 'solid',
                             boxShadow: isSel ? '0 0 0 2px rgba(125,184,90,.35)' : '0 1px 2px rgba(0,0,0,0.04)',
-                            opacity: isRem ? 0.28 : 1,
-                            textDecoration: isRem ? 'line-through' : undefined,
-                            cursor: isRem ? 'default' : 'pointer',
+                            cursor: 'pointer',
                             display:'flex', alignItems:'center',
                             justifyContent:'space-between', gap:4,
                             transition:'box-shadow .12s, background .1s',
@@ -326,7 +317,7 @@ export function GrigliaAnalitiCrm({
                           <div style={{ minWidth:0 }}>
                             <div style={{ fontSize:10, fontWeight:700,
                                           fontFamily:'IBM Plex Mono, monospace',
-                                          color: isCon ? C.con.text : C.sng.text,
+                                          color: C.sng.text,
                                           whiteSpace:'nowrap', overflow:'hidden',
                                           textOverflow:'ellipsis' }}>
                               {crm.cv ? `${crm.cv} mg/L` : '—'}
@@ -351,33 +342,17 @@ export function GrigliaAnalitiCrm({
                               </div>
                             )}
                           </div>
-                          {!isRem && (
-                            <div style={{ display:'flex', gap:3, flexShrink:0 }}>
-                              <button
-                                onClick={e => { e.stopPropagation(); goToComposto(crm.nome, false) }}
-                                style={{
-                                  width:15, height:15, borderRadius:3,
-                                  border:`1px solid ${C.page.brd}`,
-                                  background:'#fff', color:C.page.t2,
-                                  cursor:'pointer', display:'flex', alignItems:'center',
-                                  justifyContent:'center', fontSize:9,
-                                }}
-                                title="Vedi nel DB composti"
-                              >↗</button>
-                              <button
-                                onClick={e => { e.stopPropagation(); onRemoveCon(sngId) }}
-                                style={{
-                                  width:15, height:15, borderRadius:'50%',
-                                  border:`1.5px solid ${C.page.brd}`,
-                                  background:'#fff',
-                                  color: C.page.t2,
-                                  cursor:'pointer', display:'flex', alignItems:'center',
-                                  justifyContent:'center', fontSize:11, fontWeight:700,
-                                }}
-                                title="Rimuovi dallo schema"
-                              >×</button>
-                            </div>
-                          )}
+                          <button
+                            onClick={e => { e.stopPropagation(); goToComposto(crm.nome, false) }}
+                            style={{
+                              width:15, height:15, borderRadius:3,
+                              border:`1px solid ${C.page.brd}`,
+                              background:'#fff', color:C.page.t2,
+                              cursor:'pointer', display:'flex', alignItems:'center',
+                              justifyContent:'center', fontSize:9, flexShrink:0,
+                            }}
+                            title="Vedi nel DB composti"
+                          >↗</button>
                         </div>
                       )
                     })}
@@ -427,8 +402,7 @@ export function GrigliaAnalitiCrm({
                 }}
               >
                 {!isRmMx && (
-                  <div style={{ position:'absolute', top:4, right:4,
-                                display:'flex', gap:3, zIndex:3 }}>
+                  <div style={{ position:'absolute', top:4, right:4, zIndex:3 }}>
                     <button
                       onClick={e => { e.stopPropagation(); goToComposto(a.mixId!, false) }}
                       style={{
@@ -440,22 +414,11 @@ export function GrigliaAnalitiCrm({
                       }}
                       title="Vedi nel DB composti"
                     >↗</button>
-                    <button
-                      onClick={e => { e.stopPropagation(); onRemoveMix(a.mixId!) }}
-                      style={{
-                        width:15, height:15, borderRadius:'50%',
-                        border:`1.5px solid ${C.page.brd}`,
-                        background:'#fff', color:C.page.t2,
-                        cursor:'pointer', display:'flex', alignItems:'center',
-                        justifyContent:'center', fontSize:11, fontWeight:700,
-                      }}
-                      title="Rimuovi questo CRM dallo schema"
-                    >×</button>
                   </div>
                 )}
                 <div style={{ fontSize:11, fontWeight:700,
                               fontFamily:'IBM Plex Mono, monospace',
-                              color:C.mix.text, paddingRight: isRmMx ? 0 : 42 }}>
+                              color:C.mix.text, paddingRight: isRmMx ? 0 : 22 }}>
                   {info?.mix ?? info?.mix_id ?? a.mixId}
                 </div>
                 <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>

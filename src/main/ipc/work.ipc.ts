@@ -439,27 +439,44 @@ export function registerWorkIpc(): void {
     const db = getDb()
     const ingredienti = db.prepare(`
       SELECT wi.id, wi.source_id, wi.lotto_usato, wi.source_type,
-        c.nome              AS nome,
-        c.lotto             AS lotto_corrente,
+        c.nome                AS nome,
+        c.lotto               AS lotto_corrente,
         c.data_dismissione,
-        c.mix_id            AS mix_id,
-        c.forma_commerciale AS forma_commerciale
+        c.mix_id              AS mix_id,
+        c.forma_commerciale   AS forma_commerciale,
+        c.scadenza_prodotto,
+        (SELECT MAX(nuova_scadenza) FROM composti_storia
+         WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
+        ) AS ultima_rivalidazione
       FROM work_ingredienti wi
       LEFT JOIN composti c ON c.id = wi.source_id
       WHERE wi.work_id = ? AND wi.source_type = 'crm'
     `).all(workId) as any[]
 
+    const oggi = new Date().toISOString().slice(0, 10)
+
     return ingredienti.map((ing: any) => {
-      if (!ing.data_dismissione) {
+      const isScaduto = !ing.data_dismissione &&
+        ing.scadenza_prodotto && ing.scadenza_prodotto < oggi &&
+        (!ing.ultima_rivalidazione || ing.ultima_rivalidazione < oggi)
+
+      if (!ing.data_dismissione && !isScaduto) {
         return { ...ing, stato: 'ok', sostituti: [] }
       }
-      // Cerca lotti attivi con stesso nome
+      // Cerca lotti attivi con stesso nome (non dismessi, non scaduti)
       const sostituti = db.prepare(`
         SELECT id, lotto, concentrazione, unita_conc, mix_id
         FROM composti
         WHERE nome = ? AND data_dismissione IS NULL AND id != ?
+          AND (
+            scadenza_prodotto IS NULL OR scadenza_prodotto >= ?
+            OR (
+              SELECT MAX(nuova_scadenza) FROM composti_storia
+              WHERE composto_id = composti.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
+            ) >= ?
+          )
         ORDER BY id DESC
-      `).all(ing.nome, ing.source_id) as any[]
+      `).all(ing.nome, ing.source_id, oggi, oggi) as any[]
 
       const stato =
         sostituti.length === 1 ? 'auto' :
