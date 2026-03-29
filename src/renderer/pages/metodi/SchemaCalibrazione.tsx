@@ -25,6 +25,7 @@ import {
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
 import { ScenarDialog } from './ScenarDialog'
+import { buildMixComposizioni, generaScenari } from './SchemaCalibrazione.scenari'
 import { ImportaWorkDialog } from './ImportaWorkDialog'
 import { schemaCalApi, workApi } from '../../lib/api'
 import { RicaricaDialog } from '../work/RicaricaDialog'
@@ -817,10 +818,21 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     if (loading || schemaLoaded) return
     schemaCalApi.get(metodoId).then(saved => {
       if (saved?.workCols) setWorkCols(saved.workCols)
-      if (saved?.removedMix) setRemovedMix(new Set(saved.removedMix))
+      const savedRemovedMix = new Set<string>(saved?.removedMix ?? [])
+      if (saved?.removedMix) setRemovedMix(savedRemovedMix)
       const giàScelto = !!saved?.scenarioScelto
       setScenarioScelto(giàScelto)
-      if (!giàScelto) setScenarOpen(true)  // auto-apertura dialog se scenario non ancora scelto
+      if (!giàScelto) {
+        // Apri dialog solo se ci sono ≥2 scenari CRM mix tra cui scegliere
+        const comps = buildMixComposizioni(analitiAll, crmItems, firmaToMixIds, mixNomiMap)
+          .filter(c => c.mixIds.some(mid => !savedRemovedMix.has(mid)))
+        const scenari = generaScenari(analitiAll, comps)
+        if (scenari.length > 1) {
+          setScenarOpen(true)
+        } else {
+          setScenarioScelto(true)
+        }
+      }
       setSchemaLoaded(true)
     }).catch(() => { setScenarOpen(true); setSchemaLoaded(true) })
   }, [loading, metodoId, schemaLoaded])
@@ -1023,7 +1035,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           {[
             { color:C.mix.chip, border:C.mix.border, label:'Mix CRM' },
             { color:C.sng.chip, border:C.sng.border, label:'Singoli' },
-            { color:C.con.bg,   border:C.con.border, label:'Duplicato' },
             { color:C.work.chip,border:C.work.border,label:'Work' },
             { color:C.inter.chip,border:C.inter.border,label:'Intermedia' },
           ].map(l => (

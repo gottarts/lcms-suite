@@ -34,7 +34,7 @@ nella card delle work in workpage dece esserci la selezione del metodo come filt
 
 
 
-
+in compound db il nuovo lotto su crm mix mette la concentrazione dei componenti del nuovo lotto uguale a quello selezionato per il nuovo lotto...
 
 
 
