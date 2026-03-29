@@ -1,8 +1,8 @@
 # prossimi feat:
 
- 
-
-ce un problema con l'archiviazione... 
+ Ci sono dei miglioramente sempre per quanto riguarda la gestione work in schemi e workpage:
+la feat di ricarica funziona bene per quanto riguarda i crm dismessi e quindi il pulsante riarica sui chips degli schemi. 
+La cosa è da estendere anche i crm scaduti
 
 
 
