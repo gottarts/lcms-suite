@@ -9,13 +9,109 @@ import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema, ConnectionLine, I
 import { C } from './SchemaCalibrazione.types'
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Funzione pura: costruisce AnalitoItem[] e mappe da un insieme di CrmItem
+// già filtrati. Può essere chiamata sia dal hook (tutti i CRM) sia dopo la
+// scelta di uno scenario (CRM filtrati per mix_id ammessi).
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildAnalitiData(
+  items: CrmItem[],
+  analitiRows: { id: number; nome: string }[],
+): {
+  analiti: AnalitoItem[]
+  firmaToMixIds: Map<string, string[]>
+  mixNomiMap: Map<string, Set<string>>
+} {
+  // Firma di un mix = nomi componenti ordinati alfabeticamente
+  const mixNomiMap = new Map<string, Set<string>>()
+  for (const item of items) {
+    if (item.mix_id) {
+      const s = mixNomiMap.get(item.mix_id) ?? new Set<string>()
+      s.add(item.nome)
+      mixNomiMap.set(item.mix_id, s)
+    }
+  }
+  const mixFirma = new Map<string, string>()
+  for (const [mid, nomi] of mixNomiMap.entries()) {
+    mixFirma.set(mid, Array.from(nomi).sort().join('|'))
+  }
+  const firmaToMixIds = new Map<string, string[]>()
+  for (const [mid, firma] of mixFirma.entries()) {
+    const arr = firmaToMixIds.get(firma) ?? []
+    arr.push(mid)
+    firmaToMixIds.set(firma, arr)
+  }
+
+  const mixMap      = new Map<string, string[]>()
+  const sngMap      = new Map<string, string[]>()
+  const isMap       = new Map<string, boolean>()
+
+  const mixIdsByNome = new Map<string, string[]>()
+  for (const item of items) {
+    if (item.mix_id) {
+      const arr = mixIdsByNome.get(item.nome) ?? []
+      if (!arr.includes(item.mix_id)) arr.push(item.mix_id)
+      mixIdsByNome.set(item.nome, arr)
+    }
+  }
+
+  for (const item of items) {
+    if (item.mix_id) {
+      const tuttiMixIds = mixIdsByNome.get(item.nome)!
+      const firme = new Set(tuttiMixIds.map(mid => mixFirma.get(mid)!))
+      if (firme.size === 1) {
+        if (!mixMap.has(item.nome)) mixMap.set(item.nome, tuttiMixIds)
+      } else {
+        mixMap.set(item.nome, [item.mix_id])
+      }
+    } else {
+      const arr = sngMap.get(item.nome) ?? []
+      arr.push(String(item.id))
+      sngMap.set(item.nome, arr)
+    }
+    if (item.isIS) isMap.set(item.nome, true)
+  }
+
+  const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
+    nome:   row.nome,
+    mixId:  mixMap.get(row.nome)?.[0] ?? null,
+    mixIds: mixMap.get(row.nome) ?? [],
+    sngIds: sngMap.get(row.nome) ?? [],
+    isCon:  mixMap.has(row.nome) && sngMap.has(row.nome),
+    isIS:   isMap.get(row.nome) ?? false,
+  }))
+
+  const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
+  const conMix   = analitiCalc.filter(a =>  a.mixId)
+  const senzaCrm = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0)
+  const mixOrder: string[] = []
+  for (const a of conMix) {
+    if (!mixOrder.includes(a.mixId!)) mixOrder.push(a.mixId!)
+  }
+  const mixGrouped: AnalitoItem[] = []
+  for (const mid of mixOrder) {
+    const gruppo = conMix.filter(a => a.mixId === mid)
+    mixGrouped.push(...gruppo.filter(a => a.sngIds.length > 0), ...gruppo.filter(a => a.sngIds.length === 0))
+  }
+
+  return {
+    analiti: [...soloSng, ...mixGrouped, ...senzaCrm],
+    firmaToMixIds,
+    mixNomiMap,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Hook: carica CRM del metodo dal DB (tutti tranne dismessi)
 // ─────────────────────────────────────────────────────────────────────────────
 export function useSchemaData(metodoId: string) {
-  const [crmItems, setCrmItems] = useState<CrmItem[]>([])
-  const [analiti,  setAnaliti]  = useState<AnalitoItem[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState<string | null>(null)
+  const [crmItems,       setCrmItems]       = useState<CrmItem[]>([])
+  const [analiti,        setAnaliti]        = useState<AnalitoItem[]>([])
+  const [loading,        setLoading]        = useState(true)
+  const [error,          setError]          = useState<string | null>(null)
+  const [firmaToMixIds,  setFirmaToMixIds]  = useState<Map<string, string[]>>(new Map())
+  const [mixNomiMap,     setMixNomiMap]     = useState<Map<string, Set<string>>>(new Map())
+  // Raw data esposti per permettere il ricalcolo filtrato dopo la scelta dello scenario
+  const [analitiRows,    setAnalitiRows]    = useState<{ id: number; nome: string }[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,89 +179,17 @@ export function useSchemaData(metodoId: string) {
       }))
       setCrmItems(itemsFinal)
 
-      // 3. Costruisce mappe CRM disponibili per nome
+      setAnalitiRows(analitiRows)
 
-      // Firma di un mix = nomi componenti ordinati alfabeticamente
-      // mix_id con stessa firma = stessa composizione, lotto diverso
-      const mixNomiMap = new Map<string, Set<string>>()   // mix_id → set nomi componenti
-      for (const item of items) {
-        if (item.mix_id) {
-          const s = mixNomiMap.get(item.mix_id) ?? new Set<string>()
-          s.add(item.nome)
-          mixNomiMap.set(item.mix_id, s)
-        }
-      }
-      const mixFirma = new Map<string, string>()           // mix_id → firma
-      for (const [mid, nomi] of mixNomiMap.entries()) {
-        mixFirma.set(mid, Array.from(nomi).sort().join('|'))
-      }
-      // firma → array di mix_id con stessa composizione
-      const firmaToMixIds = new Map<string, string[]>()
-      for (const [mid, firma] of mixFirma.entries()) {
-        const arr = firmaToMixIds.get(firma) ?? []
-        arr.push(mid)
-        firmaToMixIds.set(firma, arr)
-      }
+      // 3 + 4. Costruisce mappe e AnalitoItem[] — usa tutti i CRM (dati grezzi)
+      //        Le mappe firmaToMixIds/mixNomiMap servono al dialog scenari
+      const { analiti: analitiCalc, firmaToMixIds, mixNomiMap } =
+        buildAnalitiData(itemsFinal, analitiRows)
 
-      const mixMap = new Map<string, string[]>()    // nome → array di mix_id (stessa composizione, lotti diversi)
-      const sngMap = new Map<string, string[]>()    // nome → array di String(id) (tutti i singoli)
-      const isMap  = new Map<string, boolean>()
-
-      // nome → tutti i mix_id che contengono quell'analita
-      const mixIdsByNome = new Map<string, string[]>()
-      for (const item of items) {
-        if (item.mix_id) {
-          const arr = mixIdsByNome.get(item.nome) ?? []
-          if (!arr.includes(item.mix_id)) arr.push(item.mix_id)
-          mixIdsByNome.set(item.nome, arr)
-        }
-      }
-
-      for (const item of items) {
-        if (item.mix_id) {
-          const tuttiMixIds = mixIdsByNome.get(item.nome)!
-          const firme = new Set(tuttiMixIds.map(mid => mixFirma.get(mid)!))
-          if (firme.size === 1) {
-            // Stessa composizione, lotti diversi → offri selettore (imposta una volta sola)
-            if (!mixMap.has(item.nome)) mixMap.set(item.nome, tuttiMixIds)
-          } else {
-            // Composizioni diverse: comportamento originale (ultimo mix_id vince)
-            mixMap.set(item.nome, [item.mix_id])
-          }
-        } else {
-          const arr = sngMap.get(item.nome) ?? []
-          arr.push(String(item.id))
-          sngMap.set(item.nome, arr)
-        }
-        if (item.isIS) isMap.set(item.nome, true)
-      }
-
-      // 4. Costruisce AnalitoItem[] dalla lista persistente (non dai CRM)
-      //    Gli analiti senza CRM disponibili sono comunque inclusi (senzaCrm)
-      const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
-        nome:   row.nome,
-        mixId:  mixMap.get(row.nome)?.[0] ?? null,
-        mixIds: mixMap.get(row.nome) ?? [],
-        sngIds: sngMap.get(row.nome) ?? [],
-        isCon:  mixMap.has(row.nome) && sngMap.has(row.nome),
-        isIS:   isMap.get(row.nome) ?? false,
-      }))
-
-      // Ordine: solo-singoli → [per ciascun mix: entrambi-del-mix → solo-mix] → senza CRM
-      const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
-      const conMix   = analitiCalc.filter(a =>  a.mixId)
-      const senzaCrm = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0)
-      // Raggruppa per mixId; dentro ogni gruppo: prima chi ha anche singoli
-      const mixOrder: string[] = []
-      for (const a of conMix) {
-        if (!mixOrder.includes(a.mixId!)) mixOrder.push(a.mixId!)
-      }
-      const mixGrouped: AnalitoItem[] = []
-      for (const mid of mixOrder) {
-        const gruppo = conMix.filter(a => a.mixId === mid)
-        mixGrouped.push(...gruppo.filter(a => a.sngIds.length > 0), ...gruppo.filter(a => a.sngIds.length === 0))
-      }
-      setAnaliti([...soloSng, ...mixGrouped, ...senzaCrm])
+      // Esponi firmaToMixIds e mixNomiMap per il dialog scenari
+      setFirmaToMixIds(firmaToMixIds)
+      setMixNomiMap(mixNomiMap)
+      setAnaliti(analitiCalc)
     } catch (e: any) {
       setError(e?.message ?? 'Errore caricamento dati')
     } finally {
@@ -174,7 +198,7 @@ export function useSchemaData(metodoId: string) {
   }, [metodoId])
 
   useEffect(() => { load() }, [load])
-  return { crmItems, analiti, loading, error, reload: load }
+  return { crmItems, analiti, loading, error, reload: load, firmaToMixIds, mixNomiMap, analitiRows }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

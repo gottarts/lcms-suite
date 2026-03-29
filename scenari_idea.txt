@@ -1,0 +1,232 @@
+Formalizzazione del problema delle coperture con CRM mix disgiunti (versione sequenziale con riutilizzo)
+1. Dati iniziali
+Insieme degli analiti: 
+A
+=
+{
+a
+1
+,
+a
+2
+,
+…
+,
+a
+n
+}
+A={a 
+1
+​
+ ,a 
+2
+​
+ ,…,a 
+n
+​
+ } (finito, non vuoto).
+
+Insieme dei CRM mix disponibili: 
+M
+=
+{
+M
+1
+,
+M
+2
+,
+…
+,
+M
+m
+}
+M={M 
+1
+​
+ ,M 
+2
+​
+ ,…,M 
+m
+​
+ }, dove ogni 
+M
+j
+M 
+j
+​
+  è un sottoinsieme non vuoto di 
+A
+A.
+
+Ogni mix può contenere uno o più analiti. Uno stesso analita può appartenere a più mix.
+
+2. Regole per un singolo scenario (copertura)
+Uno scenario è un insieme 
+S
+⊆
+M
+S⊆M tale che:
+
+Disgiunzione interna: per ogni coppia 
+M
+i
+,
+M
+j
+∈
+S
+M 
+i
+​
+ ,M 
+j
+​
+ ∈S con 
+i
+≠
+j
+i
+
+=j, si ha 
+M
+i
+∩
+M
+j
+=
+∅
+M 
+i
+​
+ ∩M 
+j
+​
+ =∅.
+
+Insieme coperto da 
+S
+S: 
+U
+=
+⋃
+M
+∈
+S
+M
+⊆
+A
+U=⋃ 
+M∈S
+​
+ M⊆A.
+
+Rapporto di copertura: 
+∣
+U
+∣
+/
+∣
+A
+∣
+∣U∣/∣A∣.
+
+La tabella associata a uno scenario elenca tutti gli analiti di 
+A
+A in ordine (prima gli analiti dei mix selezionati, raggruppati per mix, poi i non coperti), con la seconda colonna che riporta il nome del mix solo sulla prima riga di ogni gruppo (cella unita verticalmente).
+
+3. Obiettivo dell’app: generare una sequenza di scenari
+Non si vogliono generare tutti i possibili scenari, ma una sequenza ordinata che rispetti le seguenti regole:
+
+Primo scenario:
+Si calcola lo scenario (sottoinsieme di 
+M
+M disgiunto) che massimizza il rapporto di copertura.
+In caso di parità, se ne sceglie uno arbitrariamente (es. il primo trovato).
+
+Scenari successivi (per i mix non ancora comparsi):
+
+Si considerano i mix che non sono ancora stati utilizzati in alcuno scenario precedente.
+
+Per ciascuno di questi mix (chiamiamolo 
+M
+x
+M 
+x
+​
+ ), si costruisce il miglior scenario che include obbligatoriamente 
+M
+x
+M 
+x
+​
+ .
+
+Per “miglior scenario” si intende quello che massimizza la copertura, potendo riutilizzare liberamente qualsiasi altro mix (anche già apparsi in scenari precedenti), purché l’insieme complessivo sia disgiunto (cioè i mix scelti insieme a 
+M
+x
+M 
+x
+​
+  non abbiano analiti in comune).
+
+Tra tutti i mix non ancora usati, si sceglie quello che dà la copertura più alta nello scenario così ottenuto.
+
+Lo scenario corrispondente viene aggiunto alla sequenza.
+
+Il mix 
+M
+x
+M 
+x
+​
+  viene marcato come “usato” (non verrà più considerato per scenari futuri).
+
+Nota: gli altri mix (anche già usati) possono comparire di nuovo in questo scenario e in quelli successivi; non vengono marcati come “usati” se non quando sono il mix obbligatorio che si sta facendo comparire per la prima volta.
+
+Terminazione:
+Il processo termina quando tutti i mix di 
+M
+M sono comparsi almeno una volta come mix obbligatorio (cioè sono stati “coperti” dalla regola 2) oppure quando non è possibile costruire alcuno scenario valido (incluso il mix obbligatorio) con copertura positiva.
+Opzionalmente, si può aggiungere alla fine lo scenario vuoto (copertura 0).
+
+4. Algoritmo riassuntivo
+text
+mix_non_ancora_usati = insieme di tutti i mix
+scenari = []
+
+// Primo scenario (senza mix obbligatorio)
+miglior_scenario = trova_miglior_sottoinsieme_disgiunto(M)
+scenari.append(miglior_scenario)
+mix_non_ancora_usati -= insieme_dei_mix_di(miglior_scenario)
+
+// Scenari per i restanti mix
+while mix_non_ancora_usati non è vuoto:
+    migliore_copertura = -1
+    miglior_scenario_corrente = None
+    mix_scelto = None
+    for Mx in mix_non_ancora_usati:
+        scenario_con_Mx = miglior_scenario_con_mix_obbligatorio(Mx)  // può usare qualsiasi altro mix, disgiunzione
+        if scenario_con_Mx.copertura > migliore_copertura:
+            migliore_copertura = scenario_con_Mx.copertura
+            miglior_scenario_corrente = scenario_con_Mx
+            mix_scelto = Mx
+    if miglior_scenario_corrente is None or migliore_copertura == 0:
+        break
+    scenari.append(miglior_scenario_corrente)
+    mix_non_ancora_usati.remove(mix_scelto)
+
+// Opzionale: scenario vuoto
+scenari.append(scenario_vuoto)
+5. Esempio con 20 analiti e 8 mix (riassunto)
+Primo scenario: {M1,M2,M3,M4,M5,M6,M7} → copertura 95%.
+
+Mix non ancora usati: {M8}.
+
+Miglior scenario con M8 obbligatorio: {M8, M4, M5, M6, M7} → copertura 70%.
+
+Aggiunto secondo scenario. Fine.
+
+6. Visualizzazione per l’utente
+L’app presenta la lista degli scenari nell’ordine calcolato, ciascuno con rapporto di copertura e l’elenco dei mix. L’utente seleziona uno scenario e l’app mostra la tabella corrispondente (con celle unite per i mix).

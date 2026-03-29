@@ -139,8 +139,8 @@ export const queryApi = {
 export const schemaCalApi = {
   get: (metodoId: string) =>
     api.invoke('schema-cal:get', metodoId) as Promise<any | null>,
-  save: (metodoId: string, workCols: any[][], removedCon: string[], removedMix: string[]) =>
-    api.invoke('schema-cal:save', metodoId, JSON.stringify({ workCols, removedCon, removedMix })) as Promise<{ ok: boolean }>,
+  save: (metodoId: string, workCols: any[][], removedCon: string[], removedMix: string[], scenarioScelto: boolean) =>
+    api.invoke('schema-cal:save', metodoId, JSON.stringify({ workCols, removedCon, removedMix, scenarioScelto })) as Promise<{ ok: boolean }>,
 }
 
 export const metodoAnalitiApi = {

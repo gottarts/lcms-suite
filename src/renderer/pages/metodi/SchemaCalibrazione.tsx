@@ -14,16 +14,17 @@
 //   - SchemaCalibrazione.logic.ts
 //   - SchemaCalibrazione.grid.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useCallback, useRef, useLayoutEffect, useEffect } from 'react'
+import { useState, useCallback, useRef, useLayoutEffect, useEffect, useMemo } from 'react'
 import type {
   SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef
 } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import {
-  useSchemaData, targetColIdx,
+  useSchemaData, buildAnalitiData, targetColIdx,
   salvaWorkNelDb, getCompsFromWork, computeConnections,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
+import { ScenarDialog } from './ScenarDialog'
 import { ImportaWorkDialog } from './ImportaWorkDialog'
 import { schemaCalApi, workApi } from '../../lib/api'
 import { RicaricaDialog } from '../work/RicaricaDialog'
@@ -762,7 +763,7 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
 // Componente principale SchemaCalibrazione
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: SchemaCalibrazioneProps) {
-  const { crmItems, analiti, loading, error, reload } = useSchemaData(metodoId)
+  const { crmItems, analiti: analitiAll, loading, error, reload, firmaToMixIds, mixNomiMap, analitiRows } = useSchemaData(metodoId)
 
   // ── Ref registry per SVG connections ───────────────────────────────────────
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -786,7 +787,37 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [confirmReset, setConfirmReset] = useState<'reload'|'full'|null>(null)
   const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean }>>(new Map())
   const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
-  const [importOpen, setImportOpen] = useState(false)
+  const [importOpen,      setImportOpen]      = useState(false)
+  const [scenarOpen,      setScenarOpen]      = useState(false)
+  const [scenarioScelto,  setScenarioScelto]  = useState(false)
+
+  // Dopo la scelta dello scenario, ricalcola analiti e crmItems escludendo le
+  // composizioni (firme) non nello scenario. Tutti i lotti di una composizione
+  // ammessa vengono mantenuti (il filtraggio è per firma, non per mix_id singolo).
+  const { analiti, crmItemsFiltrati, removedMixFiltrato } = useMemo(() => {
+    if (!scenarioScelto || removedMix.size === 0) {
+      return { analiti: analitiAll, crmItemsFiltrati: crmItems, removedMixFiltrato: removedMix }
+    }
+    // Calcola le firme ammesse = firme i cui mix_id non sono tutti in removedMix
+    const firmeAmmesse = new Set<string>()
+    for (const [firma, mixIds] of firmaToMixIds.entries()) {
+      if (mixIds.some(mid => !removedMix.has(mid))) firmeAmmesse.add(firma)
+    }
+    // mix_id ammessi = tutti i lotti delle firme ammesse
+    const mixIdAmmessi = new Set<string>()
+    for (const firma of firmeAmmesse) {
+      for (const mid of firmaToMixIds.get(firma) ?? []) mixIdAmmessi.add(mid)
+    }
+    const filtered = crmItems.filter(c => !c.mix_id || mixIdAmmessi.has(c.mix_id))
+    const { analiti } = buildAnalitiData(filtered, analitiRows)
+    // removedMix ripulito: rimuove i mix_id che appartengono a firme ammesse
+    // (non devono apparire barrati nella griglia)
+    const removedMixFiltrato = new Set<string>()
+    for (const mid of removedMix) {
+      if (!mixIdAmmessi.has(mid)) removedMixFiltrato.add(mid)
+    }
+    return { analiti, crmItemsFiltrati: filtered, removedMixFiltrato }
+  }, [scenarioScelto, removedMix, crmItems, analitiAll, analitiRows, firmaToMixIds])
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
   useEffect(() => {
@@ -795,18 +826,21 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       if (saved?.workCols) setWorkCols(saved.workCols)
       if (saved?.removedCon) setRemovedCon(new Set(saved.removedCon))
       if (saved?.removedMix) setRemovedMix(new Set(saved.removedMix))
+      const giàScelto = !!saved?.scenarioScelto
+      setScenarioScelto(giàScelto)
+      if (!giàScelto) setScenarOpen(true)  // auto-apertura dialog se scenario non ancora scelto
       setSchemaLoaded(true)
-    }).catch(() => setSchemaLoaded(true))
+    }).catch(() => { setScenarOpen(true); setSchemaLoaded(true) })
   }, [loading, metodoId, schemaLoaded])
 
   // ── Auto-save schema (debounced, solo dopo il caricamento iniziale) ────────
   useEffect(() => {
     if (!schemaLoaded) return
     const timer = setTimeout(() => {
-      schemaCalApi.save(metodoId, workCols, Array.from(removedCon), Array.from(removedMix))
+      schemaCalApi.save(metodoId, workCols, Array.from(removedCon), Array.from(removedMix), scenarioScelto)
     }, 500)
     return () => clearTimeout(timer)
-  }, [workCols, removedCon, removedMix, metodoId, schemaLoaded])
+  }, [workCols, removedCon, removedMix, scenarioScelto, metodoId, schemaLoaded])
 
   // ── Controlla quali work hanno lotti CRM dismessi ────────────────────────────
   useEffect(() => {
@@ -840,11 +874,13 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   }, [reload])
 
   const handleFullReset = useCallback(async () => {
-    await schemaCalApi.save(metodoId, [[]], [], [])
+    await schemaCalApi.save(metodoId, [[]], [], [], false)
     setWorkCols([[]])
     setRemovedCon(new Set())
     setRemovedMix(new Set())
     setSelSrcs(new Map())
+    setScenarioScelto(false)
+    setScenarOpen(true)
     setSchemaLoaded(true) // stato già pulito, non ri-caricare dal DB
     await reload()
   }, [metodoId, reload])
@@ -910,6 +946,31 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setRemovedMix(prev => new Set([...prev, mixId]))
     setSelSrcs(prev => { const m = new Map(prev); m.delete(mixId); return m })
   }, [])
+
+  const handleApplyScenario = useCallback((mixIds: string[]) => {
+    const scenarioSet = new Set(mixIds)
+
+    // Tutti i mix_id distinti presenti nello schema (da crmItems)
+    const tuttiMixIds = new Set<string>()
+    for (const c of crmItems) { if (c.mix_id) tuttiMixIds.add(c.mix_id) }
+
+    // removedMix = tutti i mix NON nello scenario
+    setRemovedMix(() => {
+      const s = new Set<string>()
+      for (const mid of tuttiMixIds) { if (!scenarioSet.has(mid)) s.add(mid) }
+      return s
+    })
+
+    // Rimuovi dalla selezione i mix che non fanno più parte dello scenario
+    setSelSrcs(prev => {
+      const m = new Map(prev)
+      for (const [k, v] of m) { if (v.tipo === 'mix' && !scenarioSet.has(k)) m.delete(k) }
+      return m
+    })
+
+    setScenarioScelto(true)
+    setScenarOpen(false)
+  }, [crmItems])
 
   // ── Crea Work ──────────────────────────────────────────────────────────────
   const handleSaveWork = async (data: Omit<WorkInSchema, 'id' | 'dbId'>) => {
@@ -1078,10 +1139,10 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           />
           <GrigliaAnalitiCrm
             analiti={analiti}
-            crmItems={crmItems}
+            crmItems={crmItemsFiltrati}
             selSrcs={selSrcs}
             removedCon={removedCon}
-            removedMix={removedMix}
+            removedMix={removedMixFiltrato}
             onToggleMix={toggleMix}
             onToggleSng={toggleSng}
             onRemoveCon={removeCon}
@@ -1089,6 +1150,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onClose={onClose}
             registerCardRef={registerCardRef}
             gridBodyRef={gridBodyRef}
+            onOpenScenar={() => setScenarOpen(true)}
           />
           <ColonneWork
             workCols={workCols}
@@ -1158,6 +1220,20 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
         </div>
       </div>
 
+      {/* ── Dialog scenari copertura CRM Mix ── */}
+      {scenarOpen && (
+        <ScenarDialog
+          analiti={analitiAll}
+          crmItems={crmItems}
+          firmaToMixIds={firmaToMixIds}
+          mixNomiMap={mixNomiMap}
+          removedMix={new Set()}
+          obbligatorio={!scenarioScelto}
+          onClose={() => setScenarOpen(false)}
+          onApply={handleApplyScenario}
+        />
+      )}
+
       {/* ── Modal crea Work ── */}
       <ModalCreaWork
         open={modalOpen}
@@ -1203,7 +1279,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
               const updated = prev.map(col =>
                 col.map(w => w.dbId === ricaricaSchemaWorkId ? { ...w, dbId: newWorkId } : w)
               )
-              schemaCalApi.save(metodoId, updated, Array.from(removedCon), Array.from(removedMix))
+              schemaCalApi.save(metodoId, updated, Array.from(removedCon), Array.from(removedMix), scenarioScelto)
               return updated
             })
           }

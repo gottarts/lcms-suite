@@ -32,11 +32,13 @@ interface GrigliaProps {
   onClose: () => void        // per chiudere lo schema prima di navigare
   registerCardRef: RegisterCardRef
   gridBodyRef?: React.RefObject<HTMLDivElement | null>
+  onOpenScenar: () => void
 }
 
 export function GrigliaAnalitiCrm({
   analiti, crmItems, selSrcs, removedCon, removedMix,
   onToggleMix, onToggleSng, onRemoveCon, onRemoveMix, onClose, registerCardRef, gridBodyRef,
+  onOpenScenar,
 }: GrigliaProps) {
   const navigate = useNavigate()
 
@@ -220,6 +222,19 @@ export function GrigliaAnalitiCrm({
                           textTransform:'uppercase', letterSpacing:'0.08em' }}>{h.label}</div>
             <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                           fontFamily:'IBM Plex Mono, monospace' }}>{h.sub}</div>
+            {i === 1 && (
+              <button
+                onClick={e => { e.stopPropagation(); onOpenScenar() }}
+                title="Scenari di copertura"
+                disabled={analiti.length === 0}
+                style={{
+                  marginTop: 4, padding: '1px 7px', fontSize: 9, fontWeight: 600,
+                  borderRadius: 4, border: `1px solid ${C.mix.border}`,
+                  background: C.mix.chip, color: C.mix.text, cursor: 'pointer',
+                  opacity: analiti.length === 0 ? 0.4 : 1,
+                }}
+              >◎ Scenari</button>
+            )}
           </div>
         ))}
       </div>
