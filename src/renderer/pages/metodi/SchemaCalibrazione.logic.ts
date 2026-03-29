@@ -84,13 +84,54 @@ export function useSchemaData(metodoId: string) {
       setCrmItems(itemsFinal)
 
       // 3. Costruisce mappe CRM disponibili per nome
-      const mixMap = new Map<string, string>()      // nome → mix_id
+
+      // Firma di un mix = nomi componenti ordinati alfabeticamente
+      // mix_id con stessa firma = stessa composizione, lotto diverso
+      const mixNomiMap = new Map<string, Set<string>>()   // mix_id → set nomi componenti
+      for (const item of items) {
+        if (item.mix_id) {
+          const s = mixNomiMap.get(item.mix_id) ?? new Set<string>()
+          s.add(item.nome)
+          mixNomiMap.set(item.mix_id, s)
+        }
+      }
+      const mixFirma = new Map<string, string>()           // mix_id → firma
+      for (const [mid, nomi] of mixNomiMap.entries()) {
+        mixFirma.set(mid, Array.from(nomi).sort().join('|'))
+      }
+      // firma → array di mix_id con stessa composizione
+      const firmaToMixIds = new Map<string, string[]>()
+      for (const [mid, firma] of mixFirma.entries()) {
+        const arr = firmaToMixIds.get(firma) ?? []
+        arr.push(mid)
+        firmaToMixIds.set(firma, arr)
+      }
+
+      const mixMap = new Map<string, string[]>()    // nome → array di mix_id (stessa composizione, lotti diversi)
       const sngMap = new Map<string, string[]>()    // nome → array di String(id) (tutti i singoli)
       const isMap  = new Map<string, boolean>()
 
+      // nome → tutti i mix_id che contengono quell'analita
+      const mixIdsByNome = new Map<string, string[]>()
       for (const item of items) {
         if (item.mix_id) {
-          mixMap.set(item.nome, item.mix_id)
+          const arr = mixIdsByNome.get(item.nome) ?? []
+          if (!arr.includes(item.mix_id)) arr.push(item.mix_id)
+          mixIdsByNome.set(item.nome, arr)
+        }
+      }
+
+      for (const item of items) {
+        if (item.mix_id) {
+          const tuttiMixIds = mixIdsByNome.get(item.nome)!
+          const firme = new Set(tuttiMixIds.map(mid => mixFirma.get(mid)!))
+          if (firme.size === 1) {
+            // Stessa composizione, lotti diversi → offri selettore (imposta una volta sola)
+            if (!mixMap.has(item.nome)) mixMap.set(item.nome, tuttiMixIds)
+          } else {
+            // Composizioni diverse: comportamento originale (ultimo mix_id vince)
+            mixMap.set(item.nome, [item.mix_id])
+          }
         } else {
           const arr = sngMap.get(item.nome) ?? []
           arr.push(String(item.id))
@@ -103,7 +144,8 @@ export function useSchemaData(metodoId: string) {
       //    Gli analiti senza CRM disponibili sono comunque inclusi (senzaCrm)
       const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
         nome:   row.nome,
-        mixId:  mixMap.get(row.nome) ?? null,
+        mixId:  mixMap.get(row.nome)?.[0] ?? null,
+        mixIds: mixMap.get(row.nome) ?? [],
         sngIds: sngMap.get(row.nome) ?? [],
         isCon:  mixMap.has(row.nome) && sngMap.has(row.nome),
         isIS:   isMap.get(row.nome) ?? false,

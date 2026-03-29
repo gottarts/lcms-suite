@@ -60,6 +60,7 @@ export interface CrmItem {
 export interface AnalitoItem {
   nome: string
   mixId: string | null
+  mixIds: string[]          // tutti i mix_id disponibili (lotti diversi dello stesso mix)
   sngIds: string[]          // id (String) di tutti i CRM singoli non scaduti per questo analita
   isCon: boolean            // ha sia mix che almeno un singolo
   isIS: boolean

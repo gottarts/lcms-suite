@@ -71,6 +71,8 @@ export function GrigliaAnalitiCrm({
     if (c.mix_id && !mixInfo.has(c.mix_id)) mixInfo.set(c.mix_id, c)
   }
 
+  const [mixLottoSel, setMixLottoSel] = useState<Map<string, string>>(new Map())
+
   // mix_id → set di cv distinti (per rilevare mix eterogenei)
   const mixCvSets = new Map<string, Set<number>>()
   for (const c of crmItems) {
@@ -379,18 +381,20 @@ export function GrigliaAnalitiCrm({
         }}>
           {analiti.map(a => {
             if (!a.mixId || mixFirstAnalita.get(a.mixId) !== a.nome) return null
-            const info   = mixInfo.get(a.mixId)
-            const sel    = selSrcs.has(a.mixId)
-            const isRmMx = removedMix.has(a.mixId)
-            const allComps = mixAllComps.get(a.mixId) ?? []
+            // mix_id attivo = lotto selezionato (default: primo mix_id = a.mixId)
+            const mixIdAttivo = mixLottoSel.get(a.mixId) ?? a.mixId
+            const info   = mixInfo.get(mixIdAttivo)
+            const sel    = selSrcs.has(mixIdAttivo)
+            const isRmMx = removedMix.has(mixIdAttivo)
+            const allComps = mixAllComps.get(mixIdAttivo) ?? mixAllComps.get(a.mixId) ?? []
             const analitiSet = new Set(mixAnaliti.get(a.mixId) ?? [])
             const top    = mixTopPx[a.mixId] ?? 0
             const height = mixHeightPx[a.mixId] ?? ROW
             return (
               <div
                 key={a.mixId}
-                ref={el => registerCardRef(a.mixId!, el)}
-                onClick={() => !isRmMx && onToggleMix(a.mixId!)}
+                ref={el => registerCardRef(mixIdAttivo, el)}
+                onClick={() => !isRmMx && onToggleMix(mixIdAttivo)}
                 style={{
                   position:'absolute', left:8, right:8,
                   top: top + 5, height: height - 10,
@@ -442,12 +446,32 @@ export function GrigliaAnalitiCrm({
                 <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
                   {info?.produttore ?? ''}
                 </div>
-                {info?.lotto && (
+                {a.mixIds.length > 1 && !isRmMx ? (
+                  <select
+                    value={mixIdAttivo}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => {
+                      e.stopPropagation()
+                      setMixLottoSel(prev => new Map(prev).set(a.mixId!, e.target.value))
+                    }}
+                    style={{
+                      fontSize:9, fontFamily:'IBM Plex Mono, monospace',
+                      border:`1px solid ${C.mix.border}`, borderRadius:3,
+                      background:'transparent', color:C.mix.text,
+                      marginTop:2, padding:'1px 2px', cursor:'pointer',
+                    }}
+                  >
+                    {a.mixIds.map(mid => {
+                      const lbl = mixInfo.get(mid)?.lotto ?? mid
+                      return <option key={mid} value={mid}>{lbl}</option>
+                    })}
+                  </select>
+                ) : info?.lotto ? (
                   <div style={{ fontSize:9, color:C.page.t2, marginTop:1,
                                 fontFamily:'IBM Plex Mono, monospace' }}>
                     {info.lotto}
                   </div>
-                )}
+                ) : null}
                 <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                               fontFamily:'IBM Plex Mono, monospace' }}>
                   {(mixCvSets.get(a.mixId)?.size ?? 0) <= 1 && info?.cv ? `${info.cv} mg/L` : ''}
