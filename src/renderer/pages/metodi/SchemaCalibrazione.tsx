@@ -25,6 +25,7 @@ import {
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
 import { ScenarDialog } from './ScenarDialog'
+import { AutoSelectDialog } from './AutoSelectDialog'
 import { buildMixComposizioni, generaScenari } from './SchemaCalibrazione.scenari'
 import { ImportaWorkDialog } from './ImportaWorkDialog'
 import { schemaCalApi, workApi } from '../../lib/api'
@@ -790,6 +791,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [importOpen,      setImportOpen]      = useState(false)
   const [scenarOpen,      setScenarOpen]      = useState(false)
   const [scenarioScelto,  setScenarioScelto]  = useState(false)
+  const [autoSelectOpen,  setAutoSelectOpen]  = useState(false)
 
   // Dopo la scelta dello scenario, ricalcola analiti e crmItems escludendo le
   // composizioni (firme) non nello scenario. Tutti i lotti di una composizione
@@ -950,6 +952,28 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setScenarOpen(false)
   }, [crmItems])
 
+  const handleAutoSelect = useCallback((mixIds: string[], sngIds: string[]) => {
+    // Applica scenario mix (aggiorna removedMix, scenarioScelto)
+    handleApplyScenario(mixIds)
+    // Aggiunge mix e singoli a selSrcs
+    setSelSrcs(prev => {
+      const m = new Map(prev)
+      for (const mixId of mixIds) {
+        const comps = crmItems.filter(c => c.mix_id === mixId)
+        const crm = comps[0]
+        const cvSet = new Set(comps.map(c => c.cv))
+        const eterogenea = cvSet.size > 1
+        m.set(mixId, { id: mixId, nome: crm?.mix ?? mixId, cv: crm?.cv ?? 0, tipo: 'mix', concVariabile: eterogenea })
+      }
+      for (const sngId of sngIds) {
+        const crm = crmItems.find(c => String(c.id) === sngId)
+        if (crm) m.set(sngId, { id: sngId, nome: crm.nome, cv: crm.cv, tipo: 'sng' })
+      }
+      return m
+    })
+    setAutoSelectOpen(false)
+  }, [handleApplyScenario, crmItems])
+
   // ── Crea Work ──────────────────────────────────────────────────────────────
   const handleSaveWork = async (data: Omit<WorkInSchema, 'id' | 'dbId'>) => {
     setSaving(true)
@@ -1105,6 +1129,11 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             background:C.page.sur, cursor:'pointer', fontSize:11,
             fontWeight:500, color:C.con.text,
           }}>Ricomincia da zero</button>
+          <button onClick={() => setAutoSelectOpen(true)} style={{
+            padding:'5px 12px', borderRadius:8, border:`1px solid ${C.mix.border}`,
+            background:C.page.sur, cursor:'pointer', fontSize:11,
+            fontWeight:500, color:C.mix.text,
+          }}>Selezione automatica</button>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
           <span style={{ fontSize:11, color:C.page.t2,
@@ -1149,6 +1178,19 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           obbligatorio={!scenarioScelto}
           onClose={() => setScenarOpen(false)}
           onApply={handleApplyScenario}
+        />
+      )}
+
+      {/* ── Dialog selezione automatica CRM ── */}
+      {autoSelectOpen && (
+        <AutoSelectDialog
+          analiti={analitiAll}
+          crmItems={crmItems}
+          firmaToMixIds={firmaToMixIds}
+          mixNomiMap={mixNomiMap}
+          removedMix={removedMix}
+          onClose={() => setAutoSelectOpen(false)}
+          onApply={handleAutoSelect}
         />
       )}
 
