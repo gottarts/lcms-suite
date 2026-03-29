@@ -9,6 +9,50 @@ interface RicaricaDialogProps {
   onSuccess: (newWorkId: number) => void
 }
 
+// Raggruppa ingredienti per mix_id (null = singolo)
+// Restituisce una lista di "gruppi": mix o singolo
+interface MixGroup {
+  mix_id: string | null
+  forma_commerciale: string | null
+  members: any[]
+  // Stato del gruppo: il peggiore dei membri (mancante > ambiguo > auto > ok)
+  stato: 'ok' | 'auto' | 'ambiguo' | 'mancante'
+}
+
+const STATO_RANK: Record<string, number> = { ok: 0, auto: 1, ambiguo: 2, mancante: 3 }
+
+function buildGroups(lotStatus: any[]): MixGroup[] {
+  const mixMap = new Map<string, MixGroup>()
+  const singles: MixGroup[] = []
+
+  for (const ing of lotStatus) {
+    if (ing.mix_id) {
+      if (!mixMap.has(ing.mix_id)) {
+        mixMap.set(ing.mix_id, {
+          mix_id: ing.mix_id,
+          forma_commerciale: ing.forma_commerciale ?? ing.mix_id,
+          members: [],
+          stato: 'ok',
+        })
+      }
+      const g = mixMap.get(ing.mix_id)!
+      g.members.push(ing)
+      if (STATO_RANK[ing.stato] > STATO_RANK[g.stato]) {
+        g.stato = ing.stato
+      }
+    } else {
+      singles.push({
+        mix_id: null,
+        forma_commerciale: null,
+        members: [ing],
+        stato: ing.stato,
+      })
+    }
+  }
+
+  return [...mixMap.values(), ...singles]
+}
+
 export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogProps) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
@@ -67,6 +111,64 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
     }
   }
 
+  // Quando l'utente sceglie un new_mix_id per un gruppo mix, propagare a tutti i membri
+  const handleMixScelta = (group: MixGroup, newMixId: string) => {
+    const newScelte: Record<number, number> = { ...scelte }
+    for (const member of group.members) {
+      const sostituto = member.sostituti.find((s: any) => s.mix_id === newMixId)
+      if (sostituto) {
+        newScelte[member.source_id] = sostituto.id
+      }
+    }
+    setScelte(newScelte)
+  }
+
+  // Ottieni il new_mix_id attualmente selezionato per un gruppo (dal primo membro con scelta)
+  const getMixSceltaAttuale = (group: MixGroup): string => {
+    for (const member of group.members) {
+      const chosenId = scelte[member.source_id]
+      if (chosenId != null) {
+        const sostituto = member.sostituti.find((s: any) => s.id === chosenId)
+        if (sostituto?.mix_id) return sostituto.mix_id
+      }
+    }
+    return ''
+  }
+
+  // Opzioni lotto per un gruppo mix: mix_id distinti dai sostituti del primo membro ambiguo
+  const getMixOpzioni = (group: MixGroup): Array<{ mix_id: string; lotto: string }> => {
+    const firstAmbiguo = group.members.find(m => m.stato === 'ambiguo' || m.stato === 'auto')
+    if (!firstAmbiguo) return []
+    const seen = new Set<string>()
+    const result: Array<{ mix_id: string; lotto: string }> = []
+    for (const s of firstAmbiguo.sostituti) {
+      if (s.mix_id && !seen.has(s.mix_id)) {
+        seen.add(s.mix_id)
+        result.push({ mix_id: s.mix_id, lotto: s.lotto ?? s.mix_id })
+      }
+    }
+    return result
+  }
+
+  const groups = buildGroups(lotStatus)
+  const groupsOk = groups.filter(g => g.stato === 'ok')
+  const groupsAuto = groups.filter(g => g.stato === 'auto')
+  const groupsAmbiguo = groups.filter(g => g.stato === 'ambiguo')
+  const groupsMancante = groups.filter(g => g.stato === 'mancante')
+
+  const renderMemberList = (group: MixGroup) => {
+    if (!group.mix_id) return null
+    return (
+      <div style={{ marginTop: 4, paddingLeft: 10, borderLeft: '2px solid hsl(var(--border))' }}>
+        {group.members.map(m => (
+          <div key={m.source_id} style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', padding: '1px 0' }}>
+            {m.nome}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div
       style={{
@@ -99,117 +201,174 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
         ) : (
           <>
             {/* Ingredienti OK */}
-            {lotStatus.filter(i => i.stato === 'ok').length > 0 && (
+            {groupsOk.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Lotti OK ({lotStatus.filter(i => i.stato === 'ok').length})
                 </div>
-                {lotStatus.filter(i => i.stato === 'ok').map(ing => (
-                  <div key={ing.source_id} style={{
-                    fontSize: 11, padding: '3px 8px', display: 'flex', justifyContent: 'space-between',
-                    borderRadius: 4, background: '#f0fdf4', marginBottom: 2,
-                  }}>
-                    <span style={{ fontWeight: 500 }}>{ing.nome}</span>
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#16a34a' }}>
-                      {ing.lotto_corrente ?? '—'}
-                    </span>
-                  </div>
-                ))}
+                {groupsOk.map(g => {
+                  const rep = g.members[0]
+                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+                  const lotto = rep.lotto_corrente ?? '—'
+                  return (
+                    <div key={g.mix_id ?? rep.source_id} style={{
+                      fontSize: 11, padding: '3px 8px', marginBottom: 2,
+                      borderRadius: 4, background: '#f0fdf4',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: 500 }}>{label}</span>
+                        <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#16a34a' }}>{lotto}</span>
+                      </div>
+                      {renderMemberList(g)}
+                    </div>
+                  )
+                })}
               </div>
             )}
 
             {/* Ingredienti automatici */}
-            {lotStatus.filter(i => i.stato === 'auto').length > 0 && (
+            {groupsAuto.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Sostituzione automatica ({lotStatus.filter(i => i.stato === 'auto').length})
                 </div>
-                {lotStatus.filter(i => i.stato === 'auto').map(ing => (
-                  <div key={ing.source_id} style={{
-                    fontSize: 11, padding: '4px 8px', marginBottom: 2,
-                    borderRadius: 4, background: '#fffbeb', border: '1px solid #fde68a',
-                  }}>
-                    <div style={{ fontWeight: 500 }}>{ing.nome}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 10 }}>
-                      <span style={{ color: '#dc2626', textDecoration: 'line-through' }}>
-                        {ing.lotto_usato ?? '—'}
-                      </span>
-                      <span style={{ color: 'hsl(var(--muted-foreground))' }}>→</span>
-                      <span style={{ color: '#16a34a', fontWeight: 600 }}>
-                        {ing.sostituti[0]?.lotto ?? '—'}
-                      </span>
+                {groupsAuto.map(g => {
+                  const rep = g.members[0]
+                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+                  const opzioni = getMixOpzioni(g)
+                  const lottoNuovo = g.mix_id
+                    ? (opzioni[0]?.lotto ?? '—')
+                    : (rep.sostituti[0]?.lotto ?? '—')
+                  return (
+                    <div key={g.mix_id ?? rep.source_id} style={{
+                      fontSize: 11, padding: '4px 8px', marginBottom: 2,
+                      borderRadius: 4, background: '#fffbeb', border: '1px solid #fde68a',
+                    }}>
+                      <div style={{ fontWeight: 500 }}>{label}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 10 }}>
+                        <span style={{ color: '#dc2626', textDecoration: 'line-through' }}>
+                          {rep.lotto_usato ?? '—'}
+                        </span>
+                        <span style={{ color: 'hsl(var(--muted-foreground))' }}>→</span>
+                        <span style={{ color: '#16a34a', fontWeight: 600 }}>{lottoNuovo}</span>
+                      </div>
+                      {renderMemberList(g)}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
             {/* Ingredienti ambigui — scelta richiesta */}
-            {lotStatus.filter(i => i.stato === 'ambiguo').length > 0 && (
+            {groupsAmbiguo.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#b45309', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Scelta richiesta ({lotStatus.filter(i => i.stato === 'ambiguo').length})
                 </div>
-                {lotStatus.filter(i => i.stato === 'ambiguo').map(ing => (
-                  <div key={ing.source_id} style={{
-                    fontSize: 11, padding: '6px 8px', marginBottom: 4,
-                    borderRadius: 4, background: '#fff7ed', border: '1px solid #fed7aa',
-                  }}>
-                    <div style={{ fontWeight: 500, marginBottom: 4 }}>{ing.nome}</div>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 4 }}>
-                      Lotto attuale (dismesso): {ing.lotto_usato ?? '—'}
-                    </div>
-                    <select
-                      value={scelte[ing.source_id] ?? ''}
-                      onChange={e => setScelte(prev => ({ ...prev, [ing.source_id]: Number(e.target.value) }))}
-                      style={{
-                        width: '100%', padding: '4px 6px', fontSize: 11,
-                        border: '1px solid hsl(var(--border))', borderRadius: 4,
-                        background: 'hsl(var(--background))', color: 'hsl(var(--foreground))',
-                        fontFamily: 'IBM Plex Mono, monospace',
-                      }}
-                    >
-                      <option value="">— Scegli un lotto —</option>
-                      {ing.sostituti.map((s: any) => (
-                        <option key={s.id} value={s.id}>
-                          {s.lotto ?? 'Lotto n/d'}{s.concentrazione != null ? ` · ${s.concentrazione} ${s.unita_conc}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
+                {groupsAmbiguo.map(g => {
+                  const rep = g.members[0]
+                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+
+                  if (g.mix_id) {
+                    // Mix: un selettore per lotto mix
+                    const opzioni = getMixOpzioni(g)
+                    const sceltaAttuale = getMixSceltaAttuale(g)
+                    return (
+                      <div key={g.mix_id} style={{
+                        fontSize: 11, padding: '6px 8px', marginBottom: 4,
+                        borderRadius: 4, background: '#fff7ed', border: '1px solid #fed7aa',
+                      }}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 4 }}>
+                          Lotto attuale (dismesso): {rep.lotto_usato ?? '—'}
+                        </div>
+                        {renderMemberList(g)}
+                        <select
+                          value={sceltaAttuale}
+                          onChange={e => handleMixScelta(g, e.target.value)}
+                          style={{
+                            width: '100%', padding: '4px 6px', fontSize: 11, marginTop: 6,
+                            border: '1px solid hsl(var(--border))', borderRadius: 4,
+                            background: 'hsl(var(--background))', color: 'hsl(var(--foreground))',
+                            fontFamily: 'IBM Plex Mono, monospace',
+                          }}
+                        >
+                          <option value="">— Scegli un lotto —</option>
+                          {opzioni.map(o => (
+                            <option key={o.mix_id} value={o.mix_id}>{o.lotto}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  } else {
+                    // Singolo: selettore per source_id come prima
+                    return (
+                      <div key={rep.source_id} style={{
+                        fontSize: 11, padding: '6px 8px', marginBottom: 4,
+                        borderRadius: 4, background: '#fff7ed', border: '1px solid #fed7aa',
+                      }}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 4 }}>
+                          Lotto attuale (dismesso): {rep.lotto_usato ?? '—'}
+                        </div>
+                        <select
+                          value={scelte[rep.source_id] ?? ''}
+                          onChange={e => setScelte(prev => ({ ...prev, [rep.source_id]: Number(e.target.value) }))}
+                          style={{
+                            width: '100%', padding: '4px 6px', fontSize: 11,
+                            border: '1px solid hsl(var(--border))', borderRadius: 4,
+                            background: 'hsl(var(--background))', color: 'hsl(var(--foreground))',
+                            fontFamily: 'IBM Plex Mono, monospace',
+                          }}
+                        >
+                          <option value="">— Scegli un lotto —</option>
+                          {rep.sostituti.map((s: any) => (
+                            <option key={s.id} value={s.id}>
+                              {s.lotto ?? 'Lotto n/d'}{s.concentrazione != null ? ` · ${s.concentrazione} ${s.unita_conc}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  }
+                })}
               </div>
             )}
 
             {/* Ingredienti mancanti — nessun sostituto */}
-            {lotStatus.filter(i => i.stato === 'mancante').length > 0 && (
+            {groupsMancante.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#dc2626', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Nessun lotto attivo trovato ({lotStatus.filter(i => i.stato === 'mancante').length})
                 </div>
-                {lotStatus.filter(i => i.stato === 'mancante').map(ing => (
-                  <div key={ing.source_id} style={{
-                    fontSize: 11, padding: '6px 8px', marginBottom: 4,
-                    borderRadius: 4, background: '#fef2f2', border: '1px solid #fca5a5',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontWeight: 500 }}>{ing.nome}</span>
-                      <button
-                        onClick={() => { onClose(); navigate('/composti', { state: { searchFilter: ing.nome, mostraDismessi: true } }) }}
-                        style={{
-                          fontSize: 10, padding: '2px 8px', borderRadius: 4,
-                          border: '1px solid #fca5a5', background: '#fff',
-                          color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                        }}
-                      >
-                        Vai al DB Composti →
-                      </button>
+                {groupsMancante.map(g => {
+                  const rep = g.members[0]
+                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+                  return (
+                    <div key={g.mix_id ?? rep.source_id} style={{
+                      fontSize: 11, padding: '6px 8px', marginBottom: 4,
+                      borderRadius: 4, background: '#fef2f2', border: '1px solid #fca5a5',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontWeight: 500 }}>{label}</span>
+                        <button
+                          onClick={() => { onClose(); navigate('/composti', { state: { searchFilter: rep.nome, mostraDismessi: true } }) }}
+                          style={{
+                            fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                            border: '1px solid #fca5a5', background: '#fff',
+                            color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                          }}
+                        >
+                          Vai al DB Composti →
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#dc2626', marginTop: 3 }}>
+                        Nessun lotto attivo nel DB. Aggiungere un nuovo lotto nel DB Composti, poi riaprire questo dialog.
+                      </div>
+                      {renderMemberList(g)}
                     </div>
-                    <div style={{ fontSize: 10, color: '#dc2626', marginTop: 3 }}>
-                      Nessun lotto attivo nel DB. Aggiungere un nuovo lotto nel DB Composti, poi riaprire questo dialog.
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 

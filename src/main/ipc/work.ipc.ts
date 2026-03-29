@@ -439,9 +439,11 @@ export function registerWorkIpc(): void {
     const db = getDb()
     const ingredienti = db.prepare(`
       SELECT wi.id, wi.source_id, wi.lotto_usato, wi.source_type,
-        c.nome           AS nome,
-        c.lotto          AS lotto_corrente,
-        c.data_dismissione
+        c.nome              AS nome,
+        c.lotto             AS lotto_corrente,
+        c.data_dismissione,
+        c.mix_id            AS mix_id,
+        c.forma_commerciale AS forma_commerciale
       FROM work_ingredienti wi
       LEFT JOIN composti c ON c.id = wi.source_id
       WHERE wi.work_id = ? AND wi.source_type = 'crm'
@@ -453,7 +455,7 @@ export function registerWorkIpc(): void {
       }
       // Cerca lotti attivi con stesso nome
       const sostituti = db.prepare(`
-        SELECT id, lotto, concentrazione, unita_conc
+        SELECT id, lotto, concentrazione, unita_conc, mix_id
         FROM composti
         WHERE nome = ? AND data_dismissione IS NULL AND id != ?
         ORDER BY id DESC
