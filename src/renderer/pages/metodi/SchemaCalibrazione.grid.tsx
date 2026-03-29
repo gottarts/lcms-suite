@@ -12,7 +12,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
-import { getConcInfo, calcolaVols, targetColIdx, getCompsFromWork } from './SchemaCalibrazione.logic'
+import { getConcInfo, calcolaVols, targetColIdx, getCompsFromWork, computeMixFragmentsAndLanes } from './SchemaCalibrazione.logic'
 
 const ROW = 48 // px altezza riga singola
 
@@ -45,13 +45,13 @@ export function GrigliaAnalitiCrm({
     navigate('/composti', { state: { searchFilter: nome, mostraDismessi } })
   }
 
-  // mix_id → array nomi analiti (usato per layout righe)
+  // mix_id → array nomi analiti (include sia mix primari che secondari)
   const mixAnaliti = new Map<string, string[]>()
   for (const a of analiti) {
-    if (a.mixId) {
-      const arr = mixAnaliti.get(a.mixId) ?? []
+    for (const mid of a.mixIds) {
+      const arr = mixAnaliti.get(mid) ?? []
       arr.push(a.nome)
-      mixAnaliti.set(a.mixId, arr)
+      mixAnaliti.set(mid, arr)
     }
   }
 
@@ -149,45 +149,51 @@ export function GrigliaAnalitiCrm({
     }
   }
 
-  // altezza riga: per analiti con mix usa mixRowHeights, altrimenti altezza reale singoli
+  // altezza riga: per analiti con mix usa mixRowHeights del mix primario (mixIds[0])
   const rowHeight = (a: AnalitoItem): number => {
-    if (!a.mixId) return Math.max(ROW, sngCellH(a))
-    const anaArr  = mixAnaliti.get(a.mixId) ?? []
+    if (a.mixIds.length === 0) return Math.max(ROW, sngCellH(a))
+    const primaryMid = a.mixIds[0]
+    const anaArr  = mixAnaliti.get(primaryMid) ?? []
     const idx     = anaArr.indexOf(a.nome)
-    const heights = mixRowHeights.get(a.mixId)
+    const heights = mixRowHeights.get(primaryMid)
     if (heights && idx >= 0) return heights[idx]
     return Math.max(1, a.sngIds.length) * ROW
   }
 
   // Separatori tra gruppi
-  const nSoloSng    = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
-  const nConMix     = analiti.filter(a =>  a.mixId).length
-  const hasSenzaCrm = analiti.some(a => !a.mixId && a.sngIds.length === 0)
+  const nSoloSng    = analiti.filter(a => a.mixIds.length === 0 && a.sngIds.length > 0).length
+  const nConMix     = analiti.filter(a => a.mixIds.length > 0).length
+  const hasSenzaCrm = analiti.some(a => a.mixIds.length === 0 && a.sngIds.length === 0)
   const hasConMix   = nConMix > 0
 
-  // Posizione verticale assoluta di ogni mix (top e height in px)
-  const mixTopPx: Record<string, number>    = {}
-  const mixHeightPx: Record<string, number> = {}
+  // Calcola posizioni verticali righe (per lane assignment)
   let cumY = 0
+  const rowTopsArr: number[] = []
+  const sepAtRow: number[] = []
   for (let i = 0; i < analiti.length; i++) {
-    const a = analiti[i]
-    // Separatori aggiungono 9px (height:1 + margin:4px*2)
     const hasSep = (i === nSoloSng && nSoloSng > 0 && hasConMix) ||
                    (i === nSoloSng + nConMix && nConMix > 0 && hasSenzaCrm)
+    sepAtRow.push(hasSep ? 9 : 0)
     if (hasSep) cumY += 9
-    const h = rowHeight(a)
-    if (a.mixId) {
-      if (mixTopPx[a.mixId] === undefined) mixTopPx[a.mixId] = cumY
-      mixHeightPx[a.mixId] = (mixHeightPx[a.mixId] ?? 0) + h
-    }
-    cumY += h  // border-box: border è dentro h
+    rowTopsArr.push(cumY)
+    cumY += rowHeight(analiti[i])
   }
   const totalMixHeight = cumY
 
-  // Prima occorrenza di ogni mix (per decidere dove renderizzare il blocco assoluto)
-  const mixFirstAnalita = new Map<string, string>()
-  for (const a of analiti) {
-    if (a.mixId && !mixFirstAnalita.has(a.mixId)) mixFirstAnalita.set(a.mixId, a.nome)
+  // Lane assignment: calcola frammenti e corsie per tutti i mix
+  const { fragments, totalLanes } = computeMixFragmentsAndLanes(
+    analiti,
+    a => rowHeight(a),
+    i  => sepAtRow[i] ?? 0,
+  )
+  const LANE_W = 270  // larghezza fissa per corsia — la colonna si allarga e scrolla
+
+  // Raggruppa frammenti per mix_id (per connettori SVG)
+  const fragmentsByMix = new Map<string, typeof fragments>()
+  for (const frag of fragments) {
+    const arr = fragmentsByMix.get(frag.mixId) ?? []
+    arr.push(frag)
+    fragmentsByMix.set(frag.mixId, arr)
   }
 
   return (
@@ -208,9 +214,9 @@ export function GrigliaAnalitiCrm({
       <div style={{ display:'flex', background:C.page.sur, borderRadius:'12px 12px 0 0',
                     borderBottom:'1px solid rgba(0,0,0,0.06)', flexShrink:0 }}>
         {([
-          { w:190, label:'Analiti',        sub:`${analiti.length} composti` },
-          { w:270, label:'CRM Mix',        sub:'clicca per selezionare', br:true },
-          { w:260, label:'Singoli / Neat', sub:'preparazioni non scadute' },
+          { w:190,              label:'Analiti',        sub:`${analiti.length} composti` },
+          { w:270 * totalLanes, label:'CRM Mix',        sub:'clicca per selezionare', br:true },
+          { w:260,              label:'Singoli / Neat', sub:'preparazioni non scadute' },
         ] as { w:number; label:string; sub:string; br?:boolean }[]).map((h, i) => (
           <div key={i} style={{ width:h.w, padding:'9px 11px', flexShrink:0,
                                 borderRight: h.br ? `1px solid ${C.page.brd}` : undefined }}>
@@ -223,7 +229,7 @@ export function GrigliaAnalitiCrm({
       </div>
 
       {/* ── Corpo scrollabile ── */}
-      <div ref={gridBodyRef} style={{ flex:1, overflowY:'auto', overflowX:'hidden',
+      <div ref={gridBodyRef} style={{ flex:1, overflowY:'auto', overflowX:'auto',
                     display:'flex', position:'relative' }}>
 
         {/* Colonna Analiti + Singoli (scorrono insieme) */}
@@ -231,7 +237,7 @@ export function GrigliaAnalitiCrm({
           {analiti.map((a, i) => {
             const isSepSngMix  = i === nSoloSng && nSoloSng > 0 && hasConMix
             const isSepSenzaCrm = i === nSoloSng + nConMix && nConMix > 0 && hasSenzaCrm
-            const senzaCrm = !a.mixId && a.sngIds.length === 0
+            const senzaCrm = a.mixIds.length === 0 && a.sngIds.length === 0
             const h = rowHeight(a)
 
             return (
@@ -271,7 +277,7 @@ export function GrigliaAnalitiCrm({
                   </div>
 
                   {/* Placeholder Mix (il blocco vero è assoluto) */}
-                  <div style={{ width:270, flexShrink:0,
+                  <div style={{ width:270 * totalLanes, flexShrink:0,
                                 borderRight:`1px solid ${C.page.brd}` }} />
 
                   {/* Cella Singoli — una card per sngId */}
@@ -284,7 +290,7 @@ export function GrigliaAnalitiCrm({
                       const isRem = removedCon.has(sngId)
                       const isSel = selSrcs.has(sngId)
                       // duplicato attivo = ha anche un mix non rimosso
-                      const isCon = a.isCon && !!a.mixId && !removedMix.has(a.mixId)
+                      const isCon = a.isCon && a.mixIds.length > 0 && a.mixIds.some(id => !removedMix.has(id))
                       return (
                         <div
                           key={sngId}
@@ -372,28 +378,30 @@ export function GrigliaAnalitiCrm({
           })}
         </div>
 
-        {/* Blocchi Mix in position:absolute rispetto al corpo scrollabile */}
+        {/* Blocchi Mix in position:absolute — lane system */}
         <div style={{
-          position:'absolute', left:190, width:270,
+          position:'absolute', left:190, width: LANE_W * Math.min(totalLanes, 4),
           height: totalMixHeight, pointerEvents:'none', overflow:'hidden',
         }}>
-          {analiti.map(a => {
-            if (!a.mixId || mixFirstAnalita.get(a.mixId) !== a.nome) return null
-            const info   = mixInfo.get(a.mixId)
-            const sel    = selSrcs.has(a.mixId)
-            const isRmMx = removedMix.has(a.mixId)
-            const allComps = mixAllComps.get(a.mixId) ?? []
-            const analitiSet = new Set(mixAnaliti.get(a.mixId) ?? [])
-            const top    = mixTopPx[a.mixId] ?? 0
-            const height = mixHeightPx[a.mixId] ?? ROW
+          {/* Frammenti mix */}
+          {fragments.map((frag, idx) => {
+            const info     = mixInfo.get(frag.mixId)
+            const sel      = selSrcs.has(frag.mixId)
+            const isRmMx   = removedMix.has(frag.mixId)
+            const allComps = frag.isFirst ? (mixAllComps.get(frag.mixId) ?? []) : []
+            const analitiSet = frag.isFirst ? new Set(mixAnaliti.get(frag.mixId) ?? []) : new Set<string>()
+            const cardLeft = frag.lane * LANE_W + 8
+            const cardW    = LANE_W - 16
+            const showChips = frag.isFirst && frag.heightPx > 60
             return (
               <div
-                key={a.mixId}
-                ref={el => registerCardRef(a.mixId!, el)}
-                onClick={() => !isRmMx && onToggleMix(a.mixId!)}
+                key={`${frag.mixId}-${idx}`}
+                ref={frag.isFirst ? el => registerCardRef(frag.mixId, el) : undefined}
+                onClick={() => !isRmMx && onToggleMix(frag.mixId)}
                 style={{
-                  position:'absolute', left:8, right:8,
-                  top: top + 5, height: height - 10,
+                  position:'absolute',
+                  left: cardLeft, width: cardW,
+                  top: frag.topPx + 5, height: frag.heightPx - 10,
                   borderRadius:10,
                   background: isRmMx ? C.page.sur : (sel ? '#d4e8fa' : C.mix.bg),
                   border:`1.5px solid ${C.mix.border}`,
@@ -407,11 +415,12 @@ export function GrigliaAnalitiCrm({
                   transition:'box-shadow .12s, background .1s',
                 }}
               >
-                {!isRmMx && (
+                {/* Pulsanti ↗ e × solo sul primo frammento */}
+                {frag.isFirst && !isRmMx && (
                   <div style={{ position:'absolute', top:4, right:4,
                                 display:'flex', gap:3, zIndex:3 }}>
                     <button
-                      onClick={e => { e.stopPropagation(); goToComposto(a.mixId!, false) }}
+                      onClick={e => { e.stopPropagation(); goToComposto(frag.mixId, false) }}
                       style={{
                         width:15, height:15, borderRadius:3,
                         border:`1px solid ${C.page.brd}`,
@@ -422,7 +431,7 @@ export function GrigliaAnalitiCrm({
                       title="Vedi nel DB composti"
                     >↗</button>
                     <button
-                      onClick={e => { e.stopPropagation(); onRemoveMix(a.mixId!) }}
+                      onClick={e => { e.stopPropagation(); onRemoveMix(frag.mixId) }}
                       style={{
                         width:15, height:15, borderRadius:'50%',
                         border:`1.5px solid ${C.page.brd}`,
@@ -434,50 +443,116 @@ export function GrigliaAnalitiCrm({
                     >×</button>
                   </div>
                 )}
-                <div style={{ fontSize:11, fontWeight:700,
-                              fontFamily:'IBM Plex Mono, monospace',
-                              color:C.mix.text, paddingRight: isRmMx ? 0 : 42 }}>
-                  {info?.mix ?? info?.mix_id ?? a.mixId}
-                </div>
-                <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
-                  {info?.produttore ?? ''}
-                </div>
-                {info?.lotto && (
-                  <div style={{ fontSize:9, color:C.page.t2, marginTop:1,
-                                fontFamily:'IBM Plex Mono, monospace' }}>
-                    {info.lotto}
+
+                {frag.isFirst ? (
+                  <>
+                    <div style={{ fontSize:11, fontWeight:700,
+                                  fontFamily:'IBM Plex Mono, monospace',
+                                  color:C.mix.text,
+                                  paddingRight: isRmMx ? 0 : 42,
+                                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {info?.mix ?? info?.mix_id ?? frag.mixId}
+                    </div>
+                    <div style={{ fontSize:10, color:C.page.t2, marginTop:2 }}>
+                      {info?.produttore ?? ''}
+                    </div>
+                    {info?.lotto && (
+                      <div style={{ fontSize:9, color:C.page.t2, marginTop:1,
+                                    fontFamily:'IBM Plex Mono, monospace' }}>
+                        {info.lotto}
+                      </div>
+                    )}
+                    <div style={{ fontSize:10, color:C.page.th, marginTop:2,
+                                  fontFamily:'IBM Plex Mono, monospace' }}>
+                      {(mixCvSets.get(frag.mixId)?.size ?? 0) <= 1 && info?.cv ? `${info.cv} mg/L` : ''}
+                      {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
+                    </div>
+                    {info?.ultima_rivalidazione && (
+                      <div style={{ fontSize:10, color:'#b45309', marginTop:2,
+                                    fontFamily:'IBM Plex Mono, monospace' }}>
+                        Rivalidato · scad. est. {info.ultima_rivalidazione}
+                      </div>
+                    )}
+                    {showChips && (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
+                        {allComps.map(n => {
+                          const mixItem   = mixItemByNome.get(n)
+                          const concLabel = mixItem?.cv ? ` · ${mixItem.cv} mg/L` : ''
+                          const isAnalita = analitiSet.has(n)
+                          return (
+                            <span key={n} style={{
+                              fontSize:9, fontFamily:'IBM Plex Mono, monospace',
+                              background: isAnalita ? C.mix.chip : 'rgba(212,232,250,0.4)',
+                              color: isAnalita ? C.mix.text : C.page.t2,
+                              borderRadius:4, padding:'2px 6px',
+                              opacity: isAnalita ? 1 : 0.7,
+                            }}>{n}{concLabel}</span>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Frammento non-primo: nome del mix (full width, stesso stile) */
+                  <div style={{ fontSize:11, fontWeight:700,
+                                fontFamily:'IBM Plex Mono, monospace',
+                                color:C.mix.text, opacity:0.7,
+                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {info?.mix ?? frag.mixId}
                   </div>
                 )}
-                <div style={{ fontSize:10, color:C.page.th, marginTop:2,
-                              fontFamily:'IBM Plex Mono, monospace' }}>
-                  {(mixCvSets.get(a.mixId)?.size ?? 0) <= 1 && info?.cv ? `${info.cv} mg/L` : ''}
-                  {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
-                </div>
-                {info?.ultima_rivalidazione && (
-                  <div style={{ fontSize:10, color:'#b45309', marginTop:2,
-                                fontFamily:'IBM Plex Mono, monospace' }}>
-                    Rivalidato · scad. est. {info.ultima_rivalidazione}
-                  </div>
-                )}
-                <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:5 }}>
-                  {allComps.map(n => {
-                    const mixItem  = mixItemByNome.get(n)
-                    const concLabel = mixItem?.cv ? ` · ${mixItem.cv} mg/L` : ''
-                    const isAnalita = analitiSet.has(n)
-                    return (
-                      <span key={n} style={{
-                        fontSize:9, fontFamily:'IBM Plex Mono, monospace',
-                        background: isAnalita ? C.mix.chip : 'rgba(212,232,250,0.4)',
-                        color: isAnalita ? C.mix.text : C.page.t2,
-                        borderRadius:4, padding:'2px 6px',
-                        opacity: isAnalita ? 1 : 0.7,
-                      }}>{n}{concLabel}</span>
-                    )
-                  })}
-                </div>
               </div>
             )
           })}
+
+          {/* Linee SVG di connessione tra frammenti dello stesso mix */}
+          {(() => {
+            // Palette colori per connettori (visivamente distinti)
+            const CONN_COLORS = [
+              '#6ba3d6', '#e08050', '#7db85a', '#9b86d6',
+              '#c49540', '#d06090', '#50a8c0', '#a05050',
+            ]
+            // Per ogni corsia, calcola quanti mix hanno connettori e assegna sub-indice
+            // sub-indice → x offset entro la corsia per separare le linee
+            const laneSubIdx   = new Map<string, number>()  // mixId → sub-idx nella sua corsia
+            const laneCounts   = new Map<number, number>()  // lane → contatore
+            const mixColorIdx  = new Map<string, number>()  // mixId → indice colore
+            let globalIdx = 0
+            for (const [mixId, frags] of fragmentsByMix.entries()) {
+              if (frags.length <= 1) continue
+              const lane = frags[0].lane
+              const sub  = laneCounts.get(lane) ?? 0
+              laneSubIdx.set(mixId, sub)
+              laneCounts.set(lane, sub + 1)
+              mixColorIdx.set(mixId, globalIdx % CONN_COLORS.length)
+              globalIdx++
+            }
+            return (
+              <svg style={{ position:'absolute', left:0, top:0,
+                            width: LANE_W * totalLanes, height: totalMixHeight,
+                            pointerEvents:'none', overflow:'visible' }}>
+                {Array.from(fragmentsByMix.entries()).map(([mixId, frags]) => {
+                  if (frags.length <= 1) return null
+                  const color   = CONN_COLORS[mixColorIdx.get(mixId) ?? 0]
+                  const sub     = laneSubIdx.get(mixId) ?? 0
+                  const total   = laneCounts.get(frags[0].lane) ?? 1
+                  return frags.slice(0, -1).map((f, i) => {
+                    const next = frags[i + 1]
+                    // Distribuisce le linee orizzontalmente entro la corsia
+                    const x = f.lane * LANE_W + LANE_W * (sub + 1) / (total + 1)
+                    return (
+                      <line key={`${mixId}-conn-${i}`}
+                        x1={x} y1={f.topPx + f.heightPx - 5}
+                        x2={x} y2={next.topPx + 5}
+                        stroke={color} strokeWidth={2}
+                        strokeDasharray="4 3" opacity={0.7}
+                      />
+                    )
+                  })
+                })}
+              </svg>
+            )
+          })()}
         </div>
 
       </div>

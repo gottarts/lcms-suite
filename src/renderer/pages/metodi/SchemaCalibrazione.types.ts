@@ -59,10 +59,18 @@ export interface CrmItem {
 
 export interface AnalitoItem {
   nome: string
-  mixId: string | null
+  mixIds: string[]          // tutti i mix che contengono questo analita (può essere più di uno)
   sngIds: string[]          // id (String) di tutti i CRM singoli non scaduti per questo analita
-  isCon: boolean            // ha sia mix che almeno un singolo
+  isCon: boolean            // ha sia ≥1 mix che almeno un singolo
   isIS: boolean
+}
+
+export interface MixFragment {
+  mixId:    string
+  topPx:    number   // posizione verticale (px) nella colonna mix
+  heightPx: number   // altezza (px)
+  lane:     number   // corsia assegnata (0, 1, 2)
+  isFirst:  boolean  // primo frammento del mix → mostra nome/lotto
 }
 
 export interface ConnectionLine {

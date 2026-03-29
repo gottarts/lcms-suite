@@ -5,7 +5,7 @@
 //   src/renderer/pages/metodi/SchemaCalibrazione.logic.ts
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
-import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema, ConnectionLine, Ingrediente } from './SchemaCalibrazione.types'
+import type { CrmItem, AnalitoItem, MixFragment, SorgenteSel, WorkInSchema, ConnectionLine, Ingrediente } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,13 +84,15 @@ export function useSchemaData(metodoId: string) {
       setCrmItems(itemsFinal)
 
       // 3. Costruisce mappe CRM disponibili per nome
-      const mixMap = new Map<string, string>()      // nome → mix_id
-      const sngMap = new Map<string, string[]>()    // nome → array di String(id) (tutti i singoli)
-      const isMap  = new Map<string, boolean>()
+      const mixesMap = new Map<string, string[]>()  // nome → [mix_id, ...] (può essere più di uno)
+      const sngMap   = new Map<string, string[]>()  // nome → array di String(id) (tutti i singoli)
+      const isMap    = new Map<string, boolean>()
 
       for (const item of items) {
         if (item.mix_id) {
-          mixMap.set(item.nome, item.mix_id)
+          const arr = mixesMap.get(item.nome) ?? []
+          if (!arr.includes(item.mix_id)) arr.push(item.mix_id)
+          mixesMap.set(item.nome, arr)
         } else {
           const arr = sngMap.get(item.nome) ?? []
           arr.push(String(item.id))
@@ -103,24 +105,25 @@ export function useSchemaData(metodoId: string) {
       //    Gli analiti senza CRM disponibili sono comunque inclusi (senzaCrm)
       const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
         nome:   row.nome,
-        mixId:  mixMap.get(row.nome) ?? null,
+        mixIds: mixesMap.get(row.nome) ?? [],
         sngIds: sngMap.get(row.nome) ?? [],
-        isCon:  mixMap.has(row.nome) && sngMap.has(row.nome),
+        isCon:  (mixesMap.get(row.nome)?.length ?? 0) > 0 && sngMap.has(row.nome),
         isIS:   isMap.get(row.nome) ?? false,
       }))
 
-      // Ordine: solo-singoli → [per ciascun mix: entrambi-del-mix → solo-mix] → senza CRM
-      const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
-      const conMix   = analitiCalc.filter(a =>  a.mixId)
-      const senzaCrm = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0)
-      // Raggruppa per mixId; dentro ogni gruppo: prima chi ha anche singoli
+      // Ordine: solo-singoli → [per ciascun mix primario: entrambi → solo-mix] → senza CRM
+      // Il mix primario è mixIds[0]; analiti con più mix appaiono nel gruppo del primo
+      const soloSng  = analitiCalc.filter(a => a.mixIds.length === 0 && a.sngIds.length > 0)
+      const conMix   = analitiCalc.filter(a => a.mixIds.length > 0)
+      const senzaCrm = analitiCalc.filter(a => a.mixIds.length === 0 && a.sngIds.length === 0)
+      // Raggruppa per mix primario (mixIds[0]); dentro ogni gruppo: prima chi ha anche singoli
       const mixOrder: string[] = []
       for (const a of conMix) {
-        if (!mixOrder.includes(a.mixId!)) mixOrder.push(a.mixId!)
+        if (!mixOrder.includes(a.mixIds[0])) mixOrder.push(a.mixIds[0])
       }
       const mixGrouped: AnalitoItem[] = []
       for (const mid of mixOrder) {
-        const gruppo = conMix.filter(a => a.mixId === mid)
+        const gruppo = conMix.filter(a => a.mixIds[0] === mid)
         mixGrouped.push(...gruppo.filter(a => a.sngIds.length > 0), ...gruppo.filter(a => a.sngIds.length === 0))
       }
       setAnaliti([...soloSng, ...mixGrouped, ...senzaCrm])
@@ -448,6 +451,115 @@ export function ricostruisciWorkInSchema(
     vols,
     extraSrcs: extraSrcs.length > 0 ? extraSrcs : undefined,
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Calcola frammenti mix e assegna corsie (lane assignment)
+// Gestisce mix sovrapposti (stesso analita in più mix) con sub-colonne dinamiche
+// ─────────────────────────────────────────────────────────────────────────────
+export function computeMixFragmentsAndLanes(
+  analiti:     AnalitoItem[],
+  rowHeightFn: (a: AnalitoItem) => number,
+  separatorsFn: (i: number) => number,  // px di separatori cumulativi fino alla riga i
+): { fragments: MixFragment[]; totalLanes: number } {
+  if (analiti.length === 0) return { fragments: [], totalLanes: 1 }
+
+  // Calcola la posizione verticale (top) di ogni riga
+  const rowTops: number[] = []
+  const rowHeights: number[] = []
+  let cumY = 0
+  for (let i = 0; i < analiti.length; i++) {
+    const sepPx = separatorsFn(i)
+    cumY += sepPx
+    rowTops.push(cumY)
+    const h = rowHeightFn(analiti[i])
+    rowHeights.push(h)
+    cumY += h
+  }
+
+  // Raccogli tutti i mix_id presenti
+  const allMixIds = new Set<string>()
+  for (const a of analiti) {
+    for (const mid of a.mixIds) allMixIds.add(mid)
+  }
+
+  // Per ogni mix, trova i blocchi contigui di righe (frammenti)
+  const rawFragments: Omit<MixFragment, 'lane' | 'isFirst'>[] = []
+  for (const mixId of allMixIds) {
+    // Indici delle righe che contengono questo mix
+    const rows = analiti
+      .map((a, i) => (a.mixIds.includes(mixId) ? i : -1))
+      .filter(i => i >= 0)
+
+    if (rows.length === 0) continue
+
+    // Raggruppa in run contigui
+    let runStart = rows[0]
+    let runEnd   = rows[0]
+    for (let k = 1; k <= rows.length; k++) {
+      const isLast = k === rows.length
+      const isContiguous = !isLast && rows[k] === runEnd + 1
+      if (isContiguous) {
+        runEnd = rows[k]
+      } else {
+        // Fine del run corrente: calcola top e height
+        const topPx    = rowTops[runStart]
+        let heightPx = 0
+        for (let r = runStart; r <= runEnd; r++) heightPx += rowHeights[r]
+        rawFragments.push({ mixId, topPx, heightPx })
+        if (!isLast) { runStart = rows[k]; runEnd = rows[k] }
+      }
+    }
+  }
+
+  // Raggruppa i frammenti per mix (ogni mix deve stare tutto nella stessa corsia)
+  const fragsByMix = new Map<string, typeof rawFragments>()
+  for (const frag of rawFragments) {
+    const arr = fragsByMix.get(frag.mixId) ?? []
+    arr.push(frag)
+    fragsByMix.set(frag.mixId, arr)
+  }
+
+  // Ordina i mix per topPx del loro primo frammento
+  const mixOrder = Array.from(fragsByMix.entries())
+    .sort(([, a], [, b]) => a[0].topPx - b[0].topPx)
+
+  // Lane assignment per mix: trova la prima corsia dove TUTTI i frammenti del mix
+  // non si sovrappongono con niente già occupato in quella corsia
+  // laneIntervals: per ogni corsia, lista di {start, end} degli intervalli occupati
+  const laneIntervals: Array<Array<{ start: number; end: number }>> = []
+
+  const canFit = (lane: number, frags: typeof rawFragments): boolean => {
+    const occupied = laneIntervals[lane] ?? []
+    for (const frag of frags) {
+      for (const iv of occupied) {
+        if (frag.topPx < iv.end && frag.topPx + frag.heightPx > iv.start) return false
+      }
+    }
+    return true
+  }
+
+  const fragments: MixFragment[] = []
+
+  for (const [, frags] of mixOrder) {
+    // Cerca la prima corsia dove tutti i frammenti del mix entrano
+    let lane = laneIntervals.findIndex((_, l) => canFit(l, frags))
+    if (lane === -1) { lane = laneIntervals.length; laneIntervals.push([]) }
+    // Registra tutti i frammenti del mix in questa corsia
+    for (const frag of frags) {
+      laneIntervals[lane].push({ start: frag.topPx, end: frag.topPx + frag.heightPx })
+    }
+    // Emetti i frammenti con la corsia assegnata
+    frags.forEach((frag, i) => {
+      fragments.push({ ...frag, lane, isFirst: i === 0 })
+    })
+  }
+
+  // Riordina per topPx (per rendering consistente)
+  fragments.sort((a, b) => a.topPx - b.topPx)
+
+  const totalLanes = Math.max(laneIntervals.length, 1)
+  return { fragments, totalLanes }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

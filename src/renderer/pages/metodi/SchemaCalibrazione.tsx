@@ -853,7 +853,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const hasCon = analiti.some(a =>
     a.isCon &&
     a.sngIds.some(id => !removedCon.has(id)) &&
-    a.mixId && !removedMix.has(a.mixId)
+    a.mixIds.length > 0 && a.mixIds.some(id => !removedMix.has(id))
   )
   const tgtCol = targetColIdx(selSrcs)
 
