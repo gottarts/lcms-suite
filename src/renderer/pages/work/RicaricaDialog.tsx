@@ -111,11 +111,20 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
     }
   }
 
-  // Quando l'utente sceglie un new_mix_id per un gruppo mix, propagare a tutti i membri
-  const handleMixScelta = (group: MixGroup, newMixId: string) => {
+  // Quando l'utente sceglie un sostituto per un gruppo mix, propagare a tutti i membri.
+  // value è il mix_id (per sostituti mix) oppure "single:<id>" (per sostituti singoli senza mix).
+  const handleMixScelta = (group: MixGroup, value: string) => {
     const newScelte: Record<number, number> = { ...scelte }
+    const isSingle = value.startsWith('single:')
+    const singleId = isSingle ? Number(value.slice(7)) : null
+
     for (const member of group.members) {
-      const sostituto = member.sostituti.find((s: any) => s.mix_id === newMixId)
+      let sostituto: any
+      if (isSingle) {
+        sostituto = member.sostituti.find((s: any) => s.id === singleId)
+      } else {
+        sostituto = member.sostituti.find((s: any) => s.mix_id === value)
+      }
       if (sostituto) {
         newScelte[member.source_id] = sostituto.id
       }
@@ -123,28 +132,35 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
     setScelte(newScelte)
   }
 
-  // Ottieni il new_mix_id attualmente selezionato per un gruppo (dal primo membro con scelta)
+  // Ottieni il value attualmente selezionato per un gruppo (dal primo membro con scelta)
   const getMixSceltaAttuale = (group: MixGroup): string => {
     for (const member of group.members) {
       const chosenId = scelte[member.source_id]
       if (chosenId != null) {
         const sostituto = member.sostituti.find((s: any) => s.id === chosenId)
-        if (sostituto?.mix_id) return sostituto.mix_id
+        if (sostituto) {
+          return sostituto.mix_id ? sostituto.mix_id : `single:${sostituto.id}`
+        }
       }
     }
     return ''
   }
 
-  // Opzioni lotto per un gruppo mix: mix_id distinti dai sostituti del primo membro ambiguo
-  const getMixOpzioni = (group: MixGroup): Array<{ mix_id: string; lotto: string }> => {
+  // Opzioni lotto per un gruppo mix: mix_id distinti o singoli (con mix_id = null)
+  const getMixOpzioni = (group: MixGroup): Array<{ mix_id: string | null; id?: number; lotto: string }> => {
     const firstAmbiguo = group.members.find(m => m.stato === 'ambiguo' || m.stato === 'auto')
     if (!firstAmbiguo) return []
     const seen = new Set<string>()
-    const result: Array<{ mix_id: string; lotto: string }> = []
+    const result: Array<{ mix_id: string | null; id?: number; lotto: string }> = []
     for (const s of firstAmbiguo.sostituti) {
-      if (s.mix_id && !seen.has(s.mix_id)) {
-        seen.add(s.mix_id)
-        result.push({ mix_id: s.mix_id, lotto: s.lotto ?? s.mix_id })
+      if (s.mix_id) {
+        if (!seen.has(s.mix_id)) {
+          seen.add(s.mix_id)
+          result.push({ mix_id: s.mix_id, lotto: s.lotto ?? s.mix_id })
+        }
+      } else {
+        // Sostituto singolo (senza mix): usa id come chiave univoca
+        result.push({ mix_id: null, id: s.id, lotto: s.lotto ?? `#${s.id}` })
       }
     }
     return result
@@ -280,7 +296,7 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                       }}>
                         <div style={{ fontWeight: 500, marginBottom: 4 }}>{label}</div>
                         <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 4 }}>
-                          Lotto attuale (dismesso): {rep.lotto_usato ?? '—'}
+                          Lotto attuale ({rep.data_dismissione ? 'dismesso' : 'scaduto'}): {rep.lotto_usato ?? '—'}
                         </div>
                         {renderMemberList(g)}
                         <select
@@ -294,9 +310,10 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                           }}
                         >
                           <option value="">— Scegli un lotto —</option>
-                          {opzioni.map(o => (
-                            <option key={o.mix_id} value={o.mix_id}>{o.lotto}</option>
-                          ))}
+                          {opzioni.map(o => {
+                            const val = o.mix_id ?? `single:${o.id}`
+                            return <option key={val} value={val}>{o.lotto}</option>
+                          })}
                         </select>
                       </div>
                     )
@@ -309,7 +326,7 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                       }}>
                         <div style={{ fontWeight: 500, marginBottom: 4 }}>{label}</div>
                         <div style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 4 }}>
-                          Lotto attuale (dismesso): {rep.lotto_usato ?? '—'}
+                          Lotto attuale ({rep.data_dismissione ? 'dismesso' : 'scaduto'}): {rep.lotto_usato ?? '—'}
                         </div>
                         <select
                           value={scelte[rep.source_id] ?? ''}
