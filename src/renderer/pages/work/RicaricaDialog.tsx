@@ -86,14 +86,6 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
 
   if (!workId) return null
 
-  const daRisolvere = lotStatus.filter(i => i.stato !== 'ok')
-  const tuttiRisolti = daRisolvere.every(i => {
-    if (i.stato === 'auto') return true
-    if (i.stato === 'ambiguo') return scelte[i.source_id] != null
-    return false // mancante → non risolvibile automaticamente
-  })
-  const haMancanti = daRisolvere.some(i => i.stato === 'mancante')
-
   const handleConferma = async () => {
     if (!workId) return
     setSaving(true)
@@ -124,6 +116,12 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
         sostituto = member.sostituti.find((s: any) => s.id === singleId)
       } else {
         sostituto = member.sostituti.find((s: any) => s.mix_id === value)
+        // Fallback: se il membro non ha sostituti con quel mix_id esatto (il backend
+        // cerca per nome individuale e potrebbe non avere lo stesso mix_id), prendi il
+        // primo sostituto con qualsiasi mix_id non nullo dello stesso batch
+        if (!sostituto) {
+          sostituto = member.sostituti.find((s: any) => s.mix_id != null)
+        }
       }
       if (sostituto) {
         newScelte[member.source_id] = sostituto.id
@@ -132,14 +130,19 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
     setScelte(newScelte)
   }
 
-  // Ottieni il value attualmente selezionato per un gruppo (dal primo membro con scelta)
+  // Ottieni il value attualmente selezionato per un gruppo (dal primo membro con scelta valida)
   const getMixSceltaAttuale = (group: MixGroup): string => {
+    const opzioni = getMixOpzioni(group)
+    const valoriValidi = new Set(opzioni.map(o => o.mix_id ?? `single:${o.id}`))
     for (const member of group.members) {
       const chosenId = scelte[member.source_id]
       if (chosenId != null) {
         const sostituto = member.sostituti.find((s: any) => s.id === chosenId)
         if (sostituto) {
-          return sostituto.mix_id ? sostituto.mix_id : `single:${sostituto.id}`
+          const val = sostituto.mix_id ? sostituto.mix_id : `single:${sostituto.id}`
+          // Restituisce solo valori presenti nelle opzioni del dropdown, altrimenti
+          // il <select> nativo con value non valido resetta visivamente al placeholder
+          if (valoriValidi.has(val)) return val
         }
       }
     }
@@ -171,6 +174,20 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
   const groupsAuto = groups.filter(g => g.stato === 'auto')
   const groupsAmbiguo = groups.filter(g => g.stato === 'ambiguo')
   const groupsMancante = groups.filter(g => g.stato === 'mancante')
+
+  const daRisolvere = lotStatus.filter(i => i.stato !== 'ok')
+  const haMancanti = daRisolvere.some(i => i.stato === 'mancante')
+  // tuttiRisolti lavora a livello di gruppi per gestire correttamente i CRM mix:
+  // un gruppo mix è risolto se getMixSceltaAttuale trova almeno un membro con scelta valida
+  const tuttiRisolti = daRisolvere.length > 0 &&
+    groups.filter(g => g.stato !== 'ok' && g.stato !== 'mancante').every(g => {
+      if (g.stato === 'auto') return true
+      if (g.stato === 'ambiguo') {
+        if (g.mix_id) return getMixSceltaAttuale(g) !== ''
+        return scelte[g.members[0].source_id] != null
+      }
+      return false
+    })
 
   const renderMemberList = (group: MixGroup) => {
     if (!group.mix_id) return null

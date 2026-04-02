@@ -30,12 +30,15 @@ interface GrigliaProps {
   registerCardRef: RegisterCardRef
   gridBodyRef?: React.RefObject<HTMLDivElement | null>
   onOpenScenar: () => void
+  // Callback quando l'utente cambia lotto di un mix dal dropdown:
+  // firmaId = a.mixId (primo mix_id della firma), oldMixId, newMixId
+  onChangeMixLotto?: (firmaId: string, oldMixId: string, newMixId: string) => void
 }
 
 export function GrigliaAnalitiCrm({
   analiti, crmItems, selSrcs, removedMix,
   onToggleMix, onToggleSng, onClose, registerCardRef, gridBodyRef,
-  onOpenScenar,
+  onOpenScenar, onChangeMixLotto,
 }: GrigliaProps) {
   const navigate = useNavigate()
 
@@ -430,7 +433,10 @@ export function GrigliaAnalitiCrm({
                     onClick={e => e.stopPropagation()}
                     onChange={e => {
                       e.stopPropagation()
-                      setMixLottoSel(prev => new Map(prev).set(a.mixId!, e.target.value))
+                      const oldId = mixIdAttivo
+                      const newId = e.target.value
+                      setMixLottoSel(prev => new Map(prev).set(a.mixId!, newId))
+                      onChangeMixLotto?.(a.mixId!, oldId, newId)
                     }}
                     style={{
                       fontSize:9, fontFamily:'IBM Plex Mono, monospace',

@@ -926,6 +926,35 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     })
   }, [])
 
+  // Quando l'utente cambia lotto di un mix dalla griglia CRM:
+  // swappa removedMix (il nuovo lotto diventa attivo, il vecchio escluso)
+  // e trasferisce la selezione se il vecchio era selezionato
+  const handleChangeMixLotto = useCallback((_firmaId: string, oldMixId: string, newMixId: string) => {
+    setRemovedMix(prev => {
+      const s = new Set(prev)
+      s.delete(newMixId)  // il nuovo lotto non è più escluso
+      s.add(oldMixId)     // il vecchio lotto viene escluso
+      return s
+    })
+    setSelSrcs(prev => {
+      if (!prev.has(oldMixId)) return prev
+      const m = new Map(prev)
+      const entry = m.get(oldMixId)!
+      m.delete(oldMixId)
+      const comps = crmItems.filter(c => c.mix_id === newMixId)
+      const crm = comps[0]
+      const cvSet = new Set(comps.map(c => c.cv))
+      m.set(newMixId, {
+        ...entry,
+        id: newMixId,
+        nome: crm?.mix ?? entry.nome,
+        cv: crm?.cv ?? entry.cv,
+        concVariabile: cvSet.size > 1,
+      })
+      return m
+    })
+  }, [crmItems])
+
 
   const handleApplyScenario = useCallback((mixIds: string[]) => {
     const scenarioSet = new Set(mixIds)
@@ -1104,6 +1133,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             registerCardRef={registerCardRef}
             gridBodyRef={gridBodyRef}
             onOpenScenar={() => setScenarOpen(true)}
+            onChangeMixLotto={handleChangeMixLotto}
           />
           <ColonneWork
             workCols={workCols}
