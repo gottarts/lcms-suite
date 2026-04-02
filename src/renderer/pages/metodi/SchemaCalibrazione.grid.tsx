@@ -33,12 +33,14 @@ interface GrigliaProps {
   // Callback quando l'utente cambia lotto di un mix dal dropdown:
   // firmaId = a.mixId (primo mix_id della firma), oldMixId, newMixId
   onChangeMixLotto?: (firmaId: string, oldMixId: string, newMixId: string) => void
+  // Lotto attivo per firma, derivato da removedMix nel componente padre (fix reload)
+  mixLottoSel?: Map<string, string>
 }
 
 export function GrigliaAnalitiCrm({
   analiti, crmItems, selSrcs, removedMix,
   onToggleMix, onToggleSng, onClose, registerCardRef, gridBodyRef,
-  onOpenScenar, onChangeMixLotto,
+  onOpenScenar, onChangeMixLotto, mixLottoSel: mixLottoSelProp,
 }: GrigliaProps) {
   const navigate = useNavigate()
 
@@ -73,7 +75,7 @@ export function GrigliaAnalitiCrm({
     if (c.mix_id && !mixInfo.has(c.mix_id)) mixInfo.set(c.mix_id, c)
   }
 
-  const [mixLottoSel, setMixLottoSel] = useState<Map<string, string>>(new Map())
+  const mixLottoSel = mixLottoSelProp ?? new Map<string, string>()
 
   // mix_id → set di cv distinti (per rilevare mix eterogenei)
   const mixCvSets = new Map<string, Set<number>>()
@@ -435,7 +437,6 @@ export function GrigliaAnalitiCrm({
                       e.stopPropagation()
                       const oldId = mixIdAttivo
                       const newId = e.target.value
-                      setMixLottoSel(prev => new Map(prev).set(a.mixId!, newId))
                       onChangeMixLotto?.(a.mixId!, oldId, newId)
                     }}
                     style={{

@@ -815,6 +815,20 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     return { analiti, crmItemsFiltrati: filtered }
   }, [scenarioScelto, removedMix, crmItems, analitiAll, analitiRows, firmaToMixIds])
 
+  // ── Deriva mixLottoSel da removedMix ─────────────────────────────────────
+  // Il lotto attivo di ogni firma è il primo mix_id NON escluso da removedMix.
+  // Questo garantisce coerenza dopo reload (mixLottoSel non era persistito nel DB).
+  const mixLottoSel = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const a of analiti) {
+      if (!a.mixId || !a.mixIds || a.mixIds.length <= 1) continue
+      if (m.has(a.mixId)) continue
+      const attivo = a.mixIds.find(mid => !removedMix.has(mid))
+      if (attivo && attivo !== a.mixId) m.set(a.mixId, attivo)
+    }
+    return m
+  }, [analiti, removedMix])
+
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
   useEffect(() => {
     if (loading || schemaLoaded) return
@@ -1134,6 +1148,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             gridBodyRef={gridBodyRef}
             onOpenScenar={() => setScenarOpen(true)}
             onChangeMixLotto={handleChangeMixLotto}
+            mixLottoSel={mixLottoSel}
           />
           <ColonneWork
             workCols={workCols}
