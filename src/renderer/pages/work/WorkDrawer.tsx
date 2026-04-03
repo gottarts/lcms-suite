@@ -50,7 +50,7 @@ function buildCrmItems(allDbWorks: Map<number, any>): CrmItem[] {
           concentrazione:       ing.source_cv ?? null,
           unita_conc:           ing.source_unita_conc ?? 'mg/L',
           forma:                null,
-          lotto:                ing.source_lotto ?? null,
+          lotto:                ing.source_lotto ?? ing.lotto_usato ?? null,
           produttore:           null,
           scadenza_prodotto:    null,
           ultima_rivalidazione: null,
@@ -301,6 +301,13 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                   <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{src.nome}</div>
                   {src.tipo === 'mix' && (() => {
                     const lotto = crmItems.find(c => c.mix_id === src.id)?.lotto
+                    return lotto
+                      ? <div style={{ fontSize:9, color:C.page.t2,
+                                      fontFamily:'IBM Plex Mono, monospace' }}>{lotto}</div>
+                      : null
+                  })()}
+                  {src.tipo === 'sng' && (() => {
+                    const lotto = crmItems.find(c => String(c.id) === src.id)?.lotto
                     return lotto
                       ? <div style={{ fontSize:9, color:C.page.t2,
                                       fontFamily:'IBM Plex Mono, monospace' }}>{lotto}</div>

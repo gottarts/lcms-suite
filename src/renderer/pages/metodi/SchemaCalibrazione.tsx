@@ -495,6 +495,13 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                                       fontFamily:'IBM Plex Mono, monospace' }}>{lotto}</div>
                       : null
                   })()}
+                  {src.tipo === 'sng' && (() => {
+                    const lotto = crmItems.find(c => String(c.id) === src.id)?.lotto
+                    return lotto
+                      ? <div style={{ fontSize:9, color:C.page.t2,
+                                      fontFamily:'IBM Plex Mono, monospace' }}>{lotto}</div>
+                      : null
+                  })()}
                   <div style={{ fontSize:10, color:C.page.th }}>
                     {src.concVariabile ? (
                       <>
