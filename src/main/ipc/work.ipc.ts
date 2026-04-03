@@ -56,13 +56,15 @@ export function registerWorkIpc(): void {
         (SELECT wp.data_prep  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
         (SELECT wp.note       FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
         (SELECT wp.operatore  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_operatore,
-        (SELECT wp.created_at FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_created_at
+        (SELECT wp.created_at FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_created_at,
+        (SELECT GROUP_CONCAT(metodo_id) FROM work_metodi WHERE work_id = w.id) AS _metodi_ids_raw
       FROM work w
       WHERE w.archiviato = 0 OR w.archiviato IS NULL
       ORDER BY w.created_at DESC
     `).all() as any[]
 
     return works.map((w: any) => {
+      const metodi_ids: string[] = w._metodi_ids_raw ? w._metodi_ids_raw.split(',') : []
       const ultimaPrep: WorkPreparazione | null = w._up_id ? {
         id: w._up_id,
         work_id: w.id,
@@ -71,11 +73,12 @@ export function registerWorkIpc(): void {
         operatore: w._up_operatore,
         created_at: w._up_created_at,
       } : null
-      const { _up_id, _up_data_prep, _up_note, _up_operatore, _up_created_at, ...rest } = w
+      const { _up_id, _up_data_prep, _up_note, _up_operatore, _up_created_at, _metodi_ids_raw, ...rest } = w
       const nBloccati = w.n_ingredienti_bloccati as number
       const nScaduti  = w.n_ingredienti_scaduti  as number
       return {
         ...rest,
+        metodi_ids,
         ultima_preparazione: ultimaPrep,
         stato_lab: calcolaStatoLab(ultimaPrep, w.validita_mesi),
         bloccata: nBloccati > 0,

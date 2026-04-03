@@ -1099,6 +1099,11 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                     padding:'12px 24px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <button onClick={onClose} style={{
+            padding:'3px 9px', borderRadius:6, border:`1px solid ${C.page.brd}`,
+            background:'transparent', cursor:'pointer', fontSize:11,
+            fontWeight:500, color:C.page.t2,
+          }}>← Torna a Metodi</button>
           <span style={{ fontSize:15, fontWeight:600 }}>Schema Calibrazione</span>
           <span style={{ fontSize:11, color:C.page.t2,
                          fontFamily:'IBM Plex Mono, monospace',
@@ -1186,18 +1191,19 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             background:C.page.sur, cursor:'pointer', fontSize:11,
             fontWeight:500, color:C.mix.text,
           }}>Selezione automatica</button>
+          {selSrcs.size > 0 && (
+            <button onClick={() => setSelSrcs(new Set())} style={{
+              padding:'5px 12px', borderRadius:8, border:`1px solid ${C.page.brd}`,
+              background:C.page.sur, cursor:'pointer', fontSize:11,
+              fontWeight:500, color:C.page.t2,
+            }}>Deseleziona tutto</button>
+          )}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
           <span style={{ fontSize:11, color:C.page.t2,
                          fontFamily:'IBM Plex Mono, monospace' }}>
             {selSrcs.size} sorgent{selSrcs.size === 1 ? 'e' : 'i'} selezionat{selSrcs.size === 1 ? 'a' : 'e'}
           </span>
-          <button onClick={onClose} style={{
-            padding:'7px 14px', borderRadius:8, border:`1px solid ${C.page.brd}`,
-            background:C.page.sur, cursor:'pointer', fontSize:13,
-            fontWeight:700, color:C.page.t2,
-          }}>← Chiudi schema</button>
-          <div style={{ width:1, height:20, background:C.page.brd }} />
           <button
             onClick={() => setModalOpen(true)}
             disabled={selSrcs.size === 0}

@@ -23,6 +23,7 @@ export function WorkPage() {
   const [archiviaId, setArchiviaId] = useState<number | null>(null)
   const [mostraArchivio, setMostraArchivio] = useState(false)
   const [addToSchemaWork, setAddToSchemaWork] = useState<{ id: number; nome: string } | null>(null)
+  const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null)
 
   const load = async (archivio = false) => {
     const [data, metodi] = await Promise.all([
@@ -38,14 +39,28 @@ export function WorkPage() {
   useEffect(() => { load(mostraArchivio) }, [mostraArchivio])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return works
-    const q = search.toLowerCase()
-    return works.filter(w =>
-      w.nome?.toLowerCase().includes(q) ||
-      w.solvente?.toLowerCase().includes(q) ||
-      w.operatore?.toLowerCase().includes(q)
-    )
-  }, [works, search])
+    let result = works
+    if (filtroMetodo) {
+      result = result.filter(w => w.metodi_ids?.includes(filtroMetodo))
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(w =>
+        w.nome?.toLowerCase().includes(q) ||
+        w.solvente?.toLowerCase().includes(q) ||
+        w.operatore?.toLowerCase().includes(q)
+      )
+    }
+    return result
+  }, [works, search, filtroMetodo])
+
+  const metodiConWork = useMemo(() => {
+    const ids = new Set<string>()
+    for (const w of works) {
+      for (const mid of (w.metodi_ids ?? [])) ids.add(mid)
+    }
+    return [...ids].filter(id => metodiNomi[id])
+  }, [works, metodiNomi])
 
   const handleDelete = async () => {
     if (deleteId !== null) {
@@ -80,7 +95,7 @@ export function WorkPage() {
           <Button
             size="sm"
             variant={mostraArchivio ? 'secondary' : 'outline'}
-            onClick={() => { setMostraArchivio(v => !v); setSearch('') }}
+            onClick={() => { setMostraArchivio(v => !v); setSearch(''); setFiltroMetodo(null) }}
           >
             <Archive className="h-4 w-4 mr-1" />
             {mostraArchivio ? 'Archiviate' : 'Archivio'}
@@ -102,6 +117,30 @@ export function WorkPage() {
           className="pl-9"
         />
       </div>
+
+      {!mostraArchivio && metodiConWork.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          <button
+            onClick={() => setFiltroMetodo(null)}
+            className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
+              filtroMetodo === null
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-muted-foreground border-border hover:border-foreground/40'
+            }`}
+          >Tutti</button>
+          {metodiConWork.map(mid => (
+            <button
+              key={mid}
+              onClick={() => setFiltroMetodo(filtroMetodo === mid ? null : mid)}
+              className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
+                filtroMetodo === mid
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-background text-indigo-700 border-indigo-300 hover:bg-indigo-50'
+              }`}
+            >{metodiNomi[mid]}</button>
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="text-center text-muted-foreground py-16 text-sm">
@@ -126,6 +165,7 @@ export function WorkPage() {
             <WorkCard
               key={w.id}
               work={w}
+              metodiNomi={metodiNomi}
               onClick={() => setDrawerId(w.id)}
               onPrepara={() => setDrawerId(w.id)}
               onGoSchema={w.primo_metodo_id ? () => navigate('/metodi', { state: { schemaMetodoId: w.primo_metodo_id } }) : undefined}
@@ -225,7 +265,7 @@ const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
   non_preparata:{ label: 'Non preparata',className: 'text-muted-foreground' },
 }
 
-function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void; onAddToSchema?: () => void }) {
+function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiNomi }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void; onAddToSchema?: () => void; metodiNomi?: Record<string, string> }) {
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
   const isBloccata = !!work.bloccata
@@ -304,6 +344,15 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema }: { wor
           <div className="col-span-2 truncate">Op: {work.operatore}</div>
         )}
       </div>
+      {metodiNomi && work.metodi_ids && work.metodi_ids.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {work.metodi_ids.map((mid: string) => (
+            <Badge key={mid} variant="outline" className="text-[10px] px-1.5 py-0 border-indigo-300 text-indigo-700 bg-indigo-50">
+              {metodiNomi[mid] ?? mid}
+            </Badge>
+          ))}
+        </div>
+      )}
       {(onPrepara || onGoSchema || onAddToSchema) && (
         <div className="flex gap-1 mt-2 pt-2 border-t border-border/50" onClick={e => e.stopPropagation()}>
           {onPrepara && work.validita_mesi && (
