@@ -12,9 +12,10 @@ interface MetodoDrawerProps {
   onEdit: (metodo: any) => void
   onDelete: (id: string) => void
   onOpenSchema: (id: string) => void
+  onOpenParametri: (id: string) => void
 }
 
-export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema }: MetodoDrawerProps) {
+export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema, onOpenParametri }: MetodoDrawerProps) {
   const [metodo, setMetodo] = useState<any>(null)
   const [analiti, setAnaliti] = useState<{ id: number; nome: string }[]>([])
   const navigate = useNavigate()
@@ -65,6 +66,9 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
           </Button>
           <Button size="sm" variant="outline" onClick={() => { onClose(); onOpenSchema(String(metodo.id)) }}>
             Schema calibrazione
+          </Button>
+          <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" onClick={() => { onClose(); onOpenParametri(String(metodo.id)) }}>
+            Parametri
           </Button>
         </div>
 

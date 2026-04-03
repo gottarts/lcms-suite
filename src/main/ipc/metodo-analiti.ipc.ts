@@ -3,11 +3,31 @@ import { getDb } from '../db'
 
 export function registerMetodoAnalitiIpc(): void {
   ipcMain.handle('metodo-analiti:list', (_, metodoId: string) => {
-    return getDb().prepare(
-      `SELECT id, nome, ordine FROM metodo_analiti
+    const db = getDb()
+    // Verifica se le colonne extra esistono già (migrazione 018 potrebbe non essere ancora applicata)
+    const cols = (db.prepare(`PRAGMA table_info(metodo_analiti)`).all() as { name: string }[]).map(r => r.name)
+    const hasExtra = cols.includes('accreditato')
+    const selectCols = hasExtra
+      ? 'id, nome, ordine, accreditato, alias_strumento'
+      : 'id, nome, ordine, 0 AS accreditato, NULL AS alias_strumento'
+    return db.prepare(
+      `SELECT ${selectCols} FROM metodo_analiti
        WHERE metodo_id = ?
        ORDER BY COALESCE(ordine, 9999), id ASC`
     ).all(metodoId)
+  })
+
+  ipcMain.handle('metodo-analiti:update', (_, id: number, patch: { accreditato?: number; alias_strumento?: string | null }) => {
+    const db = getDb()
+    const cols = (db.prepare(`PRAGMA table_info(metodo_analiti)`).all() as { name: string }[]).map(r => r.name)
+    const fields: string[] = []
+    const values: unknown[] = []
+    if ('accreditato' in patch && cols.includes('accreditato')) { fields.push('accreditato = ?'); values.push(patch.accreditato) }
+    if ('alias_strumento' in patch && cols.includes('alias_strumento')) { fields.push('alias_strumento = ?'); values.push(patch.alias_strumento ?? null) }
+    if (fields.length === 0) return { ok: true }
+    values.push(id)
+    db.prepare(`UPDATE metodo_analiti SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    return { ok: true }
   })
 
   ipcMain.handle('metodo-analiti:add', (_, metodoId: string, nomi: string[]) => {

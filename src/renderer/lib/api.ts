@@ -145,10 +145,12 @@ export const schemaCalApi = {
 
 export const metodoAnalitiApi = {
   list: (metodoId: string) =>
-    api.invoke('metodo-analiti:list', metodoId) as Promise<{ id: number; nome: string; ordine: number | null }[]>,
+    api.invoke('metodo-analiti:list', metodoId) as Promise<{ id: number; nome: string; ordine: number | null; accreditato: number; alias_strumento: string | null }[]>,
   add: (metodoId: string, nomi: string[]) =>
     api.invoke('metodo-analiti:add', metodoId, nomi) as Promise<{ ok: boolean }>,
   remove: (metodoId: string, nomi: string[]) =>
     api.invoke('metodo-analiti:remove', metodoId, nomi) as Promise<{ ok: boolean }>,
+  update: (id: number, patch: { accreditato?: number; alias_strumento?: string | null }) =>
+    api.invoke('metodo-analiti:update', id, patch) as Promise<{ ok: boolean }>,
 }
 

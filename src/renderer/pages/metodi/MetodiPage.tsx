@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Plus, Search } from 'lucide-react'
 import SchemaCalibrazione from './SchemaCalibrazione'
+import { ParametriMetodoPage } from './ParametriMetodoPage'
 
 export function MetodiPage() {
   const location = useLocation()
@@ -22,6 +23,7 @@ export function MetodiPage() {
   const [drawerId, setDrawerId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [schemaMetodoId, setSchemaMetodoId] = useState<string | null>(null)
+  const [parametriMetodoId, setParametriMetodoId] = useState<string | null>(null)
 
   useEffect(() => {
     const state = location.state as { schemaMetodoId?: string } | null
@@ -79,6 +81,16 @@ export function MetodiPage() {
     )
   }
 
+  if (parametriMetodoId) {
+    return (
+      <ParametriMetodoPage
+        metodoId={parametriMetodoId}
+        metodoNome={metodi.find(m => m.id === parametriMetodoId)?.nome ?? ''}
+        onClose={() => setParametriMetodoId(null)}
+      />
+    )
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -116,7 +128,13 @@ export function MetodiPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtered.map(m => (
-          <MetodoCard key={m.id} metodo={m} onClick={() => setDrawerId(m.id)} />
+          <MetodoCard
+            key={m.id}
+            metodo={m}
+            onClick={() => setDrawerId(m.id)}
+            onGoSchema={() => { setDrawerId(null); setSchemaMetodoId(m.id) }}
+            onGoParametri={() => { setDrawerId(null); setParametriMetodoId(m.id) }}
+          />
         ))}
       </div>
 
@@ -143,6 +161,7 @@ export function MetodiPage() {
         onEdit={handleEdit}
         onDelete={id => { setDrawerId(null); setDeleteId(id) }}
         onOpenSchema={id => { setDrawerId(null); setSchemaMetodoId(id) }}
+        onOpenParametri={id => { setDrawerId(null); setParametriMetodoId(id) }}
       />
 
       <ConfirmDialog

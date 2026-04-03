@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 interface MetodoCardProps {
   metodo: {
@@ -12,9 +13,11 @@ interface MetodoCardProps {
     flusso?: string | null
   }
   onClick: () => void
+  onGoSchema?: () => void
+  onGoParametri?: () => void
 }
 
-export function MetodoCard({ metodo, onClick }: MetodoCardProps) {
+export function MetodoCard({ metodo, onClick, onGoSchema, onGoParametri }: MetodoCardProps) {
   return (
     <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={onClick}>
       <CardHeader className="pb-2">
@@ -40,6 +43,21 @@ export function MetodoCard({ metodo, onClick }: MetodoCardProps) {
             <div><span className="text-muted-foreground">Flusso:</span> {metodo.flusso}</div>
           )}
         </div>
+
+        {(onGoSchema || onGoParametri) && (
+          <div className="flex gap-1 mt-2 pt-2 border-t border-border/50" onClick={e => e.stopPropagation()}>
+            {onGoSchema && (
+              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 flex-1" onClick={onGoSchema}>
+                Schema ↗
+              </Button>
+            )}
+            {onGoParametri && (
+              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 flex-1 border-blue-300 text-blue-700 hover:bg-blue-50" onClick={onGoParametri}>
+                Parametri ↗
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
