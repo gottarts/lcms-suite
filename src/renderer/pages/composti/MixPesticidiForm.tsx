@@ -26,6 +26,7 @@ interface ComponenteImportato {
   scadenza_prodotto?: string | null
   data_apertura?: string | null
   produttore?: string | null
+  concentrazione?: number | null
 }
 
 interface MixPesticidiFormProps {
@@ -52,6 +53,7 @@ interface MixPesticidiFormProps {
     operatore_apertura: string
     produttore: string
     _nomi: string[]
+    _concentrazioni: (number | null)[]
     _metodi_ids: string[]
   } | null
 }
@@ -150,7 +152,16 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
         operatore_apertura: '',
       })
       setNomi(mixTemplate._nomi)
-      setComponentiImportati(null)
+      if (mixTemplate._concentrazioni?.length > 0) {
+        setComponentiImportati(
+          mixTemplate._nomi.map((nome, i) => ({
+            nome,
+            concentrazione: mixTemplate._concentrazioni[i] ?? null,
+          }))
+        )
+      } else {
+        setComponentiImportati(null)
+      }
       setImportedFields(new Set())
       if (mixTemplate._metodi_ids?.length > 0) {
         setMetodiIds(mixTemplate._metodi_ids)
@@ -355,10 +366,16 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
           form.forma_commerciale ||
           gruppo[0]?.lotto?.trim() || ''
 
+        // Se l'operatore ha compilato la concentrazione nel form, sovrascrive quella per-componente
+        const concFormOverride = form.concentrazione ? parseFloat(form.concentrazione) : null
+        const componentiFinali = concFormOverride != null
+          ? gruppo.map(c => ({ ...c, concentrazione: concFormOverride }))
+          : gruppo
+
         await compostiApi.createMix({
           ...baseData,
           forma_commerciale: formaCommercialeGruppo,
-          componenti: gruppo,
+          componenti: componentiFinali,
         })
 
         // TASK B-3: sync anagrafiche dopo salvataggio mix
@@ -507,8 +524,16 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
               <Input type="number" step="any" value={form.volume_ml} onChange={e => set('volume_ml', e.target.value)} placeholder="es. 1.2" />
             </div>
             <div>
-              <Label className="text-xs">Concentrazione</Label>
-              <Input type="number" step="any" value={form.concentrazione} onChange={e => set('concentrazione', e.target.value)} placeholder="es. 100" disabled={importedFields.has('concentrazione')} className={lockedClass('concentrazione')} />
+              <Label className="text-xs">
+                Concentrazione
+                {mixTemplate && <span className="ml-1 font-normal normal-case text-muted-foreground">— non compilare</span>}
+              </Label>
+              <Input type="number" step="any" value={form.concentrazione} onChange={e => set('concentrazione', e.target.value)} placeholder={mixTemplate ? 'lascia vuoto' : 'es. 100'} disabled={importedFields.has('concentrazione')} className={lockedClass('concentrazione')} />
+              {mixTemplate && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Lascia vuoto per mantenere le concentrazioni originali di ciascun analita. Compila solo per sovrascriverle tutte con un valore unico.
+                </p>
+              )}
             </div>
             <div>
               <Label className="text-xs">Unità</Label>

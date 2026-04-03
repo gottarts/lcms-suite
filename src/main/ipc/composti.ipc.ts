@@ -340,7 +340,26 @@ FROM composti c`
       : null
 
     db.transaction(() => {
-      updateComposto.run(row)
+      // Per componenti di mix: se la concentrazione è null (campo vuoto nel form),
+      // non sovrascrivere la concentrazione esistente — ogni analita mantiene la sua
+      if (row.mix_id && row.concentrazione == null) {
+        db.prepare(
+          `UPDATE composti SET nome=@nome, codice_interno=@codice_interno, formula=@formula,
+           classe=@classe, forma=@forma, forma_commerciale=@forma_commerciale,
+           purezza=@purezza, unita_conc=@unita_conc, solvente=@solvente,
+           fiala=@fiala, produttore=@produttore, lotto=@lotto,
+           operatore_apertura=@operatore_apertura, data_apertura=@data_apertura,
+           scadenza_prodotto=@scadenza_prodotto, data_dismissione=@data_dismissione,
+           destinazione_uso=@destinazione_uso, work_standard=@work_standard,
+           matrice=@matrice, peso_molecolare=@peso_molecolare, ubicazione=@ubicazione,
+           arpa=@arpa, mix=@mix, mix_id=@mix_id,
+           stoccaggio=@stoccaggio, accreditamento_crm=@accreditamento_crm,
+           volume_ml=@volume_ml,
+           updated_at=datetime('now') WHERE id=@id`
+        ).run(row)
+      } else {
+        updateComposto.run(row)
+      }
 
       if (row.fiala !== undefined && row.fiala !== null && row.lotto && !row.mix_id) {
         db.prepare('UPDATE composti SET fiala = ? WHERE lotto = ? AND id != ?')
@@ -348,12 +367,18 @@ FROM composti c`
       }
 
       if (row.mix_id) {
+        // Se concentrazione è null (campo lasciato vuoto), non propagarla agli altri componenti
+        // così ognuno mantiene la propria concentrazione originale
+        const concClause = row.concentrazione != null
+          ? 'concentrazione = ?,'
+          : ''
+        const concParam = row.concentrazione != null ? [row.concentrazione] : []
         db.prepare(`
           UPDATE composti SET
             forma               = ?,
             forma_commerciale   = ?,
             codice_interno      = ?,
-            concentrazione      = ?,
+            ${concClause}
             unita_conc          = ?,
             solvente            = ?,
             fiala               = ?,
@@ -374,7 +399,7 @@ FROM composti c`
         `).run(
           row.forma,
           row.forma_commerciale,
-          row.codice_interno, row.concentrazione, row.unita_conc,
+          row.codice_interno, ...concParam, row.unita_conc,
           row.solvente, row.fiala,
           row.produttore, row.operatore_apertura,
           row.data_apertura, row.scadenza_prodotto,
@@ -495,6 +520,7 @@ FROM composti c`
       scadenza_prodotto?: string | null
       data_apertura?: string | null
       produttore?: string | null
+      concentrazione?: number | null
     }>
   }) => {
     const db = getDb()
@@ -562,6 +588,7 @@ FROM composti c`
       scadenza_prodotto?: string | null
       data_apertura?: string | null
       produttore?: string | null
+      concentrazione?: number | null
     }> = data.componenti
       ? data.componenti
       : (data.nomi || []).map(nome => ({ nome }))
@@ -577,6 +604,7 @@ FROM composti c`
           scadenza_prodotto: comp.scadenza_prodotto ?? common.scadenza_prodotto,
           data_apertura:     comp.data_apertura     ?? common.data_apertura,
           produttore:        comp.produttore        ?? common.produttore,
+          concentrazione:    comp.concentrazione    ?? common.concentrazione,
         }
         const result = insert.run(row)
         const newId = result.lastInsertRowid

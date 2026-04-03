@@ -802,7 +802,7 @@ export function CompostiPage() {
         const componenti = await window.electronAPI.invoke('composti:list-by-mix', composto.mix_id) as any[]
         const template = {
           forma_commerciale: composto.forma_commerciale || composto.mix || '',
-          concentrazione: composto.concentrazione ? String(composto.concentrazione) : '',
+          concentrazione: '',
           unita_conc: composto.unita_conc || '',
           solvente: composto.solvente || '',
           classe: composto.classe || '',
@@ -817,6 +817,7 @@ export function CompostiPage() {
           lotto: '', data_apertura: '', scadenza_prodotto: '', operatore_apertura: '',
           produttore: composto.produttore || '',
           _nomi: componenti.map((c: any) => c.nome),
+          _concentrazioni: componenti.map((c: any) => c.concentrazione ?? null),
           _metodi_ids: composto.metodi_ids || [],
         }
         setMixTemplate(template); setMixOpen(true); setPanelId(null)

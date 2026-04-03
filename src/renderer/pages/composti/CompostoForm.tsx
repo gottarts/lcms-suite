@@ -55,7 +55,9 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
 
   useEffect(() => {
     if (composto) {
-      setForm({ ...composto })
+      // Per i componenti di mix: non pre-popolare la concentrazione così il campo
+      // parte vuoto = "mantieni le concentrazioni originali di ciascun analita"
+      setForm({ ...composto, ...(composto.mix_id ? { concentrazione: '' } : {}) })
       if (composto.mix_id) {
         window.electronAPI.invoke('composti:count-by-mix', composto.mix_id)
           .then((n: unknown) => setMixCount(n as number))
@@ -465,8 +467,14 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                   {isEdit && form.mix_id && mixCount > 1 && (
                     <span className="ml-2 font-normal text-orange-600 normal-case">(sceglierai al salvataggio)</span>
                   )}
+                  {isEdit && form.mix_id && <span className="ml-1 font-normal normal-case text-muted-foreground">— non compilare</span>}
                 </Label>
-                <Input type="number" step="0.01" value={form.concentrazione || ''} onChange={e => set('concentrazione', e.target.value)} />
+                <Input type="number" step="0.01" value={form.concentrazione || ''} onChange={e => set('concentrazione', e.target.value)} placeholder={form.mix_id ? 'lascia vuoto' : ''} />
+                {isEdit && form.mix_id && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Lascia vuoto per mantenere le concentrazioni originali di ciascun analita. Compila solo per sovrascriverle tutte con un valore unico.
+                  </p>
+                )}
               </div>
               <div>
                 <Label className="text-xs">Unità</Label>
