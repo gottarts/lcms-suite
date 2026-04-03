@@ -3,13 +3,9 @@
 
 
 
- Ci sono dei miglioramente sempre per quanto riguarda la gestione work in schemi e workpage:
-la feat di ricarica funziona bene per quanto riguarda i crm dismessi e quindi il pulsante riarica sui chips degli schemi. 
-La cosa è da estendere anche i crm scaduti
 
 
 
-mettere il collegamento al db composti anche per la colonna anliti del scehma calibrazione. se lanalita ha i crm attivi visualizzare la tabella coi composti non dismessi. se il composto ha solo crm dismessi o inesitenti puntare alla tabella con il filtro mostra dismessi attivo.
 
 
  
@@ -18,6 +14,7 @@ mettere il collegamento al db composti anche per la colonna anliti del scehma ca
 
  ## importante
 
+resta aperta la questione neat nei crm dellgli schemi calibrazione
 
  bisognera creare un archivio di schemi calibrazione. 
  
@@ -31,7 +28,7 @@ mettere il collegamento al db composti anche per la colonna anliti del scehma ca
  ## altri
   
  
-nella card delle work in workpage dece esserci la selezione del metodo come filtro delle work. 
+
 
 
 
