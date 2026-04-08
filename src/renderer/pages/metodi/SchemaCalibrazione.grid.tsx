@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef } from './SchemaCalibrazione.types'
+import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef, PrepStockItem } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import { getConcInfo, calcolaVols, targetColIdx, getCompsFromWork } from './SchemaCalibrazione.logic'
 
@@ -26,6 +26,7 @@ interface GrigliaProps {
   removedMix: Set<string>    // mix_id mix esclusi dallo scenario
   onToggleMix: (mixId: string) => void
   onToggleSng: (sngId: string) => void
+  onTogglePrepStock: (prepKey: string, prepId: number, crmNome: string, cv: number, lotto: string | null) => void
   onClose: () => void        // per chiudere lo schema prima di navigare
   registerCardRef: RegisterCardRef
   gridBodyRef?: React.RefObject<HTMLDivElement | null>
@@ -39,7 +40,7 @@ interface GrigliaProps {
 
 export function GrigliaAnalitiCrm({
   analiti, crmItems, selSrcs, removedMix,
-  onToggleMix, onToggleSng, onClose, registerCardRef, gridBodyRef,
+  onToggleMix, onToggleSng, onTogglePrepStock, onClose, registerCardRef, gridBodyRef,
   onOpenScenar, onChangeMixLotto, mixLottoSel: mixLottoSelProp,
 }: GrigliaProps) {
   const navigate = useNavigate()
@@ -101,6 +102,20 @@ export function GrigliaAnalitiCrm({
 
   // Stima altezza reale di una card singolo in base al contenuto
   const sngCardH = (crm: CrmItem): number => {
+    const isNeat = String(crm.forma ?? '').toLowerCase() === 'neat'
+    if (isNeat) {
+      const preps = crm.prepStock ?? []
+      const headerH = 22 // header nome·Neat
+      if (preps.length === 0) return headerH + 24 + 8 + 4 // header + riga nessuna prep + padding + gap
+      // per ogni prep: riga cv·Stock (14) + flacone (13 se presente) + scadenza (13 se presente) + padding (10) + gap (2)
+      const prepsH = preps.reduce((s, p) => {
+        let rh = 14 + 10
+        if (p.flacone)  rh += 13
+        if (p.scadenza) rh += 13
+        return s + rh + 2
+      }, 0)
+      return headerH + prepsH + 8 // header + prep rows + padding esterno
+    }
     let h = 14 + 10 // riga cv/forma + padding top+bottom
     if (crm.lotto)                h += 13
     if (crm.scadenza_prodotto)    h += 13
@@ -293,13 +308,122 @@ export function GrigliaAnalitiCrm({
                   <div style={{ width:270, flexShrink:0,
                                 borderRight:`1px solid ${C.page.brd}` }} />
 
-                  {/* Cella Singoli — una card per sngId */}
+                  {/* Cella Singoli — una card per sngId (o sub-card prep stock per Neat) */}
                   <div style={{ width:260, flexShrink:0, padding:'3px 6px',
                                 display:'flex', flexDirection:'column', gap:3,
                                 justifyContent:'center' }}>
                     {a.sngIds.map(sngId => {
                       const crm   = sngById.get(sngId)
                       if (!crm) return null
+                      const isNeat = String(crm.forma ?? '').toLowerCase() === 'neat'
+
+                      if (isNeat) {
+                        // CRM Neat: riquadro unico con le prep stock all'interno
+                        const preps: PrepStockItem[] = crm.prepStock ?? []
+                        return (
+                          <div key={sngId} style={{
+                            borderRadius:10, padding:'5px 8px',
+                            background: C.sng.bg,
+                            border:`1.5px dashed ${C.sng.border}`,
+                            borderLeft:`3px solid ${C.sng.border}`,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                            display:'flex', flexDirection:'column', gap:4,
+                          }}>
+                            {/* Header nome CRM Neat */}
+                            <div style={{ display:'flex', alignItems:'center',
+                                          justifyContent:'space-between', gap:4 }}>
+                              <div style={{ fontSize:10, fontWeight:700,
+                                            fontFamily:'IBM Plex Mono, monospace',
+                                            color: C.sng.text, minWidth:0,
+                                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                {crm.nome}
+                                <span style={{ fontWeight:400, opacity:0.6 }}> · Neat</span>
+                              </div>
+                              <button
+                                onClick={e => { e.stopPropagation(); goToComposto(crm.nome, false) }}
+                                style={{
+                                  width:15, height:15, borderRadius:3,
+                                  border:`1px solid ${C.page.brd}`,
+                                  background:'#fff', color:C.page.t2,
+                                  cursor:'pointer', display:'flex', alignItems:'center',
+                                  justifyContent:'center', fontSize:9, flexShrink:0,
+                                }}
+                                title="Vedi nel DB composti"
+                              >↗</button>
+                            </div>
+                            {/* Prep stock attive come righe interne */}
+                            {preps.length === 0 ? (
+                              <div style={{ display:'flex', alignItems:'center',
+                                            justifyContent:'space-between', gap:4 }}>
+                                <span style={{ fontSize:9, color:C.page.th,
+                                               fontFamily:'IBM Plex Mono, monospace',
+                                               fontStyle:'italic' }}>
+                                  Nessuna prep attiva
+                                </span>
+                                <button
+                                  onClick={e => { e.stopPropagation(); goToComposto(crm.nome, false) }}
+                                  style={{
+                                    padding:'1px 5px', fontSize:9, borderRadius:3,
+                                    border:`1px solid ${C.sng.border}`,
+                                    background: C.sng.chip, color: C.sng.text,
+                                    cursor:'pointer', flexShrink:0,
+                                  }}
+                                  title="Crea preparazione stock nel DB Composti"
+                                >Crea prep ↗</button>
+                              </div>
+                            ) : preps.map(prep => {
+                              const prepKey = `prep_${prep.id}`
+                              const isSel   = selSrcs.has(prepKey)
+                              const cv      = (prep.concReale ?? prep.concTarget ?? (prep.conc != null ? Number(prep.conc) : 0)) || 0
+                              // Label concentrazione: preferisce reale, poi target, poi campo testo
+                              const concLabel = prep.concReale != null
+                                ? `${prep.concReale} ${prep.unitaConc}`
+                                : prep.concTarget != null
+                                  ? `${prep.concTarget} ${prep.unitaConc}`
+                                  : prep.conc
+                                    ? `${prep.conc} ${prep.unitaConc}`
+                                    : null
+                              return (
+                                <div
+                                  key={prepKey}
+                                  ref={el => registerCardRef(prepKey, el)}
+                                  onClick={() => onTogglePrepStock(prepKey, prep.id, crm.nome, cv, prep.flacone)}
+                                  style={{
+                                    borderRadius:7, padding:'4px 7px',
+                                    background: isSel ? '#c8e8a8' : '#fff',
+                                    border:`1.5px solid ${C.sng.border}`,
+                                    boxShadow: isSel ? '0 0 0 2px rgba(125,184,90,.35)' : 'none',
+                                    cursor: 'pointer',
+                                    transition:'box-shadow .12s, background .1s',
+                                  }}
+                                >
+                                  <div style={{ fontSize:10, fontWeight:700,
+                                                fontFamily:'IBM Plex Mono, monospace',
+                                                color: C.sng.text,
+                                                whiteSpace:'nowrap', overflow:'hidden',
+                                                textOverflow:'ellipsis' }}>
+                                    {concLabel ?? <span style={{ fontStyle:'italic', fontWeight:400, opacity:0.5 }}>conc. assente</span>}
+                                  </div>
+                                  {prep.flacone && (
+                                    <div style={{ fontSize:9, color:C.page.t2,
+                                                  fontFamily:'IBM Plex Mono, monospace' }}>
+                                      {prep.flacone}
+                                    </div>
+                                  )}
+                                  {prep.scadenza && (
+                                    <div style={{ fontSize:9, color:C.page.th,
+                                                  fontFamily:'IBM Plex Mono, monospace' }}>
+                                      scad. {prep.scadenza}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      }
+
+                      // CRM non-Neat: card standard
                       const isSel = selSrcs.has(sngId)
                       return (
                         <div
