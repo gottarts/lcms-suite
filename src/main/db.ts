@@ -30,6 +30,7 @@ export function createDatabase(dbPath: string): void {
 function runMigrations(): void {
   if (!db) return
   const currentVersion = db.pragma('user_version', { simple: true }) as number
+  console.log('[migrations] user_version corrente:', currentVersion)
 
   const migrationsDir = app.isPackaged
     ? path.join(process.resourcesPath, 'migrations')
@@ -43,10 +44,21 @@ function runMigrations(): void {
 
   for (const file of files) {
     const version = parseInt(file.split('-')[0], 10)
+    console.log(`[migrations] file: ${file}, version: ${version}, applica: ${version > currentVersion}`)
     if (version > currentVersion) {
+      console.log(`[migrations] applico ${file}...`)
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8')
-      db.exec(sql)
-      db.pragma(`user_version = ${version}`)
+      db.pragma('foreign_keys = OFF')
+      try {
+        db.exec(sql)
+        db.pragma('foreign_keys = ON')
+        db.pragma(`user_version = ${version}`)
+        console.log(`[migrations] ${file} applicata OK, user_version = ${version}`)
+      } catch (e) {
+        db.pragma('foreign_keys = ON')
+        console.error(`[migrations] ERRORE in ${file}:`, e)
+        throw e
+      }
     }
   }
 }

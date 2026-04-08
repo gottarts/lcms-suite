@@ -201,7 +201,7 @@ export function registerWorkIpc(): void {
   })
 
   // ── CREATE ────────────────────────────────────────────────────────────────
-  ipcMain.handle('work:create', (_, data: {
+  ipcMain.handle('work:create', async (_, data: {
     nome: string
     concentrazione?: number | null
     conc_variabile?: boolean
@@ -213,7 +213,7 @@ export function registerWorkIpc(): void {
     note?: string | null
     livello?: number
     ingredienti?: Array<{
-      source_type: 'crm' | 'work'
+      source_type: 'crm' | 'work' | 'prep'
       source_id: number
       volume_prelievo_ml?: number | null
       fattore_diluizione?: number | null
@@ -238,45 +238,78 @@ export function registerWorkIpc(): void {
          fattore_diluizione, conc_target_mgL, modo_calcolo, lotto_usato)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
+    const insertIngrPrep = db.prepare(`
+      INSERT INTO work_ingredienti
+        (work_id, source_type, source_id, volume_prelievo_ml,
+         fattore_diluizione, conc_target_mgL, modo_calcolo, lotto_usato, prep_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
     const insertLink = db.prepare(
       'INSERT INTO work_metodi (work_id, metodo_id) VALUES (?, ?)'
     )
-    const getLotto = db.prepare('SELECT lotto FROM composti WHERE id = ?')
+    const getLotto       = db.prepare('SELECT lotto FROM composti WHERE id = ?')
+    const getPrepFlacone = db.prepare('SELECT flacone FROM preparazioni WHERE id = ?')
 
     let newId: number | bigint = 0
-    db.transaction(() => {
-      const result = insertWork.run({
-        nome:           data.nome,
-        concentrazione: data.concentrazione ?? null,
-        conc_variabile: data.conc_variabile ? 1 : 0,
-        unita_conc:     data.unita_conc     ?? 'mg/L',
-        volume_ml:      data.volume_ml      ?? null,
-        solvente:       data.solvente       ?? null,
-        validita_mesi:  data.validita_mesi  ?? null,
-        operatore:      data.operatore      ?? null,
-        note:           data.note           ?? null,
-        livello:        data.livello        ?? 0,
-      })
-      newId = result.lastInsertRowid
-      for (const ing of ingredienti) {
-        let lottoUsato: string | null = null
-        if (ing.source_type === 'crm') {
-          const row = getLotto.get(ing.source_id) as any
-          lottoUsato = row?.lotto ?? null
+    try {
+      db.transaction(() => {
+        const result = insertWork.run({
+          nome:           data.nome,
+          concentrazione: data.concentrazione ?? null,
+          conc_variabile: data.conc_variabile ? 1 : 0,
+          unita_conc:     data.unita_conc     ?? 'mg/L',
+          volume_ml:      data.volume_ml      ?? null,
+          solvente:       data.solvente       ?? null,
+          validita_mesi:  data.validita_mesi  ?? null,
+          operatore:      data.operatore      ?? null,
+          note:           data.note           ?? null,
+          livello:        data.livello        ?? 0,
+        })
+        newId = result.lastInsertRowid
+        for (const ing of ingredienti) {
+          let lottoUsato: string | null = null
+          if (ing.source_type === 'crm') {
+            const row = getLotto.get(ing.source_id) as any
+            lottoUsato = row?.lotto ?? null
+            insertIngr.run(
+              newId, ing.source_type, ing.source_id,
+              ing.volume_prelievo_ml  ?? null,
+              ing.fattore_diluizione  ?? null,
+              ing.conc_target_mgL     ?? null,
+              ing.modo_calcolo        ?? null,
+              lottoUsato
+            )
+          } else if (ing.source_type === 'prep') {
+            const row = getPrepFlacone.get(ing.source_id) as any
+            lottoUsato = row?.flacone ?? null
+            insertIngrPrep.run(
+              newId, ing.source_type, ing.source_id,
+              ing.volume_prelievo_ml  ?? null,
+              ing.fattore_diluizione  ?? null,
+              ing.conc_target_mgL     ?? null,
+              ing.modo_calcolo        ?? null,
+              lottoUsato,
+              ing.source_id
+            )
+          } else {
+            insertIngr.run(
+              newId, ing.source_type, ing.source_id,
+              ing.volume_prelievo_ml  ?? null,
+              ing.fattore_diluizione  ?? null,
+              ing.conc_target_mgL     ?? null,
+              ing.modo_calcolo        ?? null,
+              lottoUsato
+            )
+          }
         }
-        insertIngr.run(
-          newId, ing.source_type, ing.source_id,
-          ing.volume_prelievo_ml  ?? null,
-          ing.fattore_diluizione  ?? null,
-          ing.conc_target_mgL     ?? null,
-          ing.modo_calcolo        ?? null,
-          lottoUsato
-        )
-      }
-      for (const mid of metodiIds) {
-        insertLink.run(newId, mid)
-      }
-    })()
+        for (const mid of metodiIds) {
+          insertLink.run(newId, mid)
+        }
+      })()
+    } catch (e) {
+      console.error('[work:create] ERRORE:', e)
+      throw e
+    }
 
     return db.prepare('SELECT * FROM work WHERE id = ?').get(newId)
   })
@@ -293,7 +326,7 @@ export function registerWorkIpc(): void {
     operatore?: string | null
     note?: string | null
     ingredienti?: Array<{
-      source_type: 'crm' | 'work'
+      source_type: 'crm' | 'work' | 'prep'
       source_id: number
       volume_prelievo_ml?: number | null
       fattore_diluizione?: number | null
@@ -329,11 +362,18 @@ export function registerWorkIpc(): void {
          fattore_diluizione, conc_target_mgL, modo_calcolo, lotto_usato)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
+    const insertIngrPrep = db.prepare(`
+      INSERT INTO work_ingredienti
+        (work_id, source_type, source_id, volume_prelievo_ml,
+         fattore_diluizione, conc_target_mgL, modo_calcolo, lotto_usato, prep_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
     const deleteLinks = db.prepare('DELETE FROM work_metodi WHERE work_id = ?')
     const insertLink  = db.prepare(
       'INSERT INTO work_metodi (work_id, metodo_id) VALUES (?, ?)'
     )
-    const getLotto = db.prepare('SELECT lotto FROM composti WHERE id = ?')
+    const getLotto       = db.prepare('SELECT lotto FROM composti WHERE id = ?')
+    const getPrepFlacone = db.prepare('SELECT flacone FROM preparazioni WHERE id = ?')
 
     db.transaction(() => {
       updateWork.run({
@@ -355,15 +395,36 @@ export function registerWorkIpc(): void {
           if (ing.source_type === 'crm') {
             const row = getLotto.get(ing.source_id) as any
             lottoUsato = row?.lotto ?? null
+            insertIngr.run(
+              id, ing.source_type, ing.source_id,
+              ing.volume_prelievo_ml  ?? null,
+              ing.fattore_diluizione  ?? null,
+              ing.conc_target_mgL     ?? null,
+              ing.modo_calcolo        ?? null,
+              lottoUsato
+            )
+          } else if (ing.source_type === 'prep') {
+            const row = getPrepFlacone.get(ing.source_id) as any
+            lottoUsato = row?.flacone ?? null
+            insertIngrPrep.run(
+              id, ing.source_type, ing.source_id,
+              ing.volume_prelievo_ml  ?? null,
+              ing.fattore_diluizione  ?? null,
+              ing.conc_target_mgL     ?? null,
+              ing.modo_calcolo        ?? null,
+              lottoUsato,
+              ing.source_id
+            )
+          } else {
+            insertIngr.run(
+              id, ing.source_type, ing.source_id,
+              ing.volume_prelievo_ml  ?? null,
+              ing.fattore_diluizione  ?? null,
+              ing.conc_target_mgL     ?? null,
+              ing.modo_calcolo        ?? null,
+              lottoUsato
+            )
           }
-          insertIngr.run(
-            id, ing.source_type, ing.source_id,
-            ing.volume_prelievo_ml  ?? null,
-            ing.fattore_diluizione  ?? null,
-            ing.conc_target_mgL     ?? null,
-            ing.modo_calcolo        ?? null,
-            lottoUsato
-          )
         }
       }
       if (metodiIds !== undefined) {
@@ -521,6 +582,7 @@ export function registerWorkIpc(): void {
       newId = r.lastInsertRowid
 
       // Copia ingredienti con source_id sostituiti e lotto_usato aggiornato
+      const getPrepFlaconeR = db.prepare('SELECT flacone FROM preparazioni WHERE id = ?')
       for (const ing of oldIngr) {
         const newSrcId = subst.get(ing.source_id) ?? ing.source_id
         let lottoUsato: string | null = ing.lotto_usato
@@ -528,16 +590,31 @@ export function registerWorkIpc(): void {
           const c = getLotto.get(newSrcId) as any
           lottoUsato = c?.lotto ?? null
         }
-        db.prepare(`
-          INSERT INTO work_ingredienti
-            (work_id, source_type, source_id, volume_prelievo_ml,
-             fattore_diluizione, conc_target_mgL, modo_calcolo, lotto_usato)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          newId, ing.source_type, newSrcId,
-          ing.volume_prelievo_ml, ing.fattore_diluizione,
-          ing.conc_target_mgL, ing.modo_calcolo, lottoUsato
-        )
+        if (ing.source_type === 'prep') {
+          const p = getPrepFlaconeR.get(newSrcId) as any
+          lottoUsato = p?.flacone ?? ing.lotto_usato
+          db.prepare(`
+            INSERT INTO work_ingredienti
+              (work_id, source_type, source_id, volume_prelievo_ml,
+               fattore_diluizione, conc_target_mgL, modo_calcolo, lotto_usato, prep_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            newId, ing.source_type, newSrcId,
+            ing.volume_prelievo_ml, ing.fattore_diluizione,
+            ing.conc_target_mgL, ing.modo_calcolo, lottoUsato, newSrcId
+          )
+        } else {
+          db.prepare(`
+            INSERT INTO work_ingredienti
+              (work_id, source_type, source_id, volume_prelievo_ml,
+               fattore_diluizione, conc_target_mgL, modo_calcolo, lotto_usato)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            newId, ing.source_type, newSrcId,
+            ing.volume_prelievo_ml, ing.fattore_diluizione,
+            ing.conc_target_mgL, ing.modo_calcolo, lottoUsato
+          )
+        }
       }
 
       // Archivia la vecchia work
