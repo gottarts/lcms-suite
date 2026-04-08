@@ -14,7 +14,7 @@
 //   - SchemaCalibrazione.logic.ts
 //   - SchemaCalibrazione.grid.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useCallback, useRef, useLayoutEffect, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useRef, useLayoutEffect, useEffect, useMemo } from 'react'
 import type {
   SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef
 } from './SchemaCalibrazione.types'
@@ -39,12 +39,13 @@ import { Separator } from '@/components/ui/separator'
 // SVG Overlay per frecce di connessione
 // ─────────────────────────────────────────────────────────────────────────────
 function ConnectionsOverlay({
-  workCols, cardRefs, containerRef, gridScrollRef,
+  workCols, cardRefs, containerRef, gridScrollRef, workScrollRef,
 }: {
   workCols: WorkInSchema[][]
   cardRefs: React.MutableRefObject<Map<string, HTMLDivElement>>
   containerRef: React.RefObject<HTMLDivElement | null>
   gridScrollRef?: React.RefObject<HTMLDivElement | null>
+  workScrollRef?: React.RefObject<HTMLDivElement | null>
 }) {
   const [lines, setLines] = useState<ConnectionLine[]>([])
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -64,12 +65,15 @@ function ConnectionsOverlay({
     el.addEventListener('scroll', update, { passive: true })
     const grid = gridScrollRef?.current
     if (grid) grid.addEventListener('scroll', update, { passive: true })
+    const workWrap = workScrollRef?.current
+    if (workWrap) workWrap.addEventListener('scroll', update, { passive: true, capture: true })
     return () => {
       ro.disconnect()
       el.removeEventListener('scroll', update)
       if (grid) grid.removeEventListener('scroll', update)
+      if (workWrap) workWrap.removeEventListener('scroll', update, { capture: true })
     }
-  }, [workCols, cardRefs, containerRef, gridScrollRef])
+  }, [workCols, cardRefs, containerRef, gridScrollRef, workScrollRef])
 
   if (lines.length === 0) return null
 
@@ -123,13 +127,13 @@ interface ColonneWorkProps {
   onRicaricaWork: (dbId: number) => void
 }
 
-function ColonneWork({
+const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function ColonneWork({
   workCols, selSrcs,
   onToggleWork, onDeleteWork, onOpenDrawer, onAddCol, registerCardRef,
   blockedMap, onRicaricaWork,
-}: ColonneWorkProps) {
+}, ref) {
   return (
-    <div style={{ display:'flex', flexDirection:'row', flexShrink:0,
+    <div ref={ref} style={{ display:'flex', flexDirection:'row', flexShrink:0,
                   margin:0, borderRadius:12, border:`1.5px dashed ${C.page.brd2}`,
                   position:'relative', background:C.page.sur,
                   boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -360,7 +364,7 @@ function ColonneWork({
       )}
     </div>
   )
-}
+})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Drawer dettaglio Work
@@ -787,6 +791,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const workspaceRef = useRef<HTMLDivElement>(null)
   const gridBodyRef = useRef<HTMLDivElement>(null)
+  const workColsRef = useRef<HTMLDivElement>(null)
   const registerCardRef: RegisterCardRef = useCallback((id, el) => {
     if (el) cardRefs.current.set(id, el)
     else cardRefs.current.delete(id)
@@ -1164,6 +1169,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             cardRefs={cardRefs}
             containerRef={workspaceRef}
             gridScrollRef={gridBodyRef}
+            workScrollRef={workColsRef}
           />
           <GrigliaAnalitiCrm
             analiti={analiti}
@@ -1181,6 +1187,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             mixLottoSel={mixLottoSel}
           />
           <ColonneWork
+            ref={workColsRef}
             workCols={workCols}
             selSrcs={selSrcs}
             onToggleWork={toggleWork}
