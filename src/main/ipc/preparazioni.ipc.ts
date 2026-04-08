@@ -92,17 +92,4 @@ export function registerPreparazioniIpc(): void {
     getDb().prepare('DELETE FROM preparazioni WHERE id = ?').run(id)
     return { ok: true }
   })
-
-  ipcMain.handle('preparazioni:list-for-schema', (_, compostoId: number) => {
-    const oggi = new Date().toISOString().slice(0, 10)
-    return getDb().prepare(`
-      SELECT id, flacone, concentrazione, concentrazione_reale, concentrazione_target, unita_conc,
-             scadenza, data_dismissione
-      FROM preparazioni
-      WHERE composto_id = ?
-        AND data_dismissione IS NULL
-        AND (scadenza IS NULL OR scadenza >= ?)
-      ORDER BY data_prep DESC
-    `).all(compostoId, oggi)
-  })
 }

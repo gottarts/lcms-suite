@@ -5,18 +5,7 @@
 //   src/renderer/pages/metodi/SchemaCalibrazione.types.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SorgenteTipo = 'mix' | 'sng' | 'work' | 'prep'
-
-export interface PrepStockItem {
-  id: number
-  flacone: string | null
-  conc: string | null        // campo testo libero (inserito manualmente)
-  concReale: number | null
-  concTarget: number | null
-  unitaConc: string
-  scadenza: string | null
-  dataDismissione: string | null
-}
+export type SorgenteTipo = 'mix' | 'sng' | 'work'
 
 export interface SorgenteSel {
   id: string
@@ -25,8 +14,6 @@ export interface SorgenteSel {
   tipo: SorgenteTipo
   colSrc?: number
   concVariabile?: boolean
-  prepId?: number    // populated quando tipo === 'prep'
-  lotto?: string | null  // lotto/flacone snapshot per tipo === 'prep'
 }
 
 export interface Ingrediente {
@@ -68,7 +55,6 @@ export interface CrmItem {
   cv: number
   concVariabile: boolean
   isIS: boolean
-  prepStock?: PrepStockItem[]  // solo per Neat
 }
 
 export interface AnalitoItem {

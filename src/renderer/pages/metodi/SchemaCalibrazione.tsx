@@ -487,15 +487,7 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                 <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
                               background: src.tipo === 'mix' ? C.mix.border : C.sng.border }} />
                 <div>
-                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>
-                    {src.tipo === 'prep' ? `${src.nome} (stock)` : src.nome}
-                  </div>
-                  {src.tipo === 'prep' && src.lotto && (
-                    <div style={{ fontSize:9, color:C.page.t2,
-                                  fontFamily:'IBM Plex Mono, monospace' }}>
-                      prep da lotto {src.lotto} · Neat
-                    </div>
-                  )}
+                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{src.nome}</div>
                   {src.tipo === 'mix' && (() => {
                     const lotto = crmItems.find(c => c.mix_id === src.id)?.lotto
                     return lotto
@@ -511,9 +503,7 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                       : null
                   })()}
                   <div style={{ fontSize:10, color:C.page.th }}>
-                    {src.tipo === 'prep' ? (
-                      `${src.cv} mg/L · Prep stock`
-                    ) : src.concVariabile ? (
+                    {src.concVariabile ? (
                       <>
                         <span style={{ fontStyle:'italic' }}>variabile</span>
                         {(() => {
@@ -947,15 +937,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     })
   }, [crmItems])
 
-  const togglePrepStock = useCallback((prepKey: string, prepId: number, crmNome: string, cv: number, lotto: string | null) => {
-    setSelSrcs(prev => {
-      const m = new Map(prev)
-      if (m.has(prepKey)) { m.delete(prepKey) }
-      else m.set(prepKey, { id: prepKey, nome: crmNome, cv, tipo: 'prep', prepId, lotto })
-      return m
-    })
-  }, [])
-
   const toggleWork = useCallback((w: WorkInSchema, colSrc: number) => {
     setSelSrcs(prev => {
       const m = new Map(prev)
@@ -1169,7 +1150,6 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             removedMix={removedMix}
             onToggleMix={toggleMix}
             onToggleSng={toggleSng}
-            onTogglePrepStock={togglePrepStock}
             onClose={onClose}
             registerCardRef={registerCardRef}
             gridBodyRef={gridBodyRef}

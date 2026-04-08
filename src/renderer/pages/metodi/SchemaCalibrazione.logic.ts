@@ -173,31 +173,10 @@ export function useSchemaData(metodoId: string) {
           mixCvSets.set(item.mix_id, s)
         }
       }
-      const itemsWithConc = items.map(item => ({
+      const itemsFinal = items.map(item => ({
         ...item,
         concVariabile: item.mix_id ? (mixCvSets.get(item.mix_id)?.size ?? 0) > 1 : false,
       }))
-
-      // Carica le prep stock per i CRM Neat (singoli con forma Neat)
-      for (const item of itemsWithConc) {
-        if (item.mix_id === null && String(item.forma ?? '').toLowerCase() === 'neat') {
-          const rows: any[] = await (window as any).electronAPI.invoke(
-            'preparazioni:list-for-schema', item.id
-          )
-          item.prepStock = rows.map((r: any) => ({
-            id: r.id,
-            flacone: r.flacone ?? null,
-            conc: r.concentrazione ?? null,
-            concReale: r.concentrazione_reale ?? null,
-            concTarget: r.concentrazione_target ?? null,
-            unitaConc: r.unita_conc ?? 'mg/L',
-            scadenza: r.scadenza ?? null,
-            dataDismissione: r.data_dismissione ?? null,
-          }))
-        }
-      }
-
-      const itemsFinal = itemsWithConc
       setCrmItems(itemsFinal)
 
       setAnalitiRows(analitiRows)
@@ -229,7 +208,7 @@ export function getConcInfo(
   s: SorgenteSel,
   workCols: WorkInSchema[][]
 ): { omogenea: boolean; cv: number; label: string } {
-  if (s.tipo === 'sng' || s.tipo === 'mix' || s.tipo === 'prep') {
+  if (s.tipo === 'sng' || s.tipo === 'mix') {
     if (s.concVariabile) return { omogenea: false, cv: s.cv, label: 'variabile' }
     if (s.cv > 0) return { omogenea: true, cv: s.cv, label: `${s.cv} mg/L` }
     return { omogenea: false, cv: 0, label: 'variabile' }
@@ -329,8 +308,6 @@ export function getCompsFromWork(
       crmItems.filter(c => c.mix_id === src.id).forEach(c =>
         result.push({ nome: c.nome, concInWork: c.cv * dilFactor, unita: c.unita_conc, srcPath: src.nome })
       )
-    } else if (src.tipo === 'prep') {
-      result.push({ nome: src.nome, concInWork: src.cv * dilFactor, unita: 'mg/L', srcPath: src.nome + ' (Stock)' })
     } else {
       result.push({ nome: src.nome, concInWork: src.cv * dilFactor, unita: 'mg/L', srcPath: src.nome + ' (CRM)' })
     }
@@ -357,16 +334,6 @@ export async function salvaWorkNelDb(
       return [{
         source_type:        'work' as const,
         source_id:          (src as any).dbId ?? 0,
-        volume_prelievo_ml: ing.vol,
-        fattore_diluizione: ing.dilFactor ?? null,
-        conc_target_mgL:    ing.concTarget ?? null,
-        modo_calcolo:       ing.modo,
-      }]
-    }
-    if (src.tipo === 'prep') {
-      return [{
-        source_type:        'prep' as const,
-        source_id:          src.prepId!,
         volume_prelievo_ml: ing.vol,
         fattore_diluizione: ing.dilFactor ?? null,
         conc_target_mgL:    ing.concTarget ?? null,
@@ -577,9 +544,8 @@ export function computeConnections(
         const x2 = tRect.left   - containerRect.left + scrollContainer.scrollLeft
         const y2 = tRect.top + tRect.height / 2 - containerRect.top + scrollContainer.scrollTop
 
-        const color = src.tipo === 'mix'  ? C.mix.border
-                    : src.tipo === 'sng'  ? C.sng.border
-                    : src.tipo === 'prep' ? C.sng.border
+        const color = src.tipo === 'mix' ? C.mix.border
+                    : src.tipo === 'sng' ? C.sng.border
                     : C.work.border
 
         lines.push({ x1, y1, x2, y2, color, sourceType: src.tipo })
