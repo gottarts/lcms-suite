@@ -5,7 +5,7 @@
 //   src/renderer/pages/metodi/SchemaCalibrazione.logic.ts
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
-import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema, ConnectionLine, Ingrediente } from './SchemaCalibrazione.types'
+import type { CrmItem, AnalitoItem, SorgenteSel, WorkInSchema, ConnectionLine, Ingrediente, DestUso } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,17 +13,32 @@ import { C } from './SchemaCalibrazione.types'
 // già filtrati. Può essere chiamata sia dal hook (tutti i CRM) sia dopo la
 // scelta di uno scenario (CRM filtrati per mix_id ammessi).
 // ─────────────────────────────────────────────────────────────────────────────
+function matchesFiltroDestUso(destinazione_uso: string | null, filtro: DestUso): boolean {
+  if (!destinazione_uso) return filtro !== 'is' // null → visibile in Taratura e QC, non in IS
+  const d = destinazione_uso.toLowerCase()
+  if (filtro === 'taratura') return d.includes('taratura')
+  if (filtro === 'qc') return d.includes('controllo')
+  if (filtro === 'is') return d.includes('intern') || d.includes(' is')
+  return true
+}
+
 export function buildAnalitiData(
   items: CrmItem[],
   analitiRows: { id: number; nome: string }[],
+  filtroDestUso?: DestUso,
 ): {
   analiti: AnalitoItem[]
   firmaToMixIds: Map<string, string[]>
   mixNomiMap: Map<string, Set<string>>
 } {
+  // Filtra CRM per destinazione d'uso se richiesto
+  const itemsFiltrati = filtroDestUso
+    ? items.filter(item => matchesFiltroDestUso(item.destinazione_uso, filtroDestUso))
+    : items
+
   // Firma di un mix = nomi componenti ordinati alfabeticamente
   const mixNomiMap = new Map<string, Set<string>>()
-  for (const item of items) {
+  for (const item of itemsFiltrati) {
     if (item.mix_id) {
       const s = mixNomiMap.get(item.mix_id) ?? new Set<string>()
       s.add(item.nome)
@@ -46,7 +61,7 @@ export function buildAnalitiData(
   const isMap       = new Map<string, boolean>()
 
   const mixIdsByNome = new Map<string, string[]>()
-  for (const item of items) {
+  for (const item of itemsFiltrati) {
     if (item.mix_id) {
       const arr = mixIdsByNome.get(item.nome) ?? []
       if (!arr.includes(item.mix_id)) arr.push(item.mix_id)
@@ -54,7 +69,7 @@ export function buildAnalitiData(
     }
   }
 
-  for (const item of items) {
+  for (const item of itemsFiltrati) {
     if (item.mix_id) {
       const tuttiMixIds = mixIdsByNome.get(item.nome)!
       const firme = new Set(tuttiMixIds.map(mid => mixFirma.get(mid)!))
@@ -161,6 +176,7 @@ export function useSchemaData(metodoId: string) {
           cv,
           concVariabile: false, // verrà ricalcolato sotto
           isIS,
+          destinazione_uso: r.destinazione_uso ?? null,
         }
       })
 

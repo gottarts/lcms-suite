@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useCallback, useRef, useLayoutEffect, useEffect, useMemo } from 'react'
 import type {
-  SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef
+  SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef, DestUso
 } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import {
@@ -814,13 +814,43 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [scenarOpen,      setScenarOpen]      = useState(false)
   const [scenarioScelto,  setScenarioScelto]  = useState(false)
   const [autoSelectOpen,  setAutoSelectOpen]  = useState(false)
+  const [filtroDestUso,   setFiltroDestUso]   = useState<DestUso>('taratura')
+
+  // Filtra crmItems per destinazione d'uso selezionata e ricalcola analitiAll filtrati
+  const { crmItemsPerDestUso, analitiAllFiltrati } = useMemo(() => {
+    function passaDest(dest: string | null): boolean {
+      if (!dest) return filtroDestUso !== 'is' // null → visibile in Taratura e QC, non in IS
+      const d = dest.toLowerCase()
+      if (filtroDestUso === 'taratura') return d.includes('taratura')
+      if (filtroDestUso === 'qc') return d.includes('controllo')
+      if (filtroDestUso === 'is') return d.includes('intern') || d.includes(' is')
+      return true
+    }
+    // Per i mix: la destinazione_uso è la stessa su tutti i componenti oppure null sui componenti
+    // e valorizzata solo su uno. Prendi il primo valore non-null per mix_id.
+    const mixDestMap = new Map<string, string | null>()
+    for (const c of crmItems) {
+      if (c.mix_id && !mixDestMap.has(c.mix_id)) {
+        mixDestMap.set(c.mix_id, c.destinazione_uso)
+      } else if (c.mix_id && c.destinazione_uso && !mixDestMap.get(c.mix_id)) {
+        mixDestMap.set(c.mix_id, c.destinazione_uso)
+      }
+    }
+    const mixIdValidi = new Set(
+      [...mixDestMap.entries()].filter(([, dest]) => passaDest(dest)).map(([id]) => id)
+    )
+
+    const filtered = crmItems.filter(c => c.mix_id ? mixIdValidi.has(c.mix_id) : passaDest(c.destinazione_uso))
+    const { analiti: analitiAllFiltrati } = buildAnalitiData(filtered, analitiRows)
+    return { crmItemsPerDestUso: filtered, analitiAllFiltrati }
+  }, [crmItems, analitiRows, filtroDestUso])
 
   // Dopo la scelta dello scenario, ricalcola analiti e crmItems escludendo le
   // composizioni (firme) non nello scenario. Tutti i lotti di una composizione
   // ammessa vengono mantenuti (il filtraggio è per firma, non per mix_id singolo).
   const { analiti, crmItemsFiltrati } = useMemo(() => {
     if (!scenarioScelto || removedMix.size === 0) {
-      return { analiti: analitiAll, crmItemsFiltrati: crmItems }
+      return { analiti: analitiAllFiltrati, crmItemsFiltrati: crmItemsPerDestUso }
     }
     // Calcola le firme ammesse = firme i cui mix_id non sono tutti in removedMix
     const firmeAmmesse = new Set<string>()
@@ -832,10 +862,27 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     for (const firma of firmeAmmesse) {
       for (const mid of firmaToMixIds.get(firma) ?? []) mixIdAmmessi.add(mid)
     }
-    const filtered = crmItems.filter(c => !c.mix_id || mixIdAmmessi.has(c.mix_id))
+    const filtered = crmItemsPerDestUso.filter(c => !c.mix_id || mixIdAmmessi.has(c.mix_id))
     const { analiti } = buildAnalitiData(filtered, analitiRows)
     return { analiti, crmItemsFiltrati: filtered }
-  }, [scenarioScelto, removedMix, crmItems, analitiAll, analitiRows, firmaToMixIds])
+  }, [scenarioScelto, removedMix, crmItemsPerDestUso, analitiAllFiltrati, analitiRows, firmaToMixIds])
+
+  // ── removedMix effettivo per la griglia ──────────────────────────────────
+  // Se un mix_id è in removedMix ma è l'unico lotto disponibile nel filtro
+  // corrente (filtroDestUso), non deve essere mostrato come sbarrato.
+  const removedMixEffettivo = useMemo(() => {
+    const result = new Set(removedMix)
+    for (const a of analiti) {
+      if (!a.mixId) continue
+      // Se tutti i mix_id di questa firma che sono disponibili (in analiti) sono in removedMix,
+      // rimuovi dall'effettivo il primo disponibile così appare attivo
+      const disponibili = a.mixIds.filter(mid => crmItemsFiltrati.some(c => c.mix_id === mid))
+      if (disponibili.length > 0 && disponibili.every(mid => result.has(mid))) {
+        result.delete(disponibili[0])
+      }
+    }
+    return result
+  }, [removedMix, analiti, crmItemsFiltrati])
 
   // ── Deriva mixLottoSel da removedMix ─────────────────────────────────────
   // Il lotto attivo di ogni firma è il primo mix_id NON escluso da removedMix.
@@ -845,11 +892,11 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     for (const a of analiti) {
       if (!a.mixId || !a.mixIds || a.mixIds.length <= 1) continue
       if (m.has(a.mixId)) continue
-      const attivo = a.mixIds.find(mid => !removedMix.has(mid))
+      const attivo = a.mixIds.find(mid => !removedMixEffettivo.has(mid))
       if (attivo && attivo !== a.mixId) m.set(a.mixId, attivo)
     }
     return m
-  }, [analiti, removedMix])
+  }, [analiti, removedMixEffettivo])
 
   // ── Carica schema salvato (dopo il caricamento CRM) ───────────────────────
   useEffect(() => {
@@ -1175,7 +1222,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             analiti={analiti}
             crmItems={crmItemsFiltrati}
             selSrcs={selSrcs}
-            removedMix={removedMix}
+            removedMix={removedMixEffettivo}
             onToggleMix={toggleMix}
             onToggleSng={toggleSng}
             onTogglePrepStock={togglePrepStock}
@@ -1206,6 +1253,27 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                     padding:'10px 24px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          {/* ── Selector destinazione d'uso ── */}
+          <div style={{ display:'flex', alignItems:'center', gap:4, marginRight:4 }}>
+            {(['taratura', 'qc', 'is'] as DestUso[]).map(d => {
+              const labels: Record<DestUso, string> = { taratura: 'Taratura', qc: 'QC', is: 'IS' }
+              const colors: Record<DestUso, { border: string; text: string; bg: string }> = {
+                taratura: { border: C.mix.border, text: C.mix.text, bg: C.mix.bg },
+                qc:       { border: C.sng.border, text: C.sng.text, bg: C.sng.bg },
+                is:       { border: C.inter.border, text: C.inter.text, bg: C.inter.bg },
+              }
+              const active = filtroDestUso === d
+              return (
+                <button key={d} onClick={() => setFiltroDestUso(d)} style={{
+                  padding:'4px 10px', borderRadius:6, fontSize:11, fontWeight:600,
+                  cursor:'pointer',
+                  border:`1px solid ${colors[d].border}`,
+                  background: active ? colors[d].border : C.page.sur,
+                  color: active ? '#fff' : colors[d].text,
+                }}>{labels[d]}</button>
+              )
+            })}
+          </div>
           <button onClick={() => setConfirmReset('full')} style={{
             padding:'5px 12px', borderRadius:8, border:`1px solid ${C.con.border}`,
             background:C.page.sur, cursor:'pointer', fontSize:11,

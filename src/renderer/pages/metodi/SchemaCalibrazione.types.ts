@@ -53,6 +53,8 @@ export interface WorkInSchema {
   extraSrcs?: Array<{ id: string; nome: string; tipo: 'mix' | 'sng' }>
 }
 
+export type DestUso = 'taratura' | 'qc' | 'is'
+
 export interface CrmItem {
   id: number
   nome: string
@@ -68,6 +70,7 @@ export interface CrmItem {
   cv: number
   concVariabile: boolean
   isIS: boolean
+  destinazione_uso: string | null
   prepStock?: PrepStockItem[]
 }
 
