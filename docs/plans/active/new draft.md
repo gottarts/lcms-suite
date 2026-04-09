@@ -14,11 +14,6 @@
 
  ## importante
 
-resta aperta la questione neat nei crm dellgli schemi calibrazione
-
- bisognera creare un archivio di schemi calibrazione. 
- 
- In piu bisognera differenziare tra scehmi per destinazione d'uso (le stesse di db composti) cioe se e uno schema per taratura, qc, taratura+qc o IS. Magari con scelta con menu a tendina. Quando si salva lo schema deve poer essere richiamabile (Magari da metodi) se uno schema va in disuso deve essere archiviabile e consultabile ma congelato.
 
 
 
@@ -31,10 +26,6 @@ resta aperta la questione neat nei crm dellgli schemi calibrazione
 
 
 
-
-
-
-in compound db il nuovo lotto su crm mix mette la concentrazione dei componenti del nuovo lotto uguale a quello selezionato per il nuovo lotto...
 
 
 

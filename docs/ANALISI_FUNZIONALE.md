@@ -1,8 +1,16 @@
 # Analisi Funzionale — LC-MS/MS Suite
 
-**Versione:** 3.0
-**Data:** 2026-03-24
+**Versione:** 3.1
+**Data:** 2026-04-08
 **Fonte:** codice sorgente repository (lettura completa)
+
+> **Changelog rispetto alla v3.0 (2026-03-24)**
+> - Migrazioni 017/018/020: archivio Work, snapshot lotto ingredienti, campi extra `metodo_analiti` (`accreditato`, `alias_strumento`), nuovo `source_type='prep'` su `work_ingredienti` per preparazioni stock da CRM Neat
+> - SchemaCalibrazione: filtro per destinazione d'uso (Taratura / QC / IS), sistema scenari di copertura CRM Mix (`SchemaCalibrazione.scenari.ts`), ScenarDialog, AutoSelectDialog, ImportaWorkDialog; supporto prep stock come sorgente (`SorgenteTipo='prep'`)
+> - Nuova pagina **ParametriMetodoPage**: editor analiti del metodo con flag accreditato e alias strumento
+> - MetodoDrawer: pulsanti "Schema calibrazione" e "Parametri" per navigare alle due pagine full-page
+> - WorkPage: vista Archivio, filtro per metodo (chip), badge CRM dismessi / CRM scaduti, pulsanti "Prepara/Rinnova", "Schema ↗", "+ Metodo ↗" (AggiungiASchemaDialog); RicaricaDialog per rigenerare work con lotti aggiornati
+> - Work ↔ Metodi N:M: una work può essere associata a più metodi e importata/rimossa da uno schema di calibrazione esistente
 
 ---
 
@@ -41,7 +49,7 @@ Il preload espone un singolo `electronAPI.invoke(channel, ...args)` generico. I 
 
 ## 3. Database — Schema e Migrazioni
 
-16 migrazioni SQL (001→016). Tabelle principali:
+19 migrazioni SQL (001→016, 017, 018, 020 — la 019 non è presente). Tabelle principali:
 
 ### 3.1 Tabelle Core
 
@@ -69,12 +77,12 @@ Il preload espone un singolo `electronAPI.invoke(channel, ...args)` generico. I 
 
 | Tabella | Tipo | Descrizione |
 |---|---|---|
-| `work` | Core | Soluzioni work: nome, concentrazione, conc_variabile, unita_conc, volume_ml, solvente, validita_mesi (NULL = "al momento"), operatore, livello (0=Work, 1+=Intermedia) |
-| `work_ingredienti` | 1:N | Ingredienti: source_type (crm/work), source_id, volume_prelievo_ml, fattore_diluizione, conc_target_mgL, modo_calcolo (conc/dil) |
-| `work_metodi` | N:M | work ↔ metodo |
+| `work` | Core | Soluzioni work: nome, concentrazione, conc_variabile, unita_conc, volume_ml, solvente, validita_mesi (NULL = "al momento"), operatore, livello (0=Work, 1+=Intermedia). **Mig. 017**: `archiviato`, `archiviato_at`, `archiviato_motivo`, `sostituito_da_id` (FK work.id) per soft-delete / tracciabilità sostituzione lotti |
+| `work_ingredienti` | 1:N | Ingredienti: `source_type` (crm/work/**prep**), `source_id`, `volume_prelievo_ml`, `fattore_diluizione`, `conc_target_mgL`, `modo_calcolo` (conc/dil). **Mig. 017**: `lotto_usato` TEXT (snapshot del lotto CRM al momento della creazione Work). **Mig. 020**: `prep_id` (FK preparazioni.id) per ingredienti di tipo `prep` — CRM Neat pesati come preparazione stock |
+| `work_metodi` | N:M | work ↔ metodo (una work può essere associata a più metodi/schemi) |
 | `work_preparazioni` | 1:N | Storico preparazioni effettive: data_prep, note, operatore |
-| `schema_calibrazione` | 1:1 per metodo | schema_json blob JSON con workCols, removedCon, removedMix |
-| `metodo_analiti` | 1:N per metodo | Lista analiti del metodo: nome, ordine. UNIQUE(metodo_id, nome). Popolata automaticamente da composti_metodi alla migrazione 016 |
+| `schema_calibrazione` | 1:1 per metodo | schema_json blob JSON con `workCols`, `removedCon`, `removedMix`, `scenarioScelto` (flag persistenza scelta scenario CRM mix) |
+| `metodo_analiti` | 1:N per metodo | Lista analiti del metodo: nome, ordine. UNIQUE(metodo_id, nome). Popolata automaticamente da composti_metodi (mig. 016). **Mig. 018**: `accreditato` INTEGER DEFAULT 0, `alias_strumento` TEXT (nome usato dallo strumento se diverso dal CRM) |
 
 ### 3.4 Indici di Performance
 
@@ -84,6 +92,7 @@ Il preload espone un singolo `electronAPI.invoke(channel, ...args)` generico. I 
 - `idx_composti_metodi_metodo` su composti_metodi(metodo_id)
 - `idx_work_ingredienti_work/source` su work_ingredienti
 - `idx_metodo_analiti_metodo` su metodo_analiti(metodo_id)
+- `idx_work_archiviato` su work(archiviato) — mig. 017
 
 ---
 
@@ -239,9 +248,10 @@ Calcolatore inline per preparazione di soluzioni madre:
 
 #### 4.3.1 MetodiPage.tsx — Lista e Orchestratore
 
-- Lista metodi con filtro testo
-- Apertura drawer laterale per dettaglio/modifica
-- Navigazione a SchemaCalibrazione
+- Lista metodi con filtro testo + filtro strumento (Select)
+- Apertura drawer laterale per dettaglio/modifica/cancellazione
+- Stato locale `schemaMetodoId` e `parametriMetodoId`: se valorizzati, la pagina sostituisce la lista con **SchemaCalibrazione** o **ParametriMetodoPage** full-page
+- Navigazione profonda da altre pagine via `location.state.schemaMetodoId` (usata da WorkPage/WorkDrawer per aprire direttamente lo schema di un metodo)
 
 #### 4.3.2 MetodoCard.tsx — Card Singolo Metodo
 
@@ -251,9 +261,9 @@ Calcolatore inline per preparazione di soluzioni madre:
 
 #### 4.3.3 MetodoDrawer.tsx — Drawer Laterale
 
-- Vista: dettagli metodo + tabs (Metodo readonly, Analiti, Schema Calibrazione)
-- Tab **Analiti**: lista analiti del metodo (`metodo_analiti`), aggiunta/rimozione manuale, TextImportDialog per import bulk da testo
-- Tab **Schema**: apre SchemaCalibrazione full-page
+- Vista read-only dei campi del metodo (Identificazione, Cromatografia, Spettrometria) + lista analiti da `metodo_analiti`
+- Azioni in toolbar: **Modifica**, **Elimina**, **Schema calibrazione** (navigazione a SchemaCalibrazione full-page), **Parametri** (navigazione a ParametriMetodoPage full-page)
+- Click su un analita → chiude drawer e naviga a `/composti` con filtro search sul nome
 
 #### 4.3.4 MetodoForm.tsx — Form Creazione/Modifica
 
@@ -264,32 +274,56 @@ Calcolatore inline per preparazione di soluzioni madre:
 
 #### 4.3.5 SchemaCalibrazione — Designer Visuale Calibrazione
 
-Componente complesso su 4 file:
+Componente complesso su 5 file (+ 3 dialog satelliti):
 
 **Struttura file:**
-- `SchemaCalibrazione.types.ts`: tipi (SorgenteSel, WorkInSchema, CrmItem, AnalitoItem, ConnectionLine, palette colori C)
-- `SchemaCalibrazione.logic.ts`: hook `useSchemaData`, funzioni calcolo (getConcInfo, targetColIdx, calcolaVols, getCompsFromWork, salvaWorkNelDb, computeConnections)
-- `SchemaCalibrazione.grid.tsx`: GrigliaAnalitiCrm (griglia 3 colonne Analiti|Mix|Singoli), ModalCreaWork (form modale)
-- `SchemaCalibrazione.tsx`: componente root con ColonneWork, DrawerDettaglioWork, SVG ConnectionsOverlay
+- `SchemaCalibrazione.types.ts`: tipi (`SorgenteSel` con `tipo: 'mix'|'sng'|'work'|'prep'`, `PrepStockItem`, `WorkInSchema`, `CrmItem` con `destinazione_uso` e `prepStock`, `AnalitoItem`, `ConnectionLine`, `DestUso = 'taratura'|'qc'|'is'`, palette `C`)
+- `SchemaCalibrazione.logic.ts`: hook `useSchemaData` (carica CRM + analiti + `preparazioni:list-for-schema` per Neat), funzioni calcolo (`getConcInfo`, `targetColIdx`, `calcolaVols`, `getCompsFromWork`, `salvaWorkNelDb`, `verificaCompatibilitaCrm`, `ricostruisciWorkInSchema`)
+- `SchemaCalibrazione.scenari.ts`: **algoritmo scenari di copertura CRM Mix** (puro TS, no React): genera sequenza ordinata di scenari disgiunti che massimizzano la copertura analiti con i mix disponibili. Tipi `MixComposizione`, `Scenario`, funzioni `buildMixComposizioni`, `generaScenari`
+- `SchemaCalibrazione.grid.tsx`: `GrigliaAnalitiCrm` (righe analiti × colonne Mix/Singoli/Prep), `ModalCreaWork` (form modale creazione Work con calcolo volumi)
+- `SchemaCalibrazione.tsx`: componente root con filtro destinazione d'uso (tab Taratura / QC / IS), ColonneWork, DrawerDettaglioWork, SVG ConnectionsOverlay, orchestrazione dialog satelliti
 
-**Flusso operativo (4 step):**
-1. **Lettura CRM**: carica analiti da `metodo_analiti` + CRM disponibili da `composti:list-for-schema` (esclude dismessi e scaduti senza rivalidazione attiva)
-2. **Rimozione CRM indesiderati**: per analiti che hanno sia mix che singolo (flag `isCon`), l'utente sceglie quale tenere con pulsante × per rimuovere mix o singolo (`removedCon`, `removedMix`)
-3. **Selezione sorgenti**: click sulle card CRM per selezionarle come ingredienti della Work
-4. **Crea Work**: form modale con nome, concentrazione (omogenea o variabile), volume finale, solvente, validità mesi, operatore. Calcolo volumi automatico (C1V1=C2V2 per concentrazione, Vfin/N per diluizione)
+**Dialog satelliti:**
+- `ScenarDialog.tsx`: propone all'utente gli scenari di copertura CRM Mix generati dall'algoritmo. Obbligatorio se ci sono ≥2 scenari e nessuna scelta salvata (flag `scenarioScelto`). La scelta popola `removedMix` con tutti i mix_id non appartenenti allo scenario selezionato
+- `AutoSelectDialog.tsx`: selezione automatica della combinazione ottimale (Mix + Singoli) che massimizza la copertura analiti rispettando la disgiunzione tra mix
+- `ImportaWorkDialog.tsx`: permette di importare nello schema corrente una Work già esistente nel DB (di un altro metodo o precedente). Usa `verificaCompatibilitaCrm` + `ricostruisciWorkInSchema` per ricreare `WorkInSchema` dal record DB
+
+**Filtro destinazione d'uso (Taratura / QC / IS):**
+- Campo `composti.destinazione_uso` (stringa libera) filtrato via keyword: `taratura` → Taratura, `controllo` → QC, `intern`/` is` → IS
+- I Mix ereditano la destinazione dal primo componente che la dichiara; un singolo con `destinazione_uso = null` è visibile in Taratura e QC ma non in IS
+- Il filtro ricalcola `crmItemsPerDestUso` e gli analiti filtrati, mantenendo lo schema per destinazione attiva
+
+**Flusso operativo:**
+1. **Caricamento CRM**: `composti:list-for-schema` + `metodo-analiti:list`; per i CRM singoli con `forma = 'Neat'` carica `preparazioni:list-for-schema` (preparazioni stock pesate, tipo `prep`)
+2. **Scelta scenario mix** (se ≥2 scenari disponibili alla prima apertura): ScenarDialog obbligatorio
+3. **Filtro destinazione d'uso**: l'utente seleziona Taratura / QC / IS
+4. **Selezione sorgenti**: click sulle card CRM / prep stock per usarle come ingredienti
+5. **Crea Work**: ModalCreaWork con nome, concentrazione (omogenea/variabile), volume finale, solvente, validità mesi, operatore. Calcolo volumi (C1V1=C2V2 o Vfin/N)
 
 **Funzionalità chiave:**
-- Griglia analiti con righe allineate verticalmente: ogni riga = un analita, colonne Mix CRM (card con chip) e Singoli (card selezionabile)
+- Griglia analiti con righe allineate verticalmente: ogni riga = un analita, colonne Mix CRM (card con chip componenti) e Singoli (card selezionabile). Per CRM Neat: sotto-card **Stock** (prep) con flacone e concentrazione reale
 - Chip nei mix mostrano nome + concentrazione per ogni componente
 - Colonne Work dinamiche: Work (livello 0) + Intermedie (livello 1+), aggiungibili con pulsante +
-- **SVG ConnectionsOverlay**: frecce Bézier animate che collegano sorgenti → Work (ref DOM, ResizeObserver, scroll tracking)
-- **Auto-save debounced** (500ms): schema salvato come JSON in `schema_calibrazione`
-- **Ricarica / Reset**: ricarica da DB o ricomincia da zero (con conferma)
-- **DrawerDettaglioWork**: pannello laterale con tabella volumi, catena di tracciabilità ricorsiva (Work→sorgenti→CRM), lista composti con concentrazione calcolata
-- **Salvataggio Work nel DB**: se `validitaMesi > 0`, crea record in tabella `work` con ingredienti. Se "al momento" (null), resta solo nello schema JSON
+- **SVG ConnectionsOverlay**: frecce Bézier animate che collegano sorgenti → Work (ref DOM, ResizeObserver, scroll tracking verticale e orizzontale)
+- **Auto-save debounced** (500ms): schema salvato come JSON in `schema_calibrazione` (`workCols`, `removedMix`, `scenarioScelto`)
+- **Ricarica / Reset**: ricarica da DB o ricomincia da zero (con conferma). Su reset viene rilanciato ScenarDialog
+- **DrawerDettaglioWork**: pannello laterale con tabella volumi, catena di tracciabilità ricorsiva (Work→sorgenti→CRM/Prep), lista composti con concentrazione calcolata
+- **Salvataggio Work nel DB**: se `validitaMesi > 0`, crea record in tabella `work` con ingredienti. Se "al momento" (null), resta solo nello schema JSON. Gli ingredienti prep usano `source_type='prep'`, `source_id=prep_id`
+- **Toast di feedback** (snackbar) per operazioni salvataggio / import
+- **RicaricaSchemaWork**: quando una Work in schema ha CRM dismessi/scaduti, lo schema mostra un alert con azione "Ricarica" che apre il dialog di sostituzione lotti (vedi §4.6)
 - Navigazione al DB Composti: click su nome analita → chiude schema e naviga a `/composti` con filtro search
 
-#### 4.3.6 MetodiReadonlyTab.tsx — Vista Readonly
+#### 4.3.6 ParametriMetodoPage.tsx — Editor Parametri Analitici (full-page)
+
+- Pagina full-page (non drawer) raggiunta dal pulsante **Parametri** di MetodoDrawer
+- Lista analiti del metodo ordinati per nome (`metodo-analiti:list`)
+- **Aggiunta analita**: input con suggerimenti da `composti:list` (nomi distinti dal DB), aggiunta tramite `metodo-analiti:add` che crea anche il link in `composti_metodi` se esiste un composto con lo stesso nome
+- **Rimozione selezione bulk**: checkbox per riga + pulsante "Rimuovi selezionati" (`metodo-analiti:remove`)
+- **Toggle `accreditato`** per analita (colonna dedicata) con update ottimistico + persistenza via `metodo-analiti:update`
+- **Alias strumento**: input inline per ogni riga, salvato su blur in `metodo_analiti.alias_strumento` (serve quando il nome usato dallo strumento LC-MS è diverso dal nome CRM standard)
+- Chiusura → torna alla lista metodi
+
+#### 4.3.7 MetodiReadonlyTab.tsx — Vista Readonly
 
 - Tab nel dettaglio strumento: lista metodi dello strumento in sola lettura
 
@@ -340,25 +374,49 @@ Componente complesso su 4 file:
 
 #### 4.6.1 WorkPage.tsx — Lista Work
 
-- Lista tutte le Work con badge stato laboratorio (attiva, in_scadenza, scaduta, non_preparata)
-- Calcolo stato: basato su ultima_preparazione + validita_mesi. Soglia "in_scadenza" = 20% del periodo
-- Filtro testo
-- Click → apre WorkDrawer
+- Lista tutte le Work attive con badge stato laboratorio (attiva, in_scadenza, scaduta, non_preparata)
+- Calcolo stato: basato su `ultima_preparazione` + `validita_mesi`. Soglia "in_scadenza" = 20% del periodo
+- **Toggle Archivio**: switch tra lista attive (`work:list`) e lista archiviate (`work:list-archivio`) — le work archiviate sono in sola lettura
+- **Filtro per metodo**: chip cliccabili con tutti i metodi che hanno almeno una work (intersezione tra `metodi_ids` delle work e lista metodi)
+- Filtro testo su nome/solvente/operatore
+- **Card Work**: nome, badge `CRM dismessi` / `CRM scaduti` / `Intermedia` / validità / stato_lab, azioni inline:
+  - **Prepara/Rinnova** → apre drawer in modalità preparazione (disabilitato se bloccata)
+  - **Schema ↗** → naviga al primo metodo associato (`primo_metodo_id`) apre SchemaCalibrazione; se bloccata mostra `Aggiorna Schema ↗` in arancione
+  - **+ Metodo ↗** → apre AggiungiASchemaDialog per associare la work a un metodo aggiuntivo
+- Dialog conferma Elimina / Archivia
 
 #### 4.6.2 WorkDrawer.tsx — Dettaglio Work
 
 **Funzionalità:**
-- Vista dettaglio: nome, concentrazione (omogenea/variabile), volume, solvente, validità, operatore
-- **Lista ingredienti**: source_type (CRM/Work), nome sorgente, lotto (se CRM), mix commerciale (se mix)
-- **Preparazioni**: tab con storico preparazioni (`work_preparazioni`), form per registrare nuova preparazione (data, note, operatore)
+- Vista dettaglio: nome, concentrazione (omogenea/variabile), volume, solvente, validità, operatore, metodi associati
+- **Lista ingredienti**: raggruppati per mix (un chip per mix), mostra lotto snapshot (`lotto_usato`) vs lotto corrente del composto, flag dismissione
+- Ricostruzione `WorkInSchema` da record DB (cache locale `buildWorkSchemaCache`) per riutilizzare `getCompsFromWork` e mostrare tracciabilità ricorsiva
+- **Preparazioni**: tab con storico `work_preparazioni`, form per registrare nuova preparazione (data, note, operatore)
 - **Badge stato**: calcolato dal backend (`calcolaStatoLab`)
-- Azioni: Modifica, Elimina
+- Azioni: Modifica, **Archivia** (dropdown), Elimina, **Vai a Schema** (navigazione a `/metodi` per metodo associato)
 
-#### 4.6.3 WorkForm.tsx — Form Creazione/Modifica
+#### 4.6.3 WorkForm.tsx — Form Creazione/Modifica Manuale
 
 - Campi: nome, concentrazione, conc_variabile (toggle), unita_conc, volume_ml, solvente, validita_mesi (NULL = "al momento"), operatore, note, livello
 - **Ingredienti dinamici**: aggiungi/rimuovi righe, per ogni riga: source_type (crm/work), selezione sorgente (autocomplete), volume_prelievo, fattore_diluizione/conc_target, modo_calcolo
 - Associazione metodi (checkbox)
+- Nota: la creazione Work avviene tipicamente da SchemaCalibrazione; WorkForm è il fallback manuale
+
+#### 4.6.4 RicaricaDialog.tsx — Ricarica Work con Lotti Aggiornati
+
+- Aperto quando una work ha CRM dismessi (`bloccata`) o scaduti (`ha_crm_scaduti`)
+- Per ogni ingrediente raggruppato per mix_id, calcola lo stato: `ok` (lotto ancora valido) / `auto` (singolo sostituto trovato automaticamente) / `ambiguo` (più candidati, richiede scelta utente) / `mancante` (nessun sostituto)
+- Quando tutti i gruppi sono risolti, chiama `work:ricarica` che in backend:
+  1. Crea una nuova Work copiando la struttura della vecchia con `source_id` sostituiti e `lotto_usato` aggiornato; per ingredienti `prep` ricopia il flacone
+  2. Archivia la vecchia work (`archiviato_motivo = 'Lotti dismessi — sostituita da work <id>'`, `sostituito_da_id = new_id`)
+  3. Restituisce `{ ok: true, new_work_id }`
+- Il chiamante naviga alla nuova work
+
+#### 4.6.5 AggiungiASchemaDialog.tsx — Aggiungi Work a un Metodo
+
+- Lista metodi compatibili via `metodi:list-for-work` (filtra per analiti condivisi) escludendo quelli a cui la work è già associata
+- Per ogni metodo candidato, verifica la compatibilità dei CRM usati nella work con quelli disponibili nello schema del metodo target (`verificaCompatibilitaCrm`)
+- Alla selezione: chiama `work:add-to-metodo` (aggiunge link in `work_metodi`) e opzionalmente apre SchemaCalibrazione del metodo target per confermare l'integrazione
 
 ---
 
@@ -448,10 +506,24 @@ Tutti in `components/ui/`: alert-dialog, badge, button, card, dialog, dropdown-m
 
 Relazione bidirezionale gestita da due tabelle:
 - `composti_metodi`: N:M tra composti e metodi (legacy, mantiene la FK)
-- `metodo_analiti`: lista nomi analiti del metodo (fonte autorevole per SchemaCalibrazione). Popolata automaticamente quando si collegano/scollegano composti
+- `metodo_analiti`: lista nomi analiti del metodo (fonte autorevole per SchemaCalibrazione). Popolata automaticamente quando si collegano/scollegano composti. Mig. 018 aggiunge `accreditato` e `alias_strumento` (editabili da ParametriMetodoPage)
 
 Aggiunta analita: inserisce in `metodo_analiti` + cerca composti con lo stesso nome → crea link in `composti_metodi`
 Rimozione analita: rimuove da `metodo_analiti` + rimuove link `composti_metodi` per composti con lo stesso nome
+
+### 7.5 Work ↔ Metodi e Archivio Lotti
+
+- Relazione `work_metodi` è N:M: una work può essere importata in più schemi di calibrazione
+- `metodi:list-for-work` restituisce i metodi candidati per una work (metodi che condividono almeno un analita con i CRM della work, esclusi quelli già linkati)
+- Snapshot lotto (`work_ingredienti.lotto_usato`, mig. 017): catturato alla creazione della work. Confrontato col lotto corrente del composto per rilevare dismissioni/rinnovi
+- Flag in `work:list`: `bloccata` (almeno un CRM ingrediente è dismesso), `ha_crm_scaduti` (almeno un CRM non dismesso con scadenza passata e nessuna rivalidazione valida)
+- **Archivio** (mig. 017): `archiviato`, `archiviato_at`, `archiviato_motivo`, `sostituito_da_id`. Soft-delete che preserva la tracciabilità storica. `work:archivia` manuale, oppure automatico da `work:ricarica` (che crea una nuova work con lotti aggiornati e archivia la vecchia)
+
+### 7.6 CRM Neat come Preparazione Stock
+
+- I CRM con `forma = 'Neat'` non hanno concentrazione diretta: devono essere pesati in una preparazione stock (tabella `preparazioni`)
+- Nello SchemaCalibrazione, per ogni CRM Neat viene caricata la lista delle preparazioni attive (`preparazioni:list-for-schema`) come `PrepStockItem[]`, visualizzate nella griglia come sotto-card sotto il CRM Neat
+- Quando si seleziona una preparazione stock come sorgente di una Work, l'ingrediente viene salvato con `source_type='prep'`, `source_id=prep_id`, `prep_id=prep_id` (mig. 020). Il `lotto_usato` salvato è il `flacone` della preparazione
 
 ### 7.3 Importazione Legacy
 
@@ -520,11 +592,11 @@ main/
     diario.ipc.ts          → CRUD diario
     anagrafiche.ipc.ts     → CRUD anagrafiche/voci + sync + rename-propagate + merge
     query.ipc.ts           → snapshot tracciabilità
-    work.ipc.ts            → CRUD work + ingredienti + preparazioni + stato lab
-    schemaCalibrazione.ipc.ts → get/save schema JSON
-    metodo-analiti.ipc.ts  → CRUD analiti metodo
+    work.ipc.ts            → CRUD work + ingredienti + preparazioni + stato lab + archivio + ricarica lotti + list-for-import / add-to-metodo / remove-from-metodo
+    schemaCalibrazione.ipc.ts → get/save schema JSON (include scenarioScelto)
+    metodo-analiti.ipc.ts  → CRUD analiti metodo + update accreditato/alias_strumento
     migration.ipc.ts       → import JSON legacy
-  migrations/              → 16 file SQL (001→016)
+  migrations/              → 19 file SQL (001→016, 017, 018, 020 — no 019)
 
 renderer/
   App.tsx                  → routing + DB ready check
@@ -541,15 +613,15 @@ renderer/
     ui/                    → Radix primitives wrappati (15 componenti)
   pages/
     setup/                 → SetupPage
-    composti/              → CompostiPage, CompostiTable, CompostoPanel, CompostoForm, MixPesticidiForm, PrepCalcTool, PreparazioniTab, StoriaDialog, ApriAperturaDialog, FialeSelector, ImportDialog, ExportDialog, EtichetteDialog, CompostiStats
-    metodi/                → MetodiPage, MetodoCard, MetodoDrawer, MetodoForm, SchemaCalibrazione (4 file), MetodiReadonlyTab
-    strumenti/             → StrumentiPage, EluentiTab, DiarioTab, QueryTab
+    composti/              → CompostiPage, CompostiTable, CompostoPanel, CompostoForm, MixPesticidiForm, PrepCalcTool, PreparazioniTab, StoriaDialog, ApriAperturaDialog, FialeSelector, ImportDialog, ExportDialog, Etichettedialog, CompostiStats
+    metodi/                → MetodiPage, MetodoCard, MetodoDrawer, MetodoForm, ParametriMetodoPage, SchemaCalibrazione (5 file: .tsx/.types/.logic/.grid/.scenari), AutoSelectDialog, ScenarDialog, ImportaWorkDialog
+    strumenti/             → StrumentiPage, EluentiTab, DiarioTab, QueryTab, MetodiReadonlyTab
     consumabili/           → ConsumabiliPage, ConsumabileForm
-    work/                  → WorkPage, WorkDrawer, WorkForm
+    work/                  → WorkPage, WorkDrawer, WorkForm, RicaricaDialog, AggiungiASchemaDialog
     anagrafiche/           → AnagrafichePage, AnagraficaCard
 
 shared/
-  types.ts                 → Interfacce TypeScript condivise (12 entità + IPC shape)
+  types.ts                 → Interfacce TypeScript condivise (include StatoLab, Work con campi archivio, WorkIngrediente con lotto_usato, WorkIngredienteLotStatus)
 
 preload/
   index.ts                 → contextBridge: invoke, getConfig, selectFolder, selectJson, importLegacyJson
