@@ -494,10 +494,10 @@ function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDele
                   <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>
                     {src.tipo === 'prep' ? `${src.nome} (stock)` : src.nome}
                   </div>
-                  {src.tipo === 'prep' && src.lotto && (
+                  {src.tipo === 'prep' && (src.progressivo != null || src.lotto) && (
                     <div style={{ fontSize:9, color:C.page.t2,
                                   fontFamily:'IBM Plex Mono, monospace' }}>
-                      prep da lotto {src.lotto} · Neat
+                      {`prep #${src.progressivo ?? '?'}${src.lotto ? ` da lotto ${src.lotto}` : ''} · Neat`}
                     </div>
                   )}
                   {src.tipo === 'mix' && (() => {
@@ -999,11 +999,11 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     })
   }, [crmItems])
 
-  const togglePrepStock = useCallback((prepKey: string, prepId: number, crmNome: string, cv: number, lotto: string | null) => {
+  const togglePrepStock = useCallback((prepKey: string, prepId: number, crmNome: string, cv: number, lotto: string | null, flacone: string | null, progressivo: number | null) => {
     setSelSrcs(prev => {
       const m = new Map(prev)
       if (m.has(prepKey)) { m.delete(prepKey) }
-      else m.set(prepKey, { id: prepKey, nome: crmNome, cv, tipo: 'prep', prepId, lotto })
+      else m.set(prepKey, { id: prepKey, nome: crmNome, cv, tipo: 'prep', prepId, lotto, flacone, progressivo })
       return m
     })
   }, [])

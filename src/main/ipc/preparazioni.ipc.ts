@@ -96,13 +96,16 @@ export function registerPreparazioniIpc(): void {
   ipcMain.handle('preparazioni:list-for-schema', (_, compostoId: number) => {
     const oggi = new Date().toISOString().slice(0, 10)
     return getDb().prepare(`
-      SELECT id, flacone, concentrazione, concentrazione_reale, concentrazione_target, unita_conc,
-             scadenza, data_dismissione
-      FROM preparazioni
-      WHERE composto_id = ?
-        AND data_dismissione IS NULL
-        AND (scadenza IS NULL OR scadenza >= ?)
-      ORDER BY data_prep DESC
+      SELECT p.id, p.flacone, p.concentrazione, p.concentrazione_reale, p.concentrazione_target, p.unita_conc,
+             p.scadenza, p.data_dismissione,
+             (SELECT COUNT(*) FROM preparazioni p2
+              WHERE p2.composto_id = p.composto_id
+                AND p2.id <= p.id) AS progressivo
+      FROM preparazioni p
+      WHERE p.composto_id = ?
+        AND p.data_dismissione IS NULL
+        AND (p.scadenza IS NULL OR p.scadenza >= ?)
+      ORDER BY p.data_prep DESC
     `).all(compostoId, oggi)
   })
 }

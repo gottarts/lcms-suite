@@ -14,7 +14,7 @@ import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef, 
 import { C } from './SchemaCalibrazione.types'
 import { getConcInfo, calcolaVols, targetColIdx, getCompsFromWork } from './SchemaCalibrazione.logic'
 
-const ROW = 48 // px altezza riga singola
+const ROW = 62 // px altezza riga singola
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Griglia Analiti | Mix CRM | Singoli
@@ -26,7 +26,7 @@ interface GrigliaProps {
   removedMix: Set<string>    // mix_id mix esclusi dallo scenario
   onToggleMix: (mixId: string) => void
   onToggleSng: (sngId: string) => void
-  onTogglePrepStock: (prepKey: string, prepId: number, crmNome: string, cv: number, lotto: string | null) => void
+  onTogglePrepStock: (prepKey: string, prepId: number, crmNome: string, cv: number, lotto: string | null, flacone: string | null, progressivo: number | null) => void
   onClose: () => void        // per chiudere lo schema prima di navigare
   registerCardRef: RegisterCardRef
   gridBodyRef?: React.RefObject<HTMLDivElement | null>
@@ -105,21 +105,32 @@ export function GrigliaAnalitiCrm({
     const isNeat = String(crm.forma ?? '').toLowerCase() === 'neat'
     if (isNeat) {
       const preps = crm.prepStock ?? []
+      // Contenitore: padding top(7) + bottom(7) = 14px
+      // Gap flex tra figli (gap:6): header + N chip → N gap totali
+      const GAP = 6
+      const PADDING_V = 14  // 7px top + 7px bottom
       const headerH = 22
-      if (preps.length === 0) return headerH + 24 + 8 + 4
-      const prepsH = preps.reduce((s, p) => {
-        let rh = 14 + 10
-        if (p.flacone)  rh += 13
+      if (preps.length === 0) {
+        // header + gap + riga "Nessuna prep attiva"
+        return PADDING_V + headerH + GAP + 20
+      }
+      const chipsH = preps.reduce((s, p) => {
+        let rh = 12 + 14  // padding chip 6px top+bottom + riga concentrazione (font 10px → ~14px)
+        if (p.progressivo != null || crm.lotto) rh += 13  // riga "prep #N da lotto ..."
         if (p.scadenza) rh += 13
-        return s + rh + 2
+        return s + rh
       }, 0)
-      return headerH + prepsH + 8
+      const gapsH = GAP * preps.length  // gap tra header e chip1, poi tra chip i e i+1
+      // padding cella: 6px; margine respiro: 8px
+      return PADDING_V + headerH + gapsH + chipsH + 6 + 8
     }
-    let h = 14 + 10 // riga cv/forma + padding top+bottom
+    // padding chip: 5px top + 5px bottom = 10px; riga concentrazione ~14px
+    let h = 14 + 10
     if (crm.lotto)                h += 13
     if (crm.scadenza_prodotto)    h += 13
     if (crm.ultima_rivalidazione) h += 13
-    return h
+    // padding cella: 3px top + 3px bottom = 6px; margine respiro = 8px
+    return h + 6 + 8
   }
 
   // Stima altezza naturale di una cella singoli (padding cella + cards + gap)
@@ -322,12 +333,12 @@ export function GrigliaAnalitiCrm({
                         const preps: PrepStockItem[] = crm.prepStock ?? []
                         return (
                           <div key={sngId} style={{
-                            borderRadius:10, padding:'5px 8px',
+                            borderRadius:10, padding:'7px 8px',
                             background: C.sng.bg,
                             border:`1.5px dashed ${C.sng.border}`,
                             borderLeft:`3px solid ${C.sng.border}`,
                             boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                            display:'flex', flexDirection:'column', gap:4,
+                            display:'flex', flexDirection:'column', gap:6,
                           }}>
                             {/* Header nome CRM Neat */}
                             <div style={{ display:'flex', alignItems:'center',
@@ -386,9 +397,9 @@ export function GrigliaAnalitiCrm({
                                 <div
                                   key={prepKey}
                                   ref={el => registerCardRef(prepKey, el)}
-                                  onClick={() => onTogglePrepStock(prepKey, prep.id, crm.nome, cv, prep.flacone)}
+                                  onClick={() => onTogglePrepStock(prepKey, prep.id, crm.nome, cv, crm.lotto ?? null, prep.flacone ?? null, prep.progressivo ?? null)}
                                   style={{
-                                    borderRadius:7, padding:'4px 7px',
+                                    borderRadius:7, padding:'6px 7px',
                                     background: isPrepSel ? '#c8e8a8' : '#fff',
                                     border:`1.5px solid ${C.sng.border}`,
                                     boxShadow: isPrepSel ? '0 0 0 2px rgba(125,184,90,.35)' : 'none',
@@ -403,10 +414,10 @@ export function GrigliaAnalitiCrm({
                                                 textOverflow:'ellipsis' }}>
                                     {concLabel ?? <span style={{ fontStyle:'italic', fontWeight:400, opacity:0.5 }}>conc. assente</span>}
                                   </div>
-                                  {prep.flacone && (
+                                  {(prep.progressivo != null || crm.lotto) && (
                                     <div style={{ fontSize:9, color:C.page.t2,
                                                   fontFamily:'IBM Plex Mono, monospace' }}>
-                                      {prep.flacone}
+                                      {`prep #${prep.progressivo ?? '?'}`}{crm.lotto ? ` da lotto ${crm.lotto} · Neat` : ''}
                                     </div>
                                   )}
                                   {prep.scadenza && (

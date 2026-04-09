@@ -205,6 +205,7 @@ export function useSchemaData(metodoId: string) {
           item.prepStock = rows.map((r: any) => ({
             id: r.id,
             flacone: r.flacone ?? null,
+            progressivo: r.progressivo ?? null,
             conc: r.concentrazione ?? null,
             concReale: r.concentrazione_reale ?? null,
             concTarget: r.concentrazione_target ?? null,
@@ -353,7 +354,21 @@ export function getCompsFromWork(
       result.push({ nome: src.nome, concInWork: src.cv * dilFactor, unita: 'mg/L', srcPath: src.nome + ' (CRM)' })
     }
   }
-  return result
+  // Aggrega per nome: somma le concentrazioni e unisce i srcPath
+  const map = new Map<string, CompostoInWork>()
+  for (const c of result) {
+    const key = c.nome.toLowerCase()
+    const existing = map.get(key)
+    if (existing) {
+      existing.concInWork += c.concInWork
+      if (!existing.srcPath.includes(c.srcPath)) {
+        existing.srcPath = existing.srcPath + ', ' + c.srcPath
+      }
+    } else {
+      map.set(key, { ...c })
+    }
+  }
+  return Array.from(map.values())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

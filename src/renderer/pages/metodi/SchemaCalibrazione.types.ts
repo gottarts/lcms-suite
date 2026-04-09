@@ -10,6 +10,7 @@ export type SorgenteTipo = 'mix' | 'sng' | 'work' | 'prep'
 export interface PrepStockItem {
   id: number
   flacone: string | null
+  progressivo: number | null
   conc: string | null
   concReale: number | null
   concTarget: number | null
@@ -27,6 +28,8 @@ export interface SorgenteSel {
   concVariabile?: boolean
   prepId?: number
   lotto?: string | null
+  flacone?: string | null
+  progressivo?: number | null
 }
 
 export interface Ingrediente {

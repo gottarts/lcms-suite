@@ -143,6 +143,23 @@ function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchem
         dilFactor:  ing.fattore_diluizione ?? undefined,
         modo:       ing.modo_calcolo ?? 'conc',
       })
+    } else if (ing.source_type === 'prep') {
+      srcs.push({
+        id:          String(ing.prep_id ?? ing.source_id),
+        nome:        ing.source_nome ?? '',
+        cv:          ing.conc_target_mgL ?? 0,
+        tipo:        'prep',
+        lotto:       ing.source_lotto ?? ing.lotto_usato ?? null,
+        flacone:     ing.source_flacone ?? null,
+        progressivo: ing.source_progressivo ?? null,
+      })
+      vols.push({
+        nome:       ing.source_nome ?? '',
+        vol:        ing.volume_prelievo_ml ?? 0,
+        concTarget: ing.conc_target_mgL ?? undefined,
+        dilFactor:  ing.fattore_diluizione ?? undefined,
+        modo:       ing.modo_calcolo ?? 'conc',
+      })
     }
   }
 
@@ -298,7 +315,15 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                 <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
                               background: src.tipo === 'mix' ? C.mix.border : C.sng.border }} />
                 <div>
-                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{src.nome}</div>
+                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>
+                    {src.nome}
+                  </div>
+                  {src.tipo === 'prep' && (src.progressivo != null || src.lotto) && (
+                    <div style={{ fontSize:9, color:C.page.t2,
+                                  fontFamily:'IBM Plex Mono, monospace' }}>
+                      {`prep #${src.progressivo ?? '?'}${src.lotto ? ` da lotto ${src.lotto}` : ''} · Neat`}
+                    </div>
+                  )}
                   {src.tipo === 'mix' && (() => {
                     const lotto = crmItems.find(c => c.mix_id === src.id)?.lotto
                     return lotto
@@ -314,7 +339,9 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                       : null
                   })()}
                   <div style={{ fontSize:10, color:C.page.th }}>
-                    {src.concVariabile ? (
+                    {src.tipo === 'prep' ? (
+                      `${src.cv} mg/L · Prep stock`
+                    ) : src.concVariabile ? (
                       <>
                         <span style={{ fontStyle:'italic' }}>variabile</span>
                         {(() => {
