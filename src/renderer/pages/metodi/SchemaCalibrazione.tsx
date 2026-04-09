@@ -1088,7 +1088,20 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       }
       for (const sngId of sngIds) {
         const crm = crmItems.find(c => String(c.id) === sngId)
-        if (crm) m.set(sngId, { id: sngId, nome: crm.nome, cv: crm.cv, tipo: 'sng' })
+        if (!crm) continue
+        const isNeat = String(crm.forma ?? '').toLowerCase() === 'neat'
+        const preps = crm.prepStock ?? []
+        if (isNeat && preps.length > 0) {
+          // Seleziona il preparato con progressivo maggiore
+          const prep = preps.reduce((best, p) =>
+            (p.progressivo ?? 0) > (best.progressivo ?? 0) ? p : best
+          )
+          const cv = (prep.concReale ?? prep.concTarget ?? (prep.conc != null ? Number(prep.conc) : 0)) || 0
+          const prepKey = `prep_${prep.id}`
+          m.set(prepKey, { id: prepKey, nome: crm.nome, cv, tipo: 'prep', prepId: prep.id, lotto: crm.lotto ?? null, flacone: prep.flacone ?? null, progressivo: prep.progressivo ?? null })
+        } else {
+          m.set(sngId, { id: sngId, nome: crm.nome, cv: crm.cv, tipo: 'sng' })
+        }
       }
       return m
     })
