@@ -8,21 +8,7 @@ export function registerSchemaCalibrazioneIpc(): void {
     const row = db.prepare('SELECT schema_json FROM schema_calibrazione WHERE metodo_id = ?').get(metodoId) as any
     if (!row) return null
 
-    const schema = JSON.parse(row.schema_json)
-
-    // Cleanup passivo: rimuove da work_metodi le entries spurie per questo metodo
-    // (work con link in work_metodi ma assenti dal schema_json)
-    const dbIds: number[] = (schema.workCols ?? []).flat()
-      .map((w: any) => w.dbId).filter((id: any) => id != null)
-    if (dbIds.length > 0) {
-      const placeholders = dbIds.map(() => '?').join(',')
-      db.prepare(`DELETE FROM work_metodi WHERE metodo_id = ? AND work_id NOT IN (${placeholders})`)
-        .run(metodoId, ...dbIds)
-    } else {
-      db.prepare('DELETE FROM work_metodi WHERE metodo_id = ?').run(metodoId)
-    }
-
-    return schema
+    return JSON.parse(row.schema_json)
   })
 
   ipcMain.handle('schema-cal:save', (_, metodoId: string, schemaJson: string) => {
@@ -35,19 +21,14 @@ export function registerSchemaCalibrazioneIpc(): void {
         updated_at  = excluded.updated_at
     `).run(metodoId, schemaJson)
 
-    // Sincronizza work_metodi con i dbIds nel JSON (source of truth = schema_json)
+    // Aggiunge i link work↔metodo per i dbId presenti nel JSON.
+    // Non rimuove mai link esistenti: le work già create rimangono congelate e collegate al metodo.
+    // I link orfani (work eliminate dal DB) vengono gestiti dall'ON DELETE CASCADE sulla FK.
     const schema = JSON.parse(schemaJson)
     const dbIds: number[] = (schema.workCols ?? []).flat()
       .map((w: any) => w.dbId).filter((id: any) => id != null)
-    if (dbIds.length > 0) {
-      const placeholders = dbIds.map(() => '?').join(',')
-      db.prepare(`DELETE FROM work_metodi WHERE metodo_id = ? AND work_id NOT IN (${placeholders})`)
-        .run(metodoId, ...dbIds)
-      for (const dbId of dbIds) {
-        db.prepare('INSERT OR IGNORE INTO work_metodi (work_id, metodo_id) VALUES (?, ?)').run(dbId, metodoId)
-      }
-    } else {
-      db.prepare('DELETE FROM work_metodi WHERE metodo_id = ?').run(metodoId)
+    for (const dbId of dbIds) {
+      db.prepare('INSERT OR IGNORE INTO work_metodi (work_id, metodo_id) VALUES (?, ?)').run(dbId, metodoId)
     }
 
     return { ok: true }

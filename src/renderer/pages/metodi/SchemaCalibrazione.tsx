@@ -817,7 +817,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [filtroDestUso,   setFiltroDestUso]   = useState<DestUso>('taratura')
 
   // Filtra crmItems per destinazione d'uso selezionata e ricalcola analitiAll filtrati
-  const { crmItemsPerDestUso, analitiAllFiltrati } = useMemo(() => {
+  const { crmItemsPerDestUso, analitiAllFiltrati, firmaToMixIdsFiltrati, mixNomiMapFiltrati } = useMemo(() => {
     function passaDest(dest: string | null): boolean {
       if (!dest) return filtroDestUso !== 'is' // null → visibile in Taratura e QC, non in IS
       const d = dest.toLowerCase()
@@ -841,8 +841,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     )
 
     const filtered = crmItems.filter(c => c.mix_id ? mixIdValidi.has(c.mix_id) : passaDest(c.destinazione_uso))
-    const { analiti: analitiAllFiltrati } = buildAnalitiData(filtered, analitiRows)
-    return { crmItemsPerDestUso: filtered, analitiAllFiltrati }
+    const { analiti: analitiAllFiltrati, firmaToMixIds: firmaToMixIdsFiltrati, mixNomiMap: mixNomiMapFiltrati } = buildAnalitiData(filtered, analitiRows)
+    return { crmItemsPerDestUso: filtered, analitiAllFiltrati, firmaToMixIdsFiltrati, mixNomiMapFiltrati }
   }, [crmItems, analitiRows, filtroDestUso])
 
   // Dopo la scelta dello scenario, ricalcola analiti e crmItems escludendo le
@@ -1099,9 +1099,10 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           const cv = (prep.concReale ?? prep.concTarget ?? (prep.conc != null ? Number(prep.conc) : 0)) || 0
           const prepKey = `prep_${prep.id}`
           m.set(prepKey, { id: prepKey, nome: crm.nome, cv, tipo: 'prep', prepId: prep.id, lotto: crm.lotto ?? null, flacone: prep.flacone ?? null, progressivo: prep.progressivo ?? null })
-        } else {
+        } else if (!isNeat) {
           m.set(sngId, { id: sngId, nome: crm.nome, cv: crm.cv, tipo: 'sng' })
         }
+        // Neat senza preparazioni: non selezionare nulla
       }
       return m
     })
@@ -1348,10 +1349,10 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       {/* ── Dialog selezione automatica CRM ── */}
       {autoSelectOpen && (
         <AutoSelectDialog
-          analiti={analitiAll}
-          crmItems={crmItems}
-          firmaToMixIds={firmaToMixIds}
-          mixNomiMap={mixNomiMap}
+          analiti={analitiAllFiltrati}
+          crmItems={crmItemsPerDestUso}
+          firmaToMixIds={firmaToMixIdsFiltrati}
+          mixNomiMap={mixNomiMapFiltrati}
           removedMix={removedMix}
           onClose={() => setAutoSelectOpen(false)}
           onApply={handleAutoSelect}
