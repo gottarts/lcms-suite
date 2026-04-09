@@ -27,6 +27,8 @@ export interface Metodo {
   lims_id: string | null
   oqlab_id: string | null
   note: string | null
+  classe_metodo: string | null
+  nome_esteso: string | null
   created_at: string
   updated_at: string
   // Joined fields (not in DB)

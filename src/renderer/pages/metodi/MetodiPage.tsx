@@ -46,7 +46,10 @@ export function MetodiPage() {
     if (search) {
       const q = search.toLowerCase()
       result = result.filter(m =>
-        m.nome?.toLowerCase().includes(q) || m.matrice?.toLowerCase().includes(q)
+        m.nome?.toLowerCase().includes(q) ||
+        m.matrice?.toLowerCase().includes(q) ||
+        m.nome_esteso?.toLowerCase().includes(q) ||
+        m.classe_metodo?.toLowerCase().includes(q)
       )
     }
     if (filterStrumento && filterStrumento !== '__all__') {
@@ -132,8 +135,9 @@ export function MetodiPage() {
             key={m.id}
             metodo={m}
             onClick={() => setDrawerId(m.id)}
-            onGoSchema={() => { setDrawerId(null); setSchemaMetodoId(m.id) }}
+            onEdit={() => handleEdit(m)}
             onGoParametri={() => { setDrawerId(null); setParametriMetodoId(m.id) }}
+            onGoSchema={() => { setDrawerId(null); setSchemaMetodoId(m.id) }}
           />
         ))}
       </div>

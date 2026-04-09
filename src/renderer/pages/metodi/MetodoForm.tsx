@@ -31,6 +31,9 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
   const [form, setForm] = useState<Record<string, any>>({})
   // FIX-merge: se il backend segnala un conflitto, salviamo qui i dati per il dialogo
   const [mergeState, setMergeState] = useState<MergeState | null>(null)
+  // Suggerimenti per classe_metodo: calcolata dal backend + voci anagrafica Classi
+  const [classeSugg, setClasseSugg] = useState<string[]>([])
+  const [classeSuggOpen, setClasseSuggOpen] = useState(false)
 
   useEffect(() => {
     if (metodo) {
@@ -42,9 +45,34 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
         fase_a: '', fase_b: '', gradiente: '', flusso: '',
         ionizzazione: '', polarita: '', acquisizione: '', srm: '',
         lims_id: '', oqlab_id: '', note: '',
+        classe_metodo: '', nome_esteso: '',
       })
     }
   }, [metodo, open])
+
+  // Carica suggerimenti per classe_metodo quando si apre il form in modalità modifica
+  useEffect(() => {
+    if (!open) return
+    const loadClasseSugg = async () => {
+      const sugg = new Set<string>()
+      // Calcola classe dai composti associati al metodo (solo in modifica)
+      if (isEdit && metodo?.id) {
+        const computed = await (window as any).electronAPI.invoke('metodi:compute-classe', metodo.id)
+        if (computed) sugg.add(computed)
+      }
+      // Voci dall'anagrafica "Classi" (anagrafiche:list ritorna già le voci inline)
+      try {
+        const anagrafiche: any[] = await (window as any).electronAPI.invoke('anagrafiche:list')
+        const classiAnagrafica = anagrafiche.find((a: any) => a.nome === 'Classi')
+        if (classiAnagrafica?.voci) {
+          for (const v of classiAnagrafica.voci) sugg.add(v.valore)
+        }
+      } catch { /* anagrafica Classi potrebbe non esistere */ }
+      sugg.add('Multiclasse')
+      setClasseSugg(Array.from(sugg))
+    }
+    loadClasseSugg()
+  }, [open, isEdit, metodo?.id])
 
   const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
 
@@ -132,6 +160,39 @@ export function MetodoForm({ open, onClose, metodo, strumenti, onSave }: MetodoF
               <div>
                 <Label className="text-xs">OQLab ID</Label>
                 <Input value={form.oqlab_id || ''} onChange={e => set('oqlab_id', e.target.value)} />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs">Nome esteso</Label>
+                <Input
+                  value={form.nome_esteso || ''}
+                  onChange={e => set('nome_esteso', e.target.value)}
+                  placeholder="Alias leggibile del metodo (es. Pesticidi acque superficiali)"
+                />
+              </div>
+              <div className="col-span-2 relative">
+                <Label className="text-xs">Classe metodo</Label>
+                <Input
+                  value={form.classe_metodo || ''}
+                  onChange={e => { set('classe_metodo', e.target.value); setClasseSuggOpen(true) }}
+                  onFocus={() => setClasseSuggOpen(true)}
+                  onBlur={() => setTimeout(() => setClasseSuggOpen(false), 150)}
+                  placeholder="Es. Pesticidi, Multiclasse…"
+                />
+                {classeSuggOpen && classeSugg.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    {classeSugg
+                      .filter(s => !form.classe_metodo || s.toLowerCase().includes((form.classe_metodo as string).toLowerCase()))
+                      .map(s => (
+                        <div
+                          key={s}
+                          className="px-3 py-1.5 text-xs cursor-pointer hover:bg-muted"
+                          onMouseDown={() => { set('classe_metodo', s); setClasseSuggOpen(false) }}
+                        >
+                          {s}
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
 

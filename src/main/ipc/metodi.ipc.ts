@@ -47,9 +47,11 @@ export function registerMetodiIpc(): void {
 
     const insertMetodo = db.prepare(
       `INSERT INTO metodi (id, nome, strumento_id, matrice, colonna, fase_a, fase_b,
-       gradiente, flusso, ionizzazione, polarita, acquisizione, srm, lims_id, oqlab_id, note)
+       gradiente, flusso, ionizzazione, polarita, acquisizione, srm, lims_id, oqlab_id, note,
+       classe_metodo, nome_esteso)
        VALUES (@id, @nome, @strumento_id, @matrice, @colonna, @fase_a, @fase_b,
-       @gradiente, @flusso, @ionizzazione, @polarita, @acquisizione, @srm, @lims_id, @oqlab_id, @note)`
+       @gradiente, @flusso, @ionizzazione, @polarita, @acquisizione, @srm, @lims_id, @oqlab_id, @note,
+       @classe_metodo, @nome_esteso)`
     )
     const insertLink = db.prepare(
       'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
@@ -101,7 +103,8 @@ export function registerMetodiIpc(): void {
        colonna=@colonna, fase_a=@fase_a, fase_b=@fase_b, gradiente=@gradiente,
        flusso=@flusso, ionizzazione=@ionizzazione, polarita=@polarita,
        acquisizione=@acquisizione, srm=@srm, lims_id=@lims_id, oqlab_id=@oqlab_id,
-       note=@note, updated_at=datetime('now') WHERE id=@id`
+       note=@note, classe_metodo=@classe_metodo, nome_esteso=@nome_esteso,
+       updated_at=datetime('now') WHERE id=@id`
     )
     const deleteLinks = db.prepare('DELETE FROM composti_metodi WHERE metodo_id = ?')
     const deleteAllAnaliti = db.prepare('DELETE FROM metodo_analiti WHERE metodo_id = ?')
@@ -157,7 +160,8 @@ export function registerMetodiIpc(): void {
        colonna=@colonna, fase_a=@fase_a, fase_b=@fase_b, gradiente=@gradiente,
        flusso=@flusso, ionizzazione=@ionizzazione, polarita=@polarita,
        acquisizione=@acquisizione, srm=@srm, lims_id=@lims_id, oqlab_id=@oqlab_id,
-       note=@note, updated_at=datetime('now') WHERE id=@id`
+       note=@note, classe_metodo=@classe_metodo, nome_esteso=@nome_esteso,
+       updated_at=datetime('now') WHERE id=@id`
     )
     const getDestLinks = db.prepare('SELECT composto_id FROM composti_metodi WHERE metodo_id = ?')
     const deleteSrcLinks = db.prepare('DELETE FROM composti_metodi WHERE metodo_id = ?')
@@ -211,6 +215,19 @@ export function registerMetodiIpc(): void {
   ipcMain.handle('metodi:delete', (_, id: string) => {
     getDb().prepare('DELETE FROM metodi WHERE id = ?').run(id)
     return { ok: true }
+  })
+
+  // Calcola la classe suggerita per un metodo in base alle classi dei composti associati
+  ipcMain.handle('metodi:compute-classe', (_, metodoId: string) => {
+    const classi = getDb().prepare(
+      `SELECT DISTINCT c.classe
+       FROM composti c
+       JOIN composti_metodi cm ON cm.composto_id = c.id
+       WHERE cm.metodo_id = ? AND c.classe IS NOT NULL AND c.classe != ''`
+    ).all(metodoId).map((r: any) => r.classe as string)
+    if (classi.length === 0) return null
+    if (classi.length === 1) return classi[0]
+    return 'Multiclasse'
   })
 
   // FEAT-metodi-campo: crea il metodo se non esiste già (ricerca per nome, case-insensitive)
