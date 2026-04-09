@@ -63,36 +63,38 @@ export function buildAnalitiData(
   const mixIdsByNome = new Map<string, string[]>()
   for (const item of itemsFiltrati) {
     if (item.mix_id) {
-      const arr = mixIdsByNome.get(item.nome) ?? []
+      const key = item.nome.toUpperCase()
+      const arr = mixIdsByNome.get(key) ?? []
       if (!arr.includes(item.mix_id)) arr.push(item.mix_id)
-      mixIdsByNome.set(item.nome, arr)
+      mixIdsByNome.set(key, arr)
     }
   }
 
   for (const item of itemsFiltrati) {
+    const key = item.nome.toUpperCase()
     if (item.mix_id) {
-      const tuttiMixIds = mixIdsByNome.get(item.nome)!
+      const tuttiMixIds = mixIdsByNome.get(key)!
       const firme = new Set(tuttiMixIds.map(mid => mixFirma.get(mid)!))
       if (firme.size === 1) {
-        if (!mixMap.has(item.nome)) mixMap.set(item.nome, tuttiMixIds)
+        if (!mixMap.has(key)) mixMap.set(key, tuttiMixIds)
       } else {
-        mixMap.set(item.nome, [item.mix_id])
+        mixMap.set(key, [item.mix_id])
       }
     } else {
-      const arr = sngMap.get(item.nome) ?? []
+      const arr = sngMap.get(key) ?? []
       arr.push(String(item.id))
-      sngMap.set(item.nome, arr)
+      sngMap.set(key, arr)
     }
-    if (item.isIS) isMap.set(item.nome, true)
+    if (item.isIS) isMap.set(key, true)
   }
 
   const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
     nome:   row.nome,
-    mixId:  mixMap.get(row.nome)?.[0] ?? null,
-    mixIds: mixMap.get(row.nome) ?? [],
-    sngIds: sngMap.get(row.nome) ?? [],
-    isCon:  mixMap.has(row.nome) && sngMap.has(row.nome),
-    isIS:   isMap.get(row.nome) ?? false,
+    mixId:  mixMap.get(row.nome.toUpperCase())?.[0] ?? null,
+    mixIds: mixMap.get(row.nome.toUpperCase()) ?? [],
+    sngIds: sngMap.get(row.nome.toUpperCase()) ?? [],
+    isCon:  mixMap.has(row.nome.toUpperCase()) && sngMap.has(row.nome.toUpperCase()),
+    isIS:   isMap.get(row.nome.toUpperCase()) ?? false,
   }))
 
   const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)

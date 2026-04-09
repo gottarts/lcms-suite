@@ -44,7 +44,7 @@ export function registerMetodoAnalitiIpc(): void {
     db.transaction(() => {
       for (const nome of nomi) {
         const trimmed = nome.trim()
-        insert.run(metodoId, trimmed)
+        insert.run(metodoId, trimmed.toUpperCase())
         // Se esiste un composto con questo nome, collega anche composti_metodi
         const composto = getComposto.get(trimmed) as { id: number } | undefined
         if (composto) insertLink.run(composto.id, metodoId)

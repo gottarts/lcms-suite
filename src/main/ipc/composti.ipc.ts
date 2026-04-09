@@ -247,7 +247,7 @@ FROM composti c`
       newId = result.lastInsertRowid
       for (const mid of metodiIds) {
         insertLink.run(newId, mid)
-        insertAnalita.run(mid, row.nome)
+        insertAnalita.run(mid, (row.nome as string).toUpperCase())
       }
     })()
 
@@ -426,7 +426,7 @@ FROM composti c`
           deleteLinksMix.run(altro.id)
           for (const mid of metodiIds) {
             insertLinkMix.run(altro.id, mid)
-            insertAnalitaUpd.run(mid, altro.nome as string)
+            insertAnalitaUpd.run(mid, (altro.nome as string).toUpperCase())
           }
         }
       }
@@ -439,7 +439,7 @@ FROM composti c`
       deleteLinks.run(id)
       for (const mid of metodiIds) {
         insertLink.run(id, mid)
-        insertAnalitaUpd.run(mid, row.nome as string)
+        insertAnalitaUpd.run(mid, (row.nome as string).toUpperCase())
       }
 
       // Per i metodi rimossi: cancella il nome da metodo_analiti

@@ -66,7 +66,7 @@ export function registerMetodiIpc(): void {
       for (const cid of compostiIds) {
         insertLink.run(cid, data.id)
         const c = getNomeComposto.get(cid) as { nome: string } | undefined
-        if (c?.nome) insertAnalita.run(data.id, c.nome)
+        if (c?.nome) insertAnalita.run(data.id, c.nome.toUpperCase())
       }
     })()
 
@@ -125,11 +125,11 @@ export function registerMetodiIpc(): void {
     const nomiDaNuoviComposti = new Set<string>()
     for (const cid of compostiIds) {
       const c = getNomeCompostoUpd.get(cid) as { nome: string } | undefined
-      if (c?.nome) nomiDaNuoviComposti.add(c.nome)
+      if (c?.nome) nomiDaNuoviComposti.add(c.nome.toUpperCase())
     }
 
-    // Analiti manuali: esistenti non coperti dai nuovi composti_ids
-    const analitiManuali = analitiEsistenti.filter(n => !nomiDaNuoviComposti.has(n))
+    // Analiti manuali: esistenti non coperti dai nuovi composti_ids (confronto case-insensitive)
+    const analitiManuali = analitiEsistenti.filter(n => !nomiDaNuoviComposti.has(n.toUpperCase()))
 
     db.transaction(() => {
       updateMetodo.run({ ...metodoData, id })
@@ -138,11 +138,11 @@ export function registerMetodiIpc(): void {
       for (const cid of compostiIds) {
         insertLink.run(cid, id)
         const c = getNomeCompostoUpd.get(cid) as { nome: string } | undefined
-        if (c?.nome) insertAnalitaUpd.run(id, c.nome)
+        if (c?.nome) insertAnalitaUpd.run(id, c.nome.toUpperCase())
       }
       // Ripristina gli analiti manuali (non legati a composti)
       for (const nome of analitiManuali) {
-        insertAnalitaUpd.run(id, nome)
+        insertAnalitaUpd.run(id, nome.toUpperCase())
       }
     })()
 
@@ -202,7 +202,7 @@ export function registerMetodiIpc(): void {
       )
       for (const cid of allIds) {
         const c = getNomeCompostoMerge.get(cid) as { nome: string } | undefined
-        if (c?.nome) insertAnalitaMerge.run(destId, c.nome)
+        if (c?.nome) insertAnalitaMerge.run(destId, c.nome.toUpperCase())
       }
 
       // Elimina il metodo sorgente (ON DELETE CASCADE rimuove i suoi metodo_analiti)
