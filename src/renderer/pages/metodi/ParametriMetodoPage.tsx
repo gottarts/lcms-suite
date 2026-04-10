@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { X } from 'lucide-react'
+import { X, CheckSquare, Upload } from 'lucide-react'
 import { metodoAnalitiApi, compostiApi, metodiApi } from '@/lib/api'
+import { AliasImportDialog } from './AliasImportDialog'
 
 interface Analita {
   id: number
@@ -10,7 +11,11 @@ interface Analita {
   ordine: number | null
   accreditato: number
   alias_strumento: string | null
+  alias_lims: string | null
+  alias_oqlab: string | null
 }
+
+type AliasField = 'alias_strumento' | 'alias_lims' | 'alias_oqlab'
 
 interface ParametriMetodoPageProps {
   metodoId: string
@@ -24,8 +29,13 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
   const [addInput, setAddInput] = useState('')
   const [addSugg, setAddSugg] = useState<string[]>([])
   const [allNomiDb, setAllNomiDb] = useState<string[]>([])
-  // alias editing: id -> valore corrente in editing
-  const [aliasEdit, setAliasEdit] = useState<Record<number, string>>({})
+  // alias editing: field -> id -> valore corrente
+  const [aliasEdit, setAliasEdit] = useState<Record<AliasField, Record<number, string>>>({
+    alias_strumento: {},
+    alias_lims: {},
+    alias_oqlab: {},
+  })
+  const [showImport, setShowImport] = useState(false)
 
   const load = useCallback(async () => {
     const rows = await metodoAnalitiApi.list(metodoId)
@@ -59,7 +69,6 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
     if (!trimmed) return
     if (analiti.some(a => a.nome.toLowerCase() === trimmed.toLowerCase())) return
     await metodoAnalitiApi.add(metodoId, [trimmed])
-    // Ricarica composti_ids per coerenza (stesso pattern di MetodoForm)
     await metodiApi.get(metodoId)
     setAddInput('')
     setAddSugg([])
@@ -88,19 +97,40 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
   }
 
   const handleAccreditatoChange = async (analita: Analita, checked: boolean) => {
-    // Aggiornamento ottimistico
     setAnaliti(prev => prev.map(a => a.id === analita.id ? { ...a, accreditato: checked ? 1 : 0 } : a))
     await metodoAnalitiApi.update(analita.id, { accreditato: checked ? 1 : 0 })
   }
 
-  const handleAliasBlur = async (analita: Analita) => {
-    const val = aliasEdit[analita.id] ?? analita.alias_strumento ?? ''
-    const newVal = val.trim() || null
-    if (newVal === (analita.alias_strumento || null)) return
-    setAnaliti(prev => prev.map(a => a.id === analita.id ? { ...a, alias_strumento: newVal } : a))
-    await metodoAnalitiApi.update(analita.id, { alias_strumento: newVal })
-    setAliasEdit(prev => { const next = { ...prev }; delete next[analita.id]; return next })
+  const handleAccreditaTutti = async () => {
+    setAnaliti(prev => prev.map(a => ({ ...a, accreditato: 1 })))
+    await metodoAnalitiApi.bulkSetAccreditato(metodoId, 'all', 1)
   }
+
+  const handleAliasChange = (field: AliasField, id: number, val: string) => {
+    setAliasEdit(prev => ({
+      ...prev,
+      [field]: { ...prev[field], [id]: val },
+    }))
+  }
+
+  const handleAliasBlur = async (analita: Analita, field: AliasField) => {
+    const val = aliasEdit[field][analita.id] ?? analita[field] ?? ''
+    const newVal = val.trim() || null
+    if (newVal === (analita[field] || null)) return
+    setAnaliti(prev => prev.map(a => a.id === analita.id ? { ...a, [field]: newVal } : a))
+    await metodoAnalitiApi.update(analita.id, { [field]: newVal })
+    setAliasEdit(prev => {
+      const next = { ...prev, [field]: { ...prev[field] } }
+      delete next[field][analita.id]
+      return next
+    })
+  }
+
+  const aliasColumns: { field: AliasField; label: string }[] = [
+    { field: 'alias_strumento', label: 'Alias strumento' },
+    { field: 'alias_lims', label: 'Alias LIMS' },
+    { field: 'alias_oqlab', label: 'Alias OQLab' },
+  ]
 
   return (
     <div className="flex flex-col h-full">
@@ -114,8 +144,8 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
         <span className="text-sm text-muted-foreground bg-muted rounded-full px-3 py-0.5 font-mono">{metodoNome}</span>
       </div>
 
-      {/* Toolbar: aggiungi + rimuovi */}
-      <div className="flex items-center gap-2 mb-3">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Input
             placeholder="Nome parametro (dal catalogo o libero)"
@@ -150,14 +180,41 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
         >
           Aggiungi
         </Button>
+
+        <div className="h-4 w-px bg-border mx-1" />
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs gap-1"
+          onClick={handleAccreditaTutti}
+          disabled={analiti.length === 0}
+          title="Marca tutti i parametri come accreditati"
+        >
+          <CheckSquare className="h-3.5 w-3.5" />
+          Accredita tutti
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs gap-1"
+          onClick={() => setShowImport(true)}
+          disabled={analiti.length === 0}
+          title="Importa alias da file LIMS/OQLab con mappatura automatica"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Importa alias…
+        </Button>
+
         {sel.size > 0 && (
           <Button
             size="sm"
             variant="destructive"
-            className="h-8 text-xs ml-auto"
+            className="h-8 text-xs ml-auto gap-1"
             onClick={handleRimuoviSelezionati}
           >
-            <X className="h-3.5 w-3.5 mr-1" />
+            <X className="h-3.5 w-3.5" />
             Rimuovi selezionati ({sel.size})
           </Button>
         )}
@@ -179,13 +236,17 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
               </th>
               <th className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase tracking-wider">Nome</th>
               <th className="w-28 px-3 py-2 text-center font-semibold text-muted-foreground uppercase tracking-wider">Accreditato</th>
-              <th className="w-48 px-3 py-2 text-left font-semibold text-muted-foreground uppercase tracking-wider">Alias strumento</th>
+              {aliasColumns.map(col => (
+                <th key={col.field} className="w-44 px-3 py-2 text-left font-semibold text-muted-foreground uppercase tracking-wider">
+                  {col.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y">
             {analiti.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-4 text-center text-muted-foreground italic">
+                <td colSpan={5} className="px-3 py-4 text-center text-muted-foreground italic">
                   Nessun parametro — aggiungili dal catalogo o manualmente
                 </td>
               </tr>
@@ -209,22 +270,28 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
                     className="accent-primary h-4 w-4"
                   />
                 </td>
-                <td className="px-3 py-2">
-                  <Input
-                    value={aliasEdit[a.id] ?? a.alias_strumento ?? ''}
-                    onChange={e => setAliasEdit(prev => ({ ...prev, [a.id]: e.target.value }))}
-                    onBlur={() => handleAliasBlur(a)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                      if (e.key === 'Escape') {
-                        setAliasEdit(prev => { const next = { ...prev }; delete next[a.id]; return next })
-                        ;(e.target as HTMLInputElement).blur()
-                      }
-                    }}
-                    placeholder="—"
-                    className="h-7 text-xs"
-                  />
-                </td>
+                {aliasColumns.map(col => (
+                  <td key={col.field} className="px-3 py-2">
+                    <Input
+                      value={aliasEdit[col.field][a.id] ?? a[col.field] ?? ''}
+                      onChange={e => handleAliasChange(col.field, a.id, e.target.value)}
+                      onBlur={() => handleAliasBlur(a, col.field)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                        if (e.key === 'Escape') {
+                          setAliasEdit(prev => {
+                            const next = { ...prev, [col.field]: { ...prev[col.field] } }
+                            delete next[col.field][a.id]
+                            return next
+                          })
+                          ;(e.target as HTMLInputElement).blur()
+                        }
+                      }}
+                      placeholder="—"
+                      className="h-7 text-xs"
+                    />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -234,6 +301,16 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
       <p className="text-xs text-muted-foreground mt-2">
         Le modifiche sono immediate. Un parametro aggiunto manualmente apparirà grigio nello schema finché non viene associato un CRM.
       </p>
+
+      {showImport && (
+        <AliasImportDialog
+          open={showImport}
+          metodoId={metodoId}
+          analiti={analiti.map(a => a.nome)}
+          onClose={() => setShowImport(false)}
+          onSaved={() => { setShowImport(false); load() }}
+        />
+      )}
     </div>
   )
 }

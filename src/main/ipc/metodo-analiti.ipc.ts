@@ -7,9 +7,10 @@ export function registerMetodoAnalitiIpc(): void {
     // Verifica se le colonne extra esistono già (migrazione 018 potrebbe non essere ancora applicata)
     const cols = (db.prepare(`PRAGMA table_info(metodo_analiti)`).all() as { name: string }[]).map(r => r.name)
     const hasExtra = cols.includes('accreditato')
+    const hasAliasLims = cols.includes('alias_lims')
     const selectCols = hasExtra
-      ? 'id, nome, ordine, accreditato, alias_strumento'
-      : 'id, nome, ordine, 0 AS accreditato, NULL AS alias_strumento'
+      ? `id, nome, ordine, accreditato, alias_strumento${hasAliasLims ? ', alias_lims, alias_oqlab' : ', NULL AS alias_lims, NULL AS alias_oqlab'}`
+      : 'id, nome, ordine, 0 AS accreditato, NULL AS alias_strumento, NULL AS alias_lims, NULL AS alias_oqlab'
     return db.prepare(
       `SELECT ${selectCols} FROM metodo_analiti
        WHERE metodo_id = ?
@@ -17,16 +18,47 @@ export function registerMetodoAnalitiIpc(): void {
     ).all(metodoId)
   })
 
-  ipcMain.handle('metodo-analiti:update', (_, id: number, patch: { accreditato?: number; alias_strumento?: string | null }) => {
+  ipcMain.handle('metodo-analiti:update', (_, id: number, patch: { accreditato?: number; alias_strumento?: string | null; alias_lims?: string | null; alias_oqlab?: string | null }) => {
     const db = getDb()
     const cols = (db.prepare(`PRAGMA table_info(metodo_analiti)`).all() as { name: string }[]).map(r => r.name)
     const fields: string[] = []
     const values: unknown[] = []
     if ('accreditato' in patch && cols.includes('accreditato')) { fields.push('accreditato = ?'); values.push(patch.accreditato) }
     if ('alias_strumento' in patch && cols.includes('alias_strumento')) { fields.push('alias_strumento = ?'); values.push(patch.alias_strumento ?? null) }
+    if ('alias_lims' in patch && cols.includes('alias_lims')) { fields.push('alias_lims = ?'); values.push(patch.alias_lims ?? null) }
+    if ('alias_oqlab' in patch && cols.includes('alias_oqlab')) { fields.push('alias_oqlab = ?'); values.push(patch.alias_oqlab ?? null) }
     if (fields.length === 0) return { ok: true }
     values.push(id)
     db.prepare(`UPDATE metodo_analiti SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    return { ok: true }
+  })
+
+  ipcMain.handle('metodo-analiti:bulk-set-accreditato', (_, metodoId: string, nomi: string[] | 'all', accreditato: 0 | 1) => {
+    const db = getDb()
+    if (nomi === 'all') {
+      db.prepare('UPDATE metodo_analiti SET accreditato = ? WHERE metodo_id = ?').run(accreditato, metodoId)
+    } else if (nomi.length > 0) {
+      const placeholders = nomi.map(() => 'LOWER(?)').join(', ')
+      db.prepare(`UPDATE metodo_analiti SET accreditato = ? WHERE metodo_id = ? AND LOWER(nome) IN (${placeholders})`).run(accreditato, metodoId, ...nomi.map(n => n.toLowerCase()))
+    }
+    return { ok: true }
+  })
+
+  ipcMain.handle('metodo-analiti:bulk-update-alias', (_, metodoId: string, updates: Array<{ nome: string; alias_lims?: string | null; alias_oqlab?: string | null; alias_strumento?: string | null }>) => {
+    const db = getDb()
+    const cols = (db.prepare(`PRAGMA table_info(metodo_analiti)`).all() as { name: string }[]).map(r => r.name)
+    db.transaction(() => {
+      for (const u of updates) {
+        const fields: string[] = []
+        const values: unknown[] = []
+        if ('alias_lims' in u && cols.includes('alias_lims')) { fields.push('alias_lims = ?'); values.push(u.alias_lims ?? null) }
+        if ('alias_oqlab' in u && cols.includes('alias_oqlab')) { fields.push('alias_oqlab = ?'); values.push(u.alias_oqlab ?? null) }
+        if ('alias_strumento' in u && cols.includes('alias_strumento')) { fields.push('alias_strumento = ?'); values.push(u.alias_strumento ?? null) }
+        if (fields.length === 0) continue
+        values.push(metodoId, u.nome)
+        db.prepare(`UPDATE metodo_analiti SET ${fields.join(', ')} WHERE metodo_id = ? AND LOWER(nome) = LOWER(?)`).run(...values)
+      }
+    })()
     return { ok: true }
   })
 

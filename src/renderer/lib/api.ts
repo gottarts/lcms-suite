@@ -145,13 +145,17 @@ export const schemaCalApi = {
 
 export const metodoAnalitiApi = {
   list: (metodoId: string) =>
-    api.invoke('metodo-analiti:list', metodoId) as Promise<{ id: number; nome: string; ordine: number | null; accreditato: number; alias_strumento: string | null }[]>,
+    api.invoke('metodo-analiti:list', metodoId) as Promise<{ id: number; nome: string; ordine: number | null; accreditato: number; alias_strumento: string | null; alias_lims: string | null; alias_oqlab: string | null }[]>,
   add: (metodoId: string, nomi: string[]) =>
     api.invoke('metodo-analiti:add', metodoId, nomi) as Promise<{ ok: boolean }>,
   remove: (metodoId: string, nomi: string[]) =>
     api.invoke('metodo-analiti:remove', metodoId, nomi) as Promise<{ ok: boolean }>,
-  update: (id: number, patch: { accreditato?: number; alias_strumento?: string | null }) =>
+  update: (id: number, patch: { accreditato?: number; alias_strumento?: string | null; alias_lims?: string | null; alias_oqlab?: string | null }) =>
     api.invoke('metodo-analiti:update', id, patch) as Promise<{ ok: boolean }>,
+  bulkSetAccreditato: (metodoId: string, nomi: string[] | 'all', accreditato: 0 | 1) =>
+    api.invoke('metodo-analiti:bulk-set-accreditato', metodoId, nomi, accreditato) as Promise<{ ok: boolean }>,
+  bulkUpdateAlias: (metodoId: string, updates: Array<{ nome: string; alias_lims?: string | null; alias_oqlab?: string | null; alias_strumento?: string | null }>) =>
+    api.invoke('metodo-analiti:bulk-update-alias', metodoId, updates) as Promise<{ ok: boolean }>,
 }
 
 export const dashboardApi = {
