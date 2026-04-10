@@ -171,6 +171,32 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       }
     }
 
+    // Costruisce l'insieme di CRM fisici usati da questa work:
+    // - CRM singoli: gli ingredienti source_type='crm' senza mix_id → identificati da source_id
+    // - Mix: per ogni ingrediente-mix, i componenti in crm_validi con quel mix_id
+    const crmUsatiInWork = new Map<string, CrmItem>()  // keyed by id
+    for (const ing of wRaw.ingredienti ?? []) {
+      if (ing.source_type !== 'crm') continue
+      if (!ing.source_mix_id) {
+        // CRM singolo: cerca in crmItems per source_id
+        const found = crmItems.find(c => c.id === ing.source_id)
+        if (found) crmUsatiInWork.set(String(found.id), found)
+      } else {
+        // Mix: aggiungi tutti i componenti del mix da crmItems
+        for (const c of crmItems) {
+          if (c.mix_id === ing.source_mix_id) crmUsatiInWork.set(String(c.id), c)
+        }
+      }
+    }
+    // Index per nome dei CRM realmente usati dalla work
+    const crmUsatiByNome = new Map<string, CrmItem[]>()
+    for (const c of crmUsatiInWork.values()) {
+      const k = c.nome.toLowerCase()
+      const arr = crmUsatiByNome.get(k) ?? []
+      arr.push(c)
+      crmUsatiByNome.set(k, arr)
+    }
+
     // Interseca con analiti accreditati
     const coperti: AuditAnalitaCoperto[] = []
     for (const comp of comps) {
@@ -179,8 +205,8 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       if (!accr) continue
       analitiCopertiSet.add(key)
 
-      // Trova i CRM sottostanti che contengono questo analita
-      const crmSottostanti = (crmByNome.get(key) ?? []).map(c => ({
+      // Trova i CRM sottostanti che contengono questo analita (solo quelli della work)
+      const crmSottostanti = (crmUsatiByNome.get(key) ?? []).map(c => ({
         composto_id: c.id,
         composto_nome: c.nome,
         lotto: c.lotto,

@@ -153,7 +153,7 @@ export function registerDashboardIpc(): void {
     // Work registrati del metodo (validita_mesi NOT NULL, archiviato=0)
     const works = db.prepare(`
       SELECT
-        w.id, w.nome, w.conc, w.conc_variabile, w.unita_conc, w.volume_ml,
+        w.id, w.nome, w.concentrazione AS conc, w.conc_variabile, w.unita_conc, w.volume_ml,
         w.validita_mesi, w.livello, w.solvente,
         (SELECT wp.data_prep FROM work_preparazioni wp
           WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS ultima_prep_data,
