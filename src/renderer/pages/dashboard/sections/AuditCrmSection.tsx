@@ -184,6 +184,11 @@ export function AuditCrmSection() {
           <Button onClick={handleRun} disabled={!metodoId || loading}>
             {loading ? 'Analisi…' : 'Esegui audit'}
           </Button>
+          {model && (
+            <Button variant="outline" onClick={() => { setModel(null); setError(null) }}>
+              Pulisci
+            </Button>
+          )}
           <Button
             variant="outline"
             disabled={!model}

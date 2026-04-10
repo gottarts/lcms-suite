@@ -156,7 +156,7 @@ export function registerDashboardIpc(): void {
         w.id, w.nome, w.concentrazione AS conc, w.conc_variabile, w.unita_conc, w.volume_ml,
         w.validita_mesi, w.livello, w.solvente,
         (SELECT wp.data_prep FROM work_preparazioni wp
-          WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS ultima_prep_data,
+          WHERE wp.work_id = w.id AND wp.data_prep <= @data ORDER BY wp.data_prep DESC LIMIT 1) AS ultima_prep_data,
         (SELECT COUNT(*)
            FROM work_ingredienti wi JOIN composti c ON c.id = wi.source_id
            WHERE wi.work_id = w.id AND wi.source_type = 'crm'
