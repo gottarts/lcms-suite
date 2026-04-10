@@ -4,6 +4,7 @@ import { Topbar } from './Topbar'
 import { useState, useEffect } from 'react'
 
 const pageTitles: Record<string, string> = {
+  '/dashboard': 'Dashboard',
   '/composti': 'Reference Standards',
   '/metodi': 'Metodi Analitici',
   '/strumenti': 'Strumenti',

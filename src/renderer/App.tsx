@@ -7,6 +7,7 @@ import { StrumentiPage } from './pages/strumenti/StrumentiPage'
 import { ConsumabiliPage } from './pages/consumabili/ConsumabiliPage'
 import { CompostiPage } from './pages/composti/CompostiPage'
 import { WorkPage } from './pages/work/WorkPage'
+import { DashboardPage } from './pages/dashboard/DashboardPage'
 import { useState, useEffect } from 'react'
 
 export function App() {
@@ -34,13 +35,14 @@ export function App() {
     <HashRouter>
       <Routes>
         <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/composti" element={<CompostiPage />} />
           <Route path="/metodi" element={<MetodiPage />} />
           <Route path="/strumenti" element={<StrumentiPage />} />
           <Route path="/consumabili" element={<ConsumabiliPage />} />
           <Route path="/anagrafiche" element={<AnagrafichePage />} />
           <Route path="/work" element={<WorkPage />} />
-          <Route path="*" element={<Navigate to="/composti" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
     </HashRouter>

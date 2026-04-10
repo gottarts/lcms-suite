@@ -154,3 +154,25 @@ export const metodoAnalitiApi = {
     api.invoke('metodo-analiti:update', id, patch) as Promise<{ ok: boolean }>,
 }
 
+export const dashboardApi = {
+  summary: () =>
+    api.invoke('dashboard:summary') as Promise<{
+      composti: any[]
+      preparazioni: any[]
+      work: any[]
+      stats_tracciabilita: {
+        work_con_lotto_mismatch: number
+        analiti_accreditati_scoperti: number
+      }
+    }>,
+  auditCrm: (metodo_id: string, data: string) =>
+    api.invoke('dashboard:audit-crm', { metodo_id, data }) as Promise<{
+      metodo_id: string
+      metodo_nome: string | null
+      data: string
+      analiti_accreditati: Array<{ id: number; nome: string; alias_strumento: string | null; ordine: number | null }>
+      works_registrati: any[]
+      crm_validi: any[]
+    }>,
+}
+

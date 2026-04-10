@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 
 const navItems = [
+  { to: '/dashboard', label: 'Dashboard', icon: '📊' },
   { to: '/composti', label: 'Reference Standards', icon: '🧪' },
   { to: '/metodi', label: 'Metodi', icon: '📋' },
   { to: '/work', label: 'Work Solutions', icon: '⚗️' },

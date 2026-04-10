@@ -15,6 +15,7 @@ import { registerMigrationIpc } from './ipc/migration.ipc'
 import { registerWorkIpc } from './ipc/work.ipc'
 import { registerSchemaCalibrazioneIpc } from './ipc/schemaCalibrazione.ipc'
 import { registerMetodoAnalitiIpc } from './ipc/metodo-analiti.ipc'
+import { registerDashboardIpc } from './ipc/dashboard.ipc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -115,6 +116,7 @@ app.whenReady().then(() => {
   registerWorkIpc()
   registerSchemaCalibrazioneIpc()
   registerMetodoAnalitiIpc()
+  registerDashboardIpc()
   createWindow()
 
   const config = loadConfig()
