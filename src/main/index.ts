@@ -16,6 +16,7 @@ import { registerWorkIpc } from './ipc/work.ipc'
 import { registerSchemaCalibrazioneIpc } from './ipc/schemaCalibrazione.ipc'
 import { registerMetodoAnalitiIpc } from './ipc/metodo-analiti.ipc'
 import { registerDashboardIpc } from './ipc/dashboard.ipc'
+import { registerSessionsIpc, startSession, stopSession } from './ipc/sessions.ipc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -80,6 +81,7 @@ ipcMain.handle('config:select-folder', async () => {
   } else {
     createDatabase(dbPath)
   }
+  startSession()
 
   const config = loadConfig()
   config.dbPath = dbPath
@@ -117,16 +119,18 @@ app.whenReady().then(() => {
   registerSchemaCalibrazioneIpc()
   registerMetodoAnalitiIpc()
   registerDashboardIpc()
+  registerSessionsIpc()
   createWindow()
 
   const config = loadConfig()
   if (config.dbPath && dbFileExists(config.dbPath)) {
-    try { openDatabase(config.dbPath) }
+    try { openDatabase(config.dbPath); startSession() }
     catch (e) { console.error('Failed to open DB:', e) }
   }
 })
 
 app.on('window-all-closed', () => {
+  stopSession()
   closeDatabase()
   app.quit()
 })

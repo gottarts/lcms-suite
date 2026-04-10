@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('config:select-folder'),
   selectJson: () => ipcRenderer.invoke('config:select-json'),
   importLegacyJson: (jsonPath: string) => ipcRenderer.invoke('config:import-legacy', jsonPath),
+  listSessions: () => ipcRenderer.invoke('sessions:list'),
 })

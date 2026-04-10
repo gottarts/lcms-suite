@@ -15,6 +15,8 @@ const navItems = [
 export function Sidebar() {
   const [time, setTime] = useState(new Date())
   const [dbPath, setDbPath] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<{ hostname: string }[]>([])
+  const [sessionsExpanded, setSessionsExpanded] = useState(false)
 
   const today = new Date().toLocaleDateString('it-IT', {
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
@@ -27,6 +29,14 @@ export function Sidebar() {
 
   useEffect(() => {
     window.electronAPI.getConfig().then((cfg) => setDbPath(cfg.dbPath ?? null))
+  }, [])
+
+  useEffect(() => {
+    const fetchSessions = () =>
+      window.electronAPI.listSessions().then(setSessions).catch(() => {})
+    fetchSessions()
+    const timer = setInterval(fetchSessions, 30_000)
+    return () => clearInterval(timer)
   }, [])
 
   async function handleChangeFolder() {
@@ -66,12 +76,29 @@ export function Sidebar() {
       </nav>
 
       <div className="p-3 text-xs text-muted-foreground border-t border-sidebar-border space-y-1">
-        <div className="flex items-center gap-1 font-medium text-foreground">
-          <span className="text-green-500">●</span> suite
+        <div className="font-semibold text-foreground uppercase tracking-wide text-[10px]">
+          Connessioni
         </div>
         <div className="truncate" title={dbPath ?? ''}>
           {shortPath}
         </div>
+        {sessions.length > 0 && (
+          <div>
+            <button
+              onClick={() => setSessionsExpanded(p => !p)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <span className="text-blue-400">●</span>
+              {sessions.length} {sessions.length === 1 ? 'connesso' : 'connessi'}
+              <span>{sessionsExpanded ? '▴' : '▾'}</span>
+            </button>
+            {sessionsExpanded && (
+              <ul className="pl-3 mt-0.5 space-y-0.5 text-xs text-muted-foreground">
+                {sessions.map(s => <li key={s.hostname}>{s.hostname}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
         <button
           onClick={handleChangeFolder}
           className="mt-1 w-full border border-sidebar-border rounded px-2 py-0.5 text-xs hover:bg-muted transition-colors"
