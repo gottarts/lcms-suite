@@ -20,14 +20,14 @@ export function DashboardPage() {
       {/* Riga 1 — KPI */}
       <KpiCards />
 
-      {/* Riga 2 — Timeline */}
-      <ScadenzeTimeline />
-
-      {/* Riga 3 — Tracciabilità */}
+      {/* Riga 2 — Tracciabilità */}
       <TracciabilitaCard />
 
-      {/* Riga 4 — Audit CRM */}
+      {/* Riga 3 — Audit CRM */}
       <AuditCrmSection />
+
+      {/* Riga 4 — Scadenze separate per tipo */}
+      <ScadenzeTimeline />
     </div>
   )
 }

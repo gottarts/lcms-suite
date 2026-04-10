@@ -352,7 +352,7 @@ export function CompostiPage() {
     debounceTimer.current = setTimeout(() => setDebouncedSearch(value), 500)
   }
 
-  const [filtroStati, setFiltroStati] = useState<string[]>([])
+  const [filtroStati, setFiltroStati] = useState<string[]>((location.state as any)?.filtroStati ?? [])
   const [filtroWorks, setFiltroWorks] = useState<string[]>([])
   const [filtroDestinazioni, setFiltroDestinazioni] = useState<string[]>([])
   const [filtroMetodi, setFiltroMetodi] = useState<string[]>([])

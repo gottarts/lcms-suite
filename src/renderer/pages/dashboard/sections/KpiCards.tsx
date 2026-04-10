@@ -51,11 +51,11 @@ export function KpiCards() {
   }, [composti])
 
   const buckets: KpiBucket[] = [
-    { label: 'CRM scaduti',       value: stats.scaduti,     tone: 'red',   onClick: () => nav('/composti') },
-    { label: 'CRM in scadenza',   value: stats.in_scadenza, tone: 'amber', onClick: () => nav('/composti') },
-    { label: 'CRM attivi',        value: stats.attivi,      tone: 'green', onClick: () => nav('/composti') },
-    { label: 'CRM da aprire',     value: stats.da_aprire,   tone: 'blue',  onClick: () => nav('/composti') },
-    { label: 'CRM dismessi',      value: stats.dismessi,    tone: 'gray',  onClick: () => nav('/composti') },
+    { label: 'CRM scaduti',     value: stats.scaduti,     tone: 'red',   onClick: () => nav('/composti', { state: { filtroStati: ['Scaduto', 'Rivalidato — Scaduto'] } }) },
+    { label: 'CRM in scadenza', value: stats.in_scadenza, tone: 'amber', onClick: () => nav('/composti', { state: { filtroStati: ['In scadenza', 'Rivalidato — In scadenza'] } }) },
+    { label: 'CRM attivi',      value: stats.attivi,      tone: 'green', onClick: () => nav('/composti', { state: { filtroStati: ['Attivo', 'Rivalidato — Attivo'] } }) },
+    { label: 'CRM da aprire',   value: stats.da_aprire,   tone: 'blue',  onClick: () => nav('/composti', { state: { filtroStati: ['Da aprire'] } }) },
+    { label: 'CRM dismessi',    value: stats.dismessi,    tone: 'gray',  onClick: () => nav('/composti', { state: { filtroStati: ['Dismesso'], mostraDismessi: true } }) },
   ]
 
   if (loading) {
