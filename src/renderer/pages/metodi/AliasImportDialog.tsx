@@ -188,7 +188,7 @@ export function AliasImportDialog({ open, metodoId, analiti, onClose, onSaved }:
   // ---------------------------------------------------------------------------
 
   function handleProceedToReview() {
-    if (!colMapping.aliasLims && !colMapping.aliasOqlab) return
+    if (!colMapping.nomeParametro && !colMapping.aliasLims && !colMapping.aliasOqlab && !colMapping.aliasStrumento) return
 
     const paramIdx = colMapping.nomeParametro ? headers.indexOf(colMapping.nomeParametro) : -1
     const limsIdx = colMapping.aliasLims ? headers.indexOf(colMapping.aliasLims) : -1
@@ -549,8 +549,8 @@ export function AliasImportDialog({ open, metodoId, analiti, onClose, onSaved }:
                 <Button
                   size="sm"
                   onClick={handleProceedToReview}
-                  disabled={!colMapping.aliasLims && !colMapping.aliasOqlab}
-                  title={(!colMapping.aliasLims && !colMapping.aliasOqlab) ? 'Seleziona almeno Nome LIMS o Nome OQLab' : undefined}
+                  disabled={!colMapping.nomeParametro && !colMapping.aliasLims && !colMapping.aliasOqlab && !colMapping.aliasStrumento}
+                  title={(!colMapping.nomeParametro && !colMapping.aliasLims && !colMapping.aliasOqlab && !colMapping.aliasStrumento) ? 'Seleziona almeno una colonna per procedere' : undefined}
                 >
                   Avanti — Revisione mappatura
                 </Button>
@@ -703,9 +703,9 @@ function MappingStep({
         />
       </div>
 
-      {!colMapping.aliasLims && !colMapping.aliasOqlab && (
+      {!colMapping.nomeParametro && !colMapping.aliasLims && !colMapping.aliasOqlab && !colMapping.aliasStrumento && (
         <p className="text-xs text-yellow-700 dark:text-yellow-400">
-          Seleziona almeno <strong>Nome LIMS</strong> o <strong>Nome OQLab</strong> per procedere.
+          Seleziona almeno una colonna per procedere.
         </p>
       )}
     </div>
