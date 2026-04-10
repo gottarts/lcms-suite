@@ -860,6 +860,7 @@ export function CompostiPage() {
 
   return (
     <div>
+      <h2 className="font-heading text-lg font-semibold mb-4">Reference Standards</h2>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <span className="text-sm text-muted-foreground shrink-0">
           Visualizzati: {filtered.length} / Totali: {composti.length}

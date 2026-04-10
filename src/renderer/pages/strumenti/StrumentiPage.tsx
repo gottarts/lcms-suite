@@ -64,6 +64,7 @@ export function StrumentiPage() {
 
   return (
     <div>
+      <h2 className="font-heading text-lg font-semibold mb-4">Strumenti</h2>
       {/* Instrument selector strip */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         {strumenti.map(s => (

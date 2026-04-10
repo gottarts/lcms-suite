@@ -14,24 +14,6 @@
 
  ## importante
 
- ### Sezione Audit CRM
- Una sezione dedicata dell'app (separata dalle pagine operative) che permette di verificare lo stato dei CRM usati nei work rispetto a una data fornita dall'utente.
-
- **Funzionalità:**
- - L'utente seleziona un metodo e una data → l'app mostra la tabella di match tra analiti accreditati e CRM disponibili
- - Per ogni analita accreditato (`metodo_analiti.accreditato = 1`): stato CRM (✓ valido / ⚠ in scadenza / ⚠ nessuna scadenza / ❌ GAP)
- - Lotto e scadenza del CRM corrispondente quando presente
- - Evidenziazione in scadenza entro 30 giorni dalla data selezionata
- - Sommario: totale accreditati, coperti, gap, in scadenza
- - Filtro per stato
- - Esportabile come documento (es. MD o PDF) per tracciabilità
-
- **Query chiave (già prototipata):**
- `metodo_analiti` (accreditato=1) → LEFT JOIN su `work_ingredienti` + `composti` per nome → stato calcolato sulla `scadenza_prodotto`
-
-
-
-
 
 
 

@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 
+
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: '📊' },
   { to: '/composti', label: 'Reference Standards', icon: '🧪' },
@@ -13,11 +14,29 @@ const navItems = [
 
 export function Sidebar() {
   const [time, setTime] = useState(new Date())
+  const [dbPath, setDbPath] = useState<string | null>(null)
+
+  const today = new Date().toLocaleDateString('it-IT', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+  })
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 60000)
     return () => clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    window.electronAPI.getConfig().then((cfg) => setDbPath(cfg.dbPath ?? null))
+  }, [])
+
+  async function handleChangeFolder() {
+    const result = await window.electronAPI.selectFolder()
+    if (result.ok) setDbPath(result.dbPath)
+  }
+
+  const shortPath = dbPath
+    ? dbPath.split(/[\\/]/).slice(-2).join('/')
+    : '—'
 
   return (
     <aside className="w-56 h-screen bg-sidebar-background border-r border-sidebar-border flex flex-col">
@@ -46,8 +65,24 @@ export function Sidebar() {
         ))}
       </nav>
 
+      <div className="p-3 text-xs text-muted-foreground border-t border-sidebar-border space-y-1">
+        <div className="flex items-center gap-1 font-medium text-foreground">
+          <span className="text-green-500">●</span> suite
+        </div>
+        <div className="truncate" title={dbPath ?? ''}>
+          {shortPath}
+        </div>
+        <button
+          onClick={handleChangeFolder}
+          className="mt-1 w-full border border-sidebar-border rounded px-2 py-0.5 text-xs hover:bg-muted transition-colors"
+        >
+          CAMBIA CARTELLA
+        </button>
+      </div>
+
       <div className="p-3 text-xs text-muted-foreground text-center border-t border-sidebar-border">
-        {time.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+        <div>{today}</div>
+        <div>{time.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
     </aside>
   )
