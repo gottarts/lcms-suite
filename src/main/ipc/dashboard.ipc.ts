@@ -179,7 +179,10 @@ export function registerDashboardIpc(): void {
       JOIN work_metodi wm ON wm.work_id = w.id
       WHERE wm.metodo_id = @metodo_id
         AND w.validita_mesi IS NOT NULL
-        AND (w.archiviato = 0 OR w.archiviato IS NULL)
+        AND EXISTS (
+          SELECT 1 FROM work_preparazioni wp2
+          WHERE wp2.work_id = w.id AND wp2.data_prep <= @data
+        )
       ORDER BY w.nome ASC
     `).all({ metodo_id, data }) as any[]
 
