@@ -176,16 +176,21 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
     // - Mix: per ogni ingrediente-mix, i componenti in crm_validi con quel mix_id
     const crmUsatiInWork = new Map<string, CrmItem>()  // keyed by id
     for (const ing of wRaw.ingredienti ?? []) {
-      if (ing.source_type !== 'crm') continue
-      if (!ing.source_mix_id) {
-        // CRM singolo: cerca in crmItems per source_id
-        const found = crmItems.find(c => c.id === ing.source_id)
-        if (found) crmUsatiInWork.set(String(found.id), found)
-      } else {
-        // Mix: aggiungi tutti i componenti del mix da crmItems
-        for (const c of crmItems) {
-          if (c.mix_id === ing.source_mix_id) crmUsatiInWork.set(String(c.id), c)
+      if (ing.source_type === 'crm') {
+        if (!ing.source_mix_id) {
+          // CRM singolo: cerca in crmItems per source_id
+          const found = crmItems.find(c => c.id === ing.source_id)
+          if (found) crmUsatiInWork.set(String(found.id), found)
+        } else {
+          // Mix: aggiungi tutti i componenti del mix da crmItems
+          for (const c of crmItems) {
+            if (c.mix_id === ing.source_mix_id) crmUsatiInWork.set(String(c.id), c)
+          }
         }
+      } else if (ing.source_type === 'prep') {
+        // CRM Neat: risali al composto padre tramite source_composto_id
+        const found = crmItems.find(c => c.id === ing.source_composto_id)
+        if (found) crmUsatiInWork.set(String(found.id), found)
       }
     }
     // Index per nome dei CRM realmente usati dalla work

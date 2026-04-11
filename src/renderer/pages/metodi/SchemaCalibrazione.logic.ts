@@ -561,6 +561,25 @@ export function ricostruisciWorkInSchema(
         dilFactor: ing.fattore_diluizione ?? undefined,
         modo: ing.modo_calcolo ?? 'conc',
       })
+    } else if (ing.source_type === 'prep') {
+      // CRM Neat: risali al composto padre tramite source_composto_id
+      const crm = crmItems.find(c => c.id === ing.source_composto_id)
+      if (crm) {
+        srcs.push({
+          id: String(crm.id),
+          nome: crm.nome,
+          cv: crm.cv,
+          tipo: 'prep',
+          concVariabile: false,
+        })
+        vols.push({
+          nome: crm.nome,
+          vol: ing.volume_prelievo_ml ?? 0,
+          concTarget: ing.conc_target_mgL ?? undefined,
+          dilFactor: ing.fattore_diluizione ?? undefined,
+          modo: ing.modo_calcolo ?? 'conc',
+        })
+      }
     }
   }
 

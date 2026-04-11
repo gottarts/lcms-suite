@@ -205,9 +205,15 @@ export function registerDashboardIpc(): void {
           ELSE NULL
         END AS source_mix,
         CASE
-          WHEN wi.source_type = 'crm' THEN (SELECT concentrazione FROM composti WHERE id = wi.source_id)
+          WHEN wi.source_type = 'crm'  THEN (SELECT concentrazione FROM composti WHERE id = wi.source_id)
+          WHEN wi.source_type = 'prep' THEN (SELECT c.concentrazione FROM preparazioni p JOIN composti c ON c.id = p.composto_id WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
           ELSE NULL
         END AS source_cv,
+        CASE
+          WHEN wi.source_type = 'crm'  THEN wi.source_id
+          WHEN wi.source_type = 'prep' THEN (SELECT c.id FROM preparazioni p JOIN composti c ON c.id = p.composto_id WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
+          ELSE NULL
+        END AS source_composto_id,
         CASE
           WHEN wi.source_type = 'crm' THEN (SELECT mix_id FROM composti WHERE id = wi.source_id)
           ELSE NULL
@@ -285,6 +291,15 @@ export function registerDashboardIpc(): void {
         JOIN composti c ON c.id = wi.source_id
         WHERE wm.metodo_id = @metodo_id
           AND wi.source_type = 'crm'
+        UNION
+        -- (d) CRM Neat che hanno preparazioni usate dai work del metodo
+        SELECT DISTINCT c.id
+        FROM work_ingredienti wi
+        JOIN work_metodi wm ON wm.work_id = wi.work_id
+        JOIN preparazioni p ON p.id = COALESCE(wi.prep_id, wi.source_id)
+        JOIN composti c ON c.id = p.composto_id
+        WHERE wm.metodo_id = @metodo_id
+          AND wi.source_type = 'prep'
       )
       SELECT DISTINCT
         c.id, c.nome, c.lotto, c.scadenza_prodotto, c.mix_id,
