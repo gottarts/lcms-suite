@@ -152,6 +152,7 @@ function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchem
         lotto:       ing.source_lotto ?? ing.lotto_usato ?? null,
         flacone:     ing.source_flacone ?? null,
         progressivo: ing.source_progressivo ?? null,
+        scadenza:    ing.source_scadenza ?? null,
       })
       vols.push({
         nome:       ing.source_nome ?? '',
@@ -322,6 +323,11 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                     <div style={{ fontSize:9, color:C.page.t2,
                                   fontFamily:'IBM Plex Mono, monospace' }}>
                       {`prep #${src.progressivo ?? '?'}${src.lotto ? ` da lotto ${src.lotto}` : ''} · Neat`}
+                      {src.scadenza && (
+                        <span style={{ color: src.scadenza < new Date().toISOString().slice(0, 10) ? '#dc2626' : C.page.t2 }}>
+                          {` · scad. ${formatDate(src.scadenza)}`}
+                        </span>
+                      )}
                     </div>
                   )}
                   {src.tipo === 'mix' && (() => {
@@ -495,6 +501,16 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                   )
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Banner prep stock scadute (warning, non blocco) */}
+        {!isBloccata && !!work.ha_prep_scadute && (
+          <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Una o più prep stock NEAT usate in questa work sono scadute. Verifica le prep nel DB Composti.</span>
             </div>
           </div>
         )}

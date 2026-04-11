@@ -252,6 +252,7 @@ export interface Work {
   bloccata?: boolean            // true se almeno 1 CRM ingrediente è dismesso
   motivo_blocco?: 'dismesso' | null
   ha_crm_scaduti?: boolean      // true se almeno 1 CRM non dismesso ha scadenza passata e nessuna rivalidazione valida
+  ha_prep_scadute?: boolean     // true se almeno 1 prep NEAT usata ha scadenza passata
   n_ingredienti_bloccati?: number
 }
 

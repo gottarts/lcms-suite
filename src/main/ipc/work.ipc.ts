@@ -52,6 +52,15 @@ export function registerWorkIpc(): void {
                WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) < date('now')
             )
         ) AS n_ingredienti_scaduti,
+        (SELECT COUNT(*)
+          FROM work_ingredienti wi
+          JOIN preparazioni p ON p.id = COALESCE(wi.prep_id, wi.source_id)
+          WHERE wi.work_id = w.id
+            AND wi.source_type = 'prep'
+            AND p.data_dismissione IS NULL
+            AND p.scadenza IS NOT NULL
+            AND p.scadenza < date('now')
+        ) AS n_prep_scadute,
         (SELECT wp.id         FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
         (SELECT wp.data_prep  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,
         (SELECT wp.note       FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
@@ -74,8 +83,9 @@ export function registerWorkIpc(): void {
         created_at: w._up_created_at,
       } : null
       const { _up_id, _up_data_prep, _up_note, _up_operatore, _up_created_at, _metodi_ids_raw, ...rest } = w
-      const nBloccati = w.n_ingredienti_bloccati as number
-      const nScaduti  = w.n_ingredienti_scaduti  as number
+      const nBloccati    = w.n_ingredienti_bloccati as number
+      const nScaduti     = w.n_ingredienti_scaduti  as number
+      const nPrepScadute = w.n_prep_scadute         as number
       return {
         ...rest,
         metodi_ids,
@@ -84,6 +94,7 @@ export function registerWorkIpc(): void {
         bloccata: nBloccati > 0,
         motivo_blocco: nBloccati > 0 ? 'dismesso' : null,
         ha_crm_scaduti: nScaduti > 0,
+        ha_prep_scadute: nPrepScadute > 0,
       }
     })
   })
@@ -141,6 +152,10 @@ export function registerWorkIpc(): void {
           )
           ELSE NULL
         END AS source_progressivo,
+        CASE
+          WHEN wi.source_type = 'prep' THEN (SELECT scadenza FROM preparazioni WHERE id = COALESCE(wi.prep_id, wi.source_id))
+          ELSE NULL
+        END AS source_scadenza,
         CASE
           WHEN wi.source_type = 'crm' THEN (SELECT data_dismissione FROM composti WHERE id = wi.source_id)
           ELSE NULL
@@ -207,9 +222,20 @@ export function registerWorkIpc(): void {
            WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) < date('now')
         )
     `).get(id) as any).cnt as number
-    work.bloccata      = nBloccati > 0
-    work.motivo_blocco = nBloccati > 0 ? 'dismesso' : null
+    const nPrepScadute = (db.prepare(`
+      SELECT COUNT(*) AS cnt
+      FROM work_ingredienti wi
+      JOIN preparazioni p ON p.id = COALESCE(wi.prep_id, wi.source_id)
+      WHERE wi.work_id = ?
+        AND wi.source_type = 'prep'
+        AND p.data_dismissione IS NULL
+        AND p.scadenza IS NOT NULL
+        AND p.scadenza < date('now')
+    `).get(id) as any).cnt as number
+    work.bloccata       = nBloccati > 0
+    work.motivo_blocco  = nBloccati > 0 ? 'dismesso' : null
     work.ha_crm_scaduti = nScaduti > 0
+    work.ha_prep_scadute = nPrepScadute > 0
 
     return work
   })

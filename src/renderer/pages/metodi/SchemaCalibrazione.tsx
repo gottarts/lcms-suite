@@ -123,7 +123,7 @@ interface ColonneWorkProps {
   onOpenDrawer: (w: WorkInSchema, colIdx: number) => void
   onAddCol: () => void
   registerCardRef: RegisterCardRef
-  blockedMap: Map<number, { bloccata: boolean; haScaduti: boolean }>
+  blockedMap: Map<number, { bloccata: boolean; haScaduti: boolean; haStockScadute: boolean }>
   onRicaricaWork: (dbId: number) => void
 }
 
@@ -184,9 +184,10 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
 
               {works.map((w, wi) => {
                 const isSel      = selSrcs.has(w.id)
-                const stateEntry = w.dbId ? (blockedMap.get(w.dbId) ?? null) : null
-                const isBloccata = stateEntry?.bloccata ?? false
-                const haScaduti  = stateEntry?.haScaduti ?? false
+                const stateEntry    = w.dbId ? (blockedMap.get(w.dbId) ?? null) : null
+                const isBloccata    = stateEntry?.bloccata ?? false
+                const haScaduti     = stateEntry?.haScaduti ?? false
+                const haStockScadute = stateEntry?.haStockScadute ?? false
                 const usedVol    = w.vols.reduce((a, v) => a + v.vol, 0)
                 const solvVol    = Math.max(0, w.volFin - usedVol)
                 const neg        = usedVol > w.volFin
@@ -199,7 +200,7 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                     ref={el => registerCardRef(w.id, el)}
                     onClick={() => onToggleWork(w, ci)}
                     style={{
-                      borderRadius:10, padding:`8px 12px ${(isBloccata || haScaduti) ? 28 : 8}px`, position:'relative',
+                      borderRadius:10, padding:`8px 12px ${(isBloccata || haScaduti || haStockScadute) ? 28 : 8}px`, position:'relative',
                       background: isSel ? (isInter ? '#ddd4f5' : '#f5e8c8') : col.bg,
                       border:`1.5px solid ${col.border}`,
                       borderLeft:`3px solid ${col.border}`,
@@ -238,7 +239,7 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                     >⊙</button>
 
                     {/* Pulsante Ricarica (lotti dismessi o scaduti) */}
-                    {(isBloccata || haScaduti) && w.dbId && (
+                    {(isBloccata || haScaduti || haStockScadute) && w.dbId && (
                       <button
                         onClick={e => { e.stopPropagation(); onRicaricaWork(w.dbId!) }}
                         style={{
@@ -249,7 +250,7 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                           color: isBloccata ? '#ea580c' : '#b45309',
                           cursor:'pointer', fontSize:9, fontWeight:700,
                         }}
-                        title={isBloccata ? 'Lotti CRM dismessi — aggiorna la work' : 'CRM scaduti — aggiorna la work'}
+                        title={isBloccata ? 'Lotti CRM dismessi — aggiorna la work' : haScaduti ? 'CRM scaduti — aggiorna la work' : 'Prep stock scadute — aggiorna la work'}
                       >Ricarica ↻</button>
                     )}
 
@@ -264,6 +265,11 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                     {haScaduti && !isBloccata && (
                       <div style={{ fontSize:9, color:'#92400e', fontWeight:600, marginTop:1 }}>
                         ⚠ CRM scaduti
+                      </div>
+                    )}
+                    {haStockScadute && !isBloccata && (
+                      <div style={{ fontSize:9, color:'#92400e', fontWeight:600, marginTop:1 }}>
+                        ⚠ Prep stock scadute
                       </div>
                     )}
                     <div style={{ fontSize:10, color:C.page.t2, marginTop:2,
@@ -807,7 +813,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [drawerCol,    setDrawerCol]    = useState(0)
   const [schemaLoaded, setSchemaLoaded] = useState(false)
   const [confirmReset, setConfirmReset] = useState<'full'|null>(null)
-  const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean }>>(new Map())
+  const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean; haStockScadute: boolean }>>(new Map())
   const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [importOpen,      setImportOpen]      = useState(false)
@@ -941,9 +947,9 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     let cancelled = false
     Promise.all(allDbIds.map(id => workApi.get(id))).then(results => {
       if (cancelled) return
-      const map = new Map<number, { bloccata: boolean; haScaduti: boolean }>()
+      const map = new Map<number, { bloccata: boolean; haScaduti: boolean; haStockScadute: boolean }>()
       for (const w of results) {
-        if (w?.id != null) map.set(w.id, { bloccata: !!w.bloccata, haScaduti: !!w.ha_crm_scaduti })
+        if (w?.id != null) map.set(w.id, { bloccata: !!w.bloccata, haScaduti: !!w.ha_crm_scaduti, haStockScadute: !!w.ha_prep_scadute })
       }
       setBlockedMap(map)
     }).catch(() => {})

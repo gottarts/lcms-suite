@@ -30,6 +30,7 @@ export interface SorgenteSel {
   lotto?: string | null
   flacone?: string | null
   progressivo?: number | null
+  scadenza?: string | null      // solo per tipo 'prep' (NEAT)
 }
 
 export interface Ingrediente {

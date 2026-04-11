@@ -301,6 +301,12 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiN
               CRM scaduti
             </Badge>
           )}
+          {!isBloccata && !!work.ha_prep_scadute && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
+              <AlertCircle className="h-2.5 w-2.5" />
+              Prep stock scadute
+            </Badge>
+          )}
           {isIntermedia && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-700 bg-purple-50">
               Intermedia
