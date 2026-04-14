@@ -546,24 +546,81 @@ export function registerWorkIpc(): void {
   ipcMain.handle('work:check-lot-status', (_, workId: number) => {
     const db = getDb()
     const ingredienti = db.prepare(`
-      SELECT wi.id, wi.source_id, wi.lotto_usato, wi.source_type,
-        c.nome                AS nome,
-        c.lotto               AS lotto_corrente,
-        c.data_dismissione,
-        c.mix_id              AS mix_id,
-        c.forma_commerciale   AS forma_commerciale,
-        c.scadenza_prodotto,
-        (SELECT MAX(nuova_scadenza) FROM composti_storia
-         WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
-        ) AS ultima_rivalidazione
+      SELECT wi.id, wi.source_id, wi.prep_id, wi.lotto_usato, wi.source_type,
+        CASE
+          WHEN wi.source_type = 'crm'  THEN c.nome
+          WHEN wi.source_type = 'prep' THEN cp.nome
+        END AS nome,
+        CASE
+          WHEN wi.source_type = 'crm'  THEN c.lotto
+          WHEN wi.source_type = 'prep' THEN p.flacone
+        END AS lotto_corrente,
+        CASE
+          WHEN wi.source_type = 'crm'  THEN c.data_dismissione
+          WHEN wi.source_type = 'prep' THEN p.data_dismissione
+        END AS data_dismissione,
+        CASE WHEN wi.source_type = 'crm' THEN c.mix_id              END AS mix_id,
+        CASE WHEN wi.source_type = 'crm' THEN c.forma_commerciale   END AS forma_commerciale,
+        CASE
+          WHEN wi.source_type = 'crm'  THEN c.scadenza_prodotto
+          WHEN wi.source_type = 'prep' THEN p.scadenza
+        END AS scadenza_prodotto,
+        CASE WHEN wi.source_type = 'crm' THEN (
+          SELECT MAX(nuova_scadenza) FROM composti_storia
+          WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
+        ) END AS ultima_rivalidazione,
+        cp.id AS prep_composto_id
       FROM work_ingredienti wi
-      LEFT JOIN composti c ON c.id = wi.source_id
-      WHERE wi.work_id = ? AND wi.source_type = 'crm'
+      LEFT JOIN composti c  ON wi.source_type = 'crm'  AND c.id  = wi.source_id
+      LEFT JOIN preparazioni p  ON wi.source_type = 'prep' AND p.id  = COALESCE(wi.prep_id, wi.source_id)
+      LEFT JOIN composti cp ON wi.source_type = 'prep' AND cp.id = p.composto_id
+      WHERE wi.work_id = ? AND wi.source_type IN ('crm', 'prep')
     `).all(workId) as any[]
 
     const oggi = new Date().toISOString().slice(0, 10)
 
+    const stmtSostitutiCrm = db.prepare(`
+      SELECT id, lotto, concentrazione, unita_conc, mix_id
+      FROM composti
+      WHERE nome = ? AND data_dismissione IS NULL AND id != ?
+        AND (
+          scadenza_prodotto IS NULL OR scadenza_prodotto >= ?
+          OR (
+            SELECT MAX(nuova_scadenza) FROM composti_storia
+            WHERE composto_id = composti.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
+          ) >= ?
+        )
+      ORDER BY id DESC
+    `)
+
+    const stmtSostitutiPrep = db.prepare(`
+      SELECT p2.id AS id, p2.flacone AS lotto, p2.concentrazione_reale AS concentrazione,
+        p2.unita_conc AS unita_conc, NULL AS mix_id
+      FROM preparazioni p2
+      WHERE p2.composto_id = ?
+        AND p2.id != ?
+        AND p2.data_dismissione IS NULL
+        AND (p2.scadenza IS NULL OR p2.scadenza >= ?)
+      ORDER BY p2.id DESC
+    `)
+
     return ingredienti.map((ing: any) => {
+      if (ing.source_type === 'prep') {
+        const prepId = ing.prep_id ?? ing.source_id
+        const isScaduto = !ing.data_dismissione &&
+          ing.scadenza_prodotto && ing.scadenza_prodotto < oggi
+
+        if (!ing.data_dismissione && !isScaduto) {
+          return { ...ing, stato: 'ok', sostituti: [] }
+        }
+        const sostituti = stmtSostitutiPrep.all(ing.prep_composto_id, prepId, oggi) as any[]
+        const stato =
+          sostituti.length === 1 ? 'auto' :
+          sostituti.length  >  1 ? 'ambiguo' : 'mancante'
+        return { ...ing, stato, sostituti }
+      }
+
+      // source_type === 'crm'
       const isScaduto = !ing.data_dismissione &&
         ing.scadenza_prodotto && ing.scadenza_prodotto < oggi &&
         (!ing.ultima_rivalidazione || ing.ultima_rivalidazione < oggi)
@@ -571,25 +628,10 @@ export function registerWorkIpc(): void {
       if (!ing.data_dismissione && !isScaduto) {
         return { ...ing, stato: 'ok', sostituti: [] }
       }
-      // Cerca lotti attivi con stesso nome (non dismessi, non scaduti)
-      const sostituti = db.prepare(`
-        SELECT id, lotto, concentrazione, unita_conc, mix_id
-        FROM composti
-        WHERE nome = ? AND data_dismissione IS NULL AND id != ?
-          AND (
-            scadenza_prodotto IS NULL OR scadenza_prodotto >= ?
-            OR (
-              SELECT MAX(nuova_scadenza) FROM composti_storia
-              WHERE composto_id = composti.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
-            ) >= ?
-          )
-        ORDER BY id DESC
-      `).all(ing.nome, ing.source_id, oggi, oggi) as any[]
-
+      const sostituti = stmtSostitutiCrm.all(ing.nome, ing.source_id, oggi, oggi) as any[]
       const stato =
         sostituti.length === 1 ? 'auto' :
         sostituti.length  >  1 ? 'ambiguo' : 'mancante'
-
       return { ...ing, stato, sostituti }
     })
   })

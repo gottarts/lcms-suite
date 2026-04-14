@@ -169,6 +169,14 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
     return result
   }
 
+  // Costruisce l'etichetta del gruppo: "Prep: {nome}" per ingredienti prep, altrimenti il nome CRM/mix
+  const groupLabel = (g: MixGroup): string => {
+    const rep = g.members[0]
+    if (g.mix_id) return g.forma_commerciale ?? g.mix_id
+    if (rep.source_type === 'prep') return `Prep: ${rep.nome ?? '—'}`
+    return rep.nome ?? '—'
+  }
+
   const groups = buildGroups(lotStatus)
   const groupsOk = groups.filter(g => g.stato === 'ok')
   const groupsAuto = groups.filter(g => g.stato === 'auto')
@@ -241,7 +249,7 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                 </div>
                 {groupsOk.map(g => {
                   const rep = g.members[0]
-                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+                  const label = groupLabel(g)
                   const lotto = rep.lotto_corrente ?? '—'
                   return (
                     <div key={g.mix_id ?? rep.source_id} style={{
@@ -267,7 +275,7 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                 </div>
                 {groupsAuto.map(g => {
                   const rep = g.members[0]
-                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+                  const label = groupLabel(g)
                   const opzioni = getMixOpzioni(g)
                   const lottoNuovo = g.mix_id
                     ? (opzioni[0]?.lotto ?? '—')
@@ -300,7 +308,7 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                 </div>
                 {groupsAmbiguo.map(g => {
                   const rep = g.members[0]
-                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+                  const label = groupLabel(g)
 
                   if (g.mix_id) {
                     // Mix: un selettore per lotto mix
@@ -377,7 +385,7 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                 </div>
                 {groupsMancante.map(g => {
                   const rep = g.members[0]
-                  const label = g.mix_id ? (g.forma_commerciale ?? g.mix_id) : rep.nome
+                  const label = groupLabel(g)
                   return (
                     <div key={g.mix_id ?? rep.source_id} style={{
                       fontSize: 11, padding: '6px 8px', marginBottom: 4,

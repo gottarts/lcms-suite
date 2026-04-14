@@ -21,6 +21,11 @@ export type CrmUsato = {
   composto_nome: string
   lotto: string | null
   scadenza_effettiva: string | null  // ultima_rivalidazione ?? scadenza_prodotto
+  // Presenti solo se il CRM è usato via preparazione Neat (source_type='prep')
+  prep_flacone?: string | null
+  prep_data_prep?: string | null
+  prep_scadenza?: string | null
+  prep_scaduta?: boolean             // prep_scadenza < data audit
 }
 
 export type AuditAnalitaCoperto = {
@@ -38,6 +43,7 @@ export type AuditWorkRow = {
   stato_work: StatoLab | null
   bloccata: boolean
   ha_crm_scaduti: boolean
+  ha_prep_scadute_at_data: boolean
   analiti_coperti: AuditAnalitaCoperto[]
 }
 
@@ -175,6 +181,11 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
     // - CRM singoli: gli ingredienti source_type='crm' senza mix_id → identificati da source_id
     // - Mix: per ogni ingrediente-mix, i componenti in crm_validi con quel mix_id
     const crmUsatiInWork = new Map<string, CrmItem>()  // keyed by id
+    // Info preparazione Neat associata a un composto (per source_type='prep')
+    // Keyed by composto_id; in caso di più prep dello stesso composto teniamo la più problematica
+    type PrepInfo = { flacone: string | null; data_prep: string | null; scadenza: string | null; scaduta: boolean }
+    const prepInfoByCompostoId = new Map<number, PrepInfo>()
+
     for (const ing of wRaw.ingredienti ?? []) {
       if (ing.source_type === 'crm') {
         if (!ing.source_mix_id) {
@@ -190,7 +201,20 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       } else if (ing.source_type === 'prep') {
         // CRM Neat: risali al composto padre tramite source_composto_id
         const found = crmItems.find(c => c.id === ing.source_composto_id)
-        if (found) crmUsatiInWork.set(String(found.id), found)
+        if (found) {
+          crmUsatiInWork.set(String(found.id), found)
+          // Memorizza info prep (la scaduta ha precedenza)
+          const scaduta = !!(ing.source_prep_scadenza && ing.source_prep_scadenza < input.data)
+          const existing = prepInfoByCompostoId.get(found.id)
+          if (!existing || (scaduta && !existing.scaduta)) {
+            prepInfoByCompostoId.set(found.id, {
+              flacone: ing.source_prep_flacone ?? null,
+              data_prep: ing.source_prep_data_prep ?? null,
+              scadenza: ing.source_prep_scadenza ?? null,
+              scaduta,
+            })
+          }
+        }
       }
     }
     // Index per nome dei CRM realmente usati dalla work
@@ -211,12 +235,21 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       analitiCopertiSet.add(key)
 
       // Trova i CRM sottostanti che contengono questo analita (solo quelli della work)
-      const crmSottostanti = (crmUsatiByNome.get(key) ?? []).map(c => ({
-        composto_id: c.id,
-        composto_nome: c.nome,
-        lotto: c.lotto,
-        scadenza_effettiva: c.ultima_rivalidazione ?? c.scadenza_prodotto ?? null,
-      }))
+      const crmSottostanti = (crmUsatiByNome.get(key) ?? []).map(c => {
+        const prepInfo = prepInfoByCompostoId.get(c.id)
+        return {
+          composto_id: c.id,
+          composto_nome: c.nome,
+          lotto: c.lotto,
+          scadenza_effettiva: c.ultima_rivalidazione ?? c.scadenza_prodotto ?? null,
+          ...(prepInfo ? {
+            prep_flacone: prepInfo.flacone,
+            prep_data_prep: prepInfo.data_prep,
+            prep_scadenza: prepInfo.scadenza,
+            prep_scaduta: prepInfo.scaduta,
+          } : {}),
+        }
+      })
 
       coperti.push({
         analita_id: accr.id,
@@ -249,6 +282,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       stato_work,
       bloccata: !!wRaw.bloccata,
       ha_crm_scaduti: !!wRaw.ha_crm_scaduti,
+      ha_prep_scadute_at_data: !!wRaw.ha_prep_scadute_at_data,
       analiti_coperti: coperti,
     })
   }

@@ -174,7 +174,16 @@ export function registerDashboardIpc(): void {
                        AND cs.nuova_scadenza IS NOT NULL AND cs.data <= @data),
                    '1970-01-01'
                  ) < @data
-        ) AS n_scaduti
+        ) AS n_scaduti,
+        (SELECT COUNT(*)
+           FROM work_ingredienti wi
+           JOIN preparazioni p ON p.id = COALESCE(wi.prep_id, wi.source_id)
+           WHERE wi.work_id = w.id
+             AND wi.source_type = 'prep'
+             AND (p.data_dismissione IS NULL OR p.data_dismissione > @data)
+             AND p.scadenza IS NOT NULL
+             AND p.scadenza < @data
+        ) AS n_prep_scadute_at_data
       FROM work w
       JOIN work_metodi wm ON wm.work_id = w.id
       WHERE wm.metodo_id = @metodo_id
@@ -242,18 +251,31 @@ export function registerDashboardIpc(): void {
               AND cs.data <= @data
           )
           ELSE NULL
-        END AS source_rivalidazione
+        END AS source_rivalidazione,
+        CASE WHEN wi.source_type = 'prep' THEN
+          (SELECT p.flacone FROM preparazioni p WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
+        END AS source_prep_flacone,
+        CASE WHEN wi.source_type = 'prep' THEN
+          (SELECT p.data_prep FROM preparazioni p WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
+        END AS source_prep_data_prep,
+        CASE WHEN wi.source_type = 'prep' THEN
+          (SELECT p.scadenza FROM preparazioni p WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
+        END AS source_prep_scadenza,
+        CASE WHEN wi.source_type = 'prep' THEN
+          (SELECT p.data_dismissione FROM preparazioni p WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
+        END AS source_prep_dismissione
       FROM work_ingredienti wi
       WHERE wi.work_id = @work_id
     `)
 
     const works_registrati = works.map(w => {
-      const { n_bloccati, n_scaduti, ...rest } = w
+      const { n_bloccati, n_scaduti, n_prep_scadute_at_data, ...rest } = w
       const ingredienti = stmtIngredienti.all({ work_id: w.id, data })
       return {
         ...rest,
         bloccata: (n_bloccati as number) > 0,
         ha_crm_scaduti: (n_scaduti as number) > 0,
+        ha_prep_scadute_at_data: (n_prep_scadute_at_data as number) > 0,
         ingredienti,
       }
     })

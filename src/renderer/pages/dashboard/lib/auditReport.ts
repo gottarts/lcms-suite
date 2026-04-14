@@ -108,7 +108,7 @@ export function exportAuditPdf(model: AuditModel): void {
         w.work_scadenza ?? '—',
         statoLabel(w.stato_work),
         String(w.analiti_coperti.length),
-        [w.bloccata ? 'BLOCC' : null, w.ha_crm_scaduti ? 'CRM SCAD' : null]
+        [w.bloccata ? 'BLOCC' : null, w.ha_crm_scaduti ? 'CRM SCAD' : null, w.ha_prep_scadute_at_data ? 'PREP SCAD' : null]
           .filter(Boolean).join(' · ') || '—',
       ]),
       styles: tableBodyStyle,
@@ -220,6 +220,13 @@ function drawWorkSheet(doc: jsPDF, w: AuditWorkRow): void {
     doc.roundedRect(flagX, 14, 26, 7, 2, 2, 'F')
     doc.setTextColor(255, 255, 255)
     doc.text('CRM SCADUTI', flagX + 13, 19, { align: 'center' })
+    flagX += 28
+  }
+  if (w.ha_prep_scadute_at_data) {
+    doc.setFillColor(...PDF_COLORS.statoInScadenza)
+    doc.roundedRect(flagX, 14, 28, 7, 2, 2, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.text('PREP SCADUTE', flagX + 14, 19, { align: 'center' })
   }
 
   doc.setTextColor(80, 80, 80)
@@ -256,7 +263,13 @@ function drawWorkSheet(doc: jsPDF, w: AuditWorkRow): void {
       a.crm_ingredienti.length === 0
         ? '—'
         : a.crm_ingredienti
-            .map(c => `${cleanText(c.composto_nome)}${c.lotto ? ` · ${c.lotto}` : ''}${c.scadenza_effettiva ? ` · ${c.scadenza_effettiva}` : ''}`)
+            .map(c => {
+              let riga = `${cleanText(c.composto_nome)}${c.lotto ? ` · ${c.lotto}` : ''}${c.scadenza_effettiva ? ` · scad. ${c.scadenza_effettiva}` : ''}`
+              if (c.prep_flacone != null) {
+                riga += `\n  prep: ${c.prep_flacone ?? '—'}${c.prep_data_prep ? ` · ${c.prep_data_prep}` : ''}${c.prep_scadenza ? ` · scad. ${c.prep_scadenza}` : ''}${c.prep_scaduta ? ' [SCADUTA]' : ''}`
+              }
+              return riga
+            })
             .join('\n'),
     ]),
     styles: { ...tableBodyStyle, minCellHeight: 6 },
@@ -266,6 +279,14 @@ function drawWorkSheet(doc: jsPDF, w: AuditWorkRow): void {
       0: { cellWidth: 50, fontStyle: 'bold' },
       1: { cellWidth: 34 },
       2: { cellWidth: 'auto' },
+    },
+    didParseCell: (data: any) => {
+      if (data.section === 'body' && data.column.index === 2) {
+        const analita = w.analiti_coperti[data.row.index]
+        if (analita?.crm_ingredienti.some(c => c.prep_scaduta)) {
+          data.cell.styles.fillColor = [255, 235, 235]
+        }
+      }
     },
   })
 }

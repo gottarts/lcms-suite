@@ -40,6 +40,9 @@ function WorkRowBlock({ row }: { row: AuditWorkRow }) {
         {row.ha_crm_scaduti && !row.bloccata && (
           <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">⚠ CRM scaduti</Badge>
         )}
+        {row.ha_prep_scadute_at_data && !row.bloccata && (
+          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">⚠ Prep Neat scadute</Badge>
+        )}
         {stato && (
           <Badge variant="outline" className={statoLabTone[stato]}>{statoLabLabel[stato]}</Badge>
         )}
@@ -69,10 +72,24 @@ function WorkRowBlock({ row }: { row: AuditWorkRow }) {
                   <Badge
                     key={c.composto_id}
                     variant="outline"
-                    className="bg-purple-50 text-purple-800 border-purple-200 font-normal"
+                    className={c.prep_scaduta
+                      ? 'bg-red-50 text-red-900 border-red-300 font-normal'
+                      : 'bg-purple-50 text-purple-800 border-purple-200 font-normal'}
                   >
-                    {c.composto_nome}
-                    {c.lotto && <span className="opacity-60 ml-1">· {c.lotto}</span>}
+                    <span className="flex flex-col gap-0">
+                      <span>
+                        {c.composto_nome}
+                        {c.lotto && <span className="opacity-60 ml-1">· {c.lotto}</span>}
+                        {c.scadenza_effettiva && <span className="opacity-60 ml-1">· scad. {c.scadenza_effettiva}</span>}
+                      </span>
+                      {c.prep_flacone != null && (
+                        <span className={`text-[10px] ${c.prep_scaduta ? 'text-red-700' : 'opacity-70'}`}>
+                          prep: {c.prep_flacone ?? '—'}
+                          {c.prep_data_prep && <span className="ml-1">· {c.prep_data_prep}</span>}
+                          {c.prep_scadenza && <span className="ml-1">· scad. {c.prep_scadenza}</span>}
+                        </span>
+                      )}
+                    </span>
                   </Badge>
                 ))}
               </div>
