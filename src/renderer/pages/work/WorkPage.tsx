@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Plus, Search, FlaskConical, AlertCircle, Archive } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
@@ -168,7 +169,7 @@ export function WorkPage() {
               metodiNomi={metodiNomi}
               onClick={() => setDrawerId(w.id)}
               onPrepara={() => setDrawerId(w.id)}
-              onGoSchema={w.primo_metodo_id ? () => navigate('/metodi', { state: { schemaMetodoId: w.primo_metodo_id } }) : undefined}
+              onGoSchema={w.metodi_ids?.length > 0 ? (mid: string) => navigate('/metodi', { state: { schemaMetodoId: mid } }) : undefined}
               onAddToSchema={() => setAddToSchemaWork({ id: w.id, nome: w.nome })}
             />
           ))}
@@ -265,7 +266,7 @@ const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
   non_preparata:{ label: 'Non preparata',className: 'text-muted-foreground' },
 }
 
-function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiNomi }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: () => void; onAddToSchema?: () => void; metodiNomi?: Record<string, string> }) {
+function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiNomi }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: (metodoId: string) => void; onAddToSchema?: () => void; metodiNomi?: Record<string, string> }) {
   const isTracciata = !!work.validita_mesi
   const isIntermedia = (work.livello ?? 0) > 0
   const isBloccata = !!work.bloccata
@@ -373,15 +374,36 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiN
               {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}
             </Button>
           )}
-          {onGoSchema && (
-            <Button
-              size="sm" variant="outline"
-              className={`h-6 text-[10px] px-2 flex-1${isBloccata ? ' border-orange-300 text-orange-700 hover:bg-orange-50' : ''}`}
-              onClick={onGoSchema}
-              title={isBloccata ? 'Vai allo Schema per aggiornare i lotti e creare una nuova work' : undefined}
-            >
-              {isBloccata ? 'Aggiorna Schema ↗' : 'Schema ↗'}
-            </Button>
+          {onGoSchema && work.metodi_ids && work.metodi_ids.length > 0 && (
+            work.metodi_ids.length === 1 ? (
+              <Button
+                size="sm" variant="outline"
+                className={`h-6 text-[10px] px-2 flex-1${isBloccata ? ' border-orange-300 text-orange-700 hover:bg-orange-50' : ''}`}
+                onClick={() => onGoSchema(work.metodi_ids[0])}
+                title={isBloccata ? 'Vai allo Schema per aggiornare i lotti e creare una nuova work' : undefined}
+              >
+                {isBloccata ? 'Aggiorna Schema ↗' : 'Schema ↗'}
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm" variant="outline"
+                    className={`h-6 text-[10px] px-2 flex-1${isBloccata ? ' border-orange-300 text-orange-700 hover:bg-orange-50' : ''}`}
+                    title={isBloccata ? 'Vai allo Schema per aggiornare i lotti e creare una nuova work' : undefined}
+                  >
+                    {isBloccata ? 'Aggiorna Schema ↗' : 'Schema ↗'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {(work.metodi_ids as string[]).map((mid: string) => (
+                    <DropdownMenuItem key={mid} onClick={() => onGoSchema(mid)}>
+                      {metodiNomi?.[mid] ?? mid}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )
           )}
           {onAddToSchema && (
             <Button

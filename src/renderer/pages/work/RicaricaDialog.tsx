@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { workApi } from '@/lib/api'
@@ -210,18 +211,18 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
     )
   }
 
-  return (
+  return createPortal(
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.4)',
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.7)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
       onClick={onClose}
     >
       <div
         style={{
-          background: 'hsl(var(--background))', borderRadius: 8, padding: 24,
+          background: '#ffffff', borderRadius: 8, padding: 24,
           width: 520, maxWidth: '95vw', maxHeight: '85vh',
           overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,.18)',
           border: '1px solid hsl(var(--border))',
@@ -430,6 +431,7 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

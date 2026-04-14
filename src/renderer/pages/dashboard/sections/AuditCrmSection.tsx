@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,7 @@ function today(): string {
 
 function WorkRowBlock({ row }: { row: AuditWorkRow }) {
   const stato = row.stato_work
+  const navigate = useNavigate()
   return (
     <div className="border rounded-md overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b">
@@ -72,9 +74,10 @@ function WorkRowBlock({ row }: { row: AuditWorkRow }) {
                   <Badge
                     key={c.composto_id}
                     variant="outline"
-                    className={c.prep_scaduta
+                    className={`cursor-pointer hover:opacity-75 transition-opacity ${c.prep_scaduta
                       ? 'bg-red-50 text-red-900 border-red-300 font-normal'
-                      : 'bg-purple-50 text-purple-800 border-purple-200 font-normal'}
+                      : 'bg-purple-50 text-purple-800 border-purple-200 font-normal'}`}
+                    onClick={() => navigate('/composti', { state: { searchFilter: c.composto_nome } })}
                   >
                     <span className="flex flex-col gap-0">
                       <span>
@@ -102,6 +105,7 @@ function WorkRowBlock({ row }: { row: AuditWorkRow }) {
 }
 
 function ScopertoRowBlock({ row }: { row: AuditScopertoRow }) {
+  const navigate = useNavigate()
   return (
     <div className="border border-red-200 rounded-md overflow-hidden bg-red-50/30">
       <div className="px-3 py-2 flex items-start gap-3">
@@ -119,8 +123,9 @@ function ScopertoRowBlock({ row }: { row: AuditScopertoRow }) {
               <Badge
                 key={c.composto_id}
                 variant="outline"
-                className="bg-white text-red-800 border-red-200 font-normal"
+                className="bg-white text-red-800 border-red-200 font-normal cursor-pointer hover:opacity-75 transition-opacity"
                 title={`scad. ${c.scadenza_effettiva ?? '—'}`}
+                onClick={() => navigate('/composti', { state: { searchFilter: c.composto_nome } })}
               >
                 {c.composto_nome}
                 {c.lotto && <span className="opacity-60 ml-1">· {c.lotto}</span>}
