@@ -14,14 +14,12 @@
 
  ## importante
 
-BUG:Il problema sta nel fatto che a comandare non è la work come oggetto generale ma la preparazione... la work in generale è un oggetto che serve a definire contenuto ricetta e tracciabilità rispetto ai crm. Audit deve usare le preparazioni come riferimento di data:
-audit metodo X data Y-->cerca le work associate al metodo X --> cerca le preparazioni sia in work attive che in work archiviate che erano valide in data Y (devono essere riportate tutte) -per ognuna-> estrai info (lotti CRM,lotti CRMneat(preparazione stock), e info di preprazione della work).
-questo schema deve essere monolitico per la questione audit.
-attualmente audit come prende la data di "inizio" di una work. se creo una work oggi e faccio audit per ieri la vedo? vedo la work creata oggi--> questo è un gravissimo bug concettuale del sofware e va assolutamente aggiustato.
 
+Consolidate calibration drawer schemas
+(finire con nome metodo e fare resoconto sessione)
 
  ## altri
-  
+  mettere link a db composti per tutti i badge dei crm in audit CRM della dashboard
  
 
 

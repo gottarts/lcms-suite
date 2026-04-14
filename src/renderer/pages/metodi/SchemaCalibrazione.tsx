@@ -6,7 +6,6 @@
 //
 // Contiene:
 //   - ColonneWork         → colonne Work lv0 + Intermedie
-//   - DrawerDettaglioWork → pannello laterale dettaglio
 //   - SchemaCalibrazione  → root (esporta default)
 //
 // DIPENDENZE (tutti nella stessa cartella):
@@ -16,12 +15,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useCallback, useRef, useLayoutEffect, useEffect, useMemo } from 'react'
 import type {
-  SorgenteSel, WorkInSchema, CrmItem, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef, DestUso
+  SorgenteSel, WorkInSchema, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef, DestUso
 } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import {
   useSchemaData, buildAnalitiData, targetColIdx,
-  salvaWorkNelDb, getCompsFromWork, computeConnections,
+  salvaWorkNelDb, computeConnections,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
 import { ScenarDialog } from './ScenarDialog'
@@ -30,10 +29,8 @@ import { buildMixComposizioni, generaScenari } from './SchemaCalibrazione.scenar
 import { ImportaWorkDialog } from './ImportaWorkDialog'
 import { schemaCalApi, workApi } from '../../lib/api'
 import { RicaricaDialog } from '../work/RicaricaDialog'
-import { SlidePanel } from '@/components/shared/SlidePanel'
+import { WorkDrawer } from '../work/WorkDrawer'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG Overlay per frecce di connessione
@@ -371,421 +368,6 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
     </div>
   )
 })
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Drawer dettaglio Work
-// ─────────────────────────────────────────────────────────────────────────────
-interface DrawerProps {
-  work: WorkInSchema | null
-  colIdx: number
-  workCols: WorkInSchema[][]
-  crmItems: CrmItem[]
-  onClose: () => void
-  onDelete: (colIdx: number, workIdx: number) => void
-}
-
-function DrawerDettaglioWork({ work, colIdx, workCols, crmItems, onClose, onDelete }: DrawerProps) {
-  const [search, setSearch] = useState('')
-  const [dbWork, setDbWork] = useState<any>(null)
-
-  useEffect(() => {
-    if (work?.dbId) {
-      workApi.get(work.dbId).then(setDbWork).catch(() => setDbWork(null))
-    } else {
-      setDbWork(null)
-    }
-  }, [work?.dbId])
-
-  if (!work) return null
-
-  const isInter  = colIdx > 0
-  const col      = isInter ? C.inter : C.work
-  const allComps = getCompsFromWork(work, workCols, crmItems)
-  const comps    = search
-    ? allComps.filter(c => c.nome.toLowerCase().includes(search.toLowerCase()))
-    : allComps
-
-  // Composti extra: presenti nella work DB ma non coperti dai crmItems dello schema
-  const crmIdSet = new Set(crmItems.map(c => c.id))
-  const extraComps: Array<{ nome: string; concInWork: number; unita: string; srcNome: string }> = []
-  if (dbWork?.ingredienti) {
-    const seenExtraMixComp = new Set<string>()
-    for (const ing of dbWork.ingredienti as any[]) {
-      if (ing.source_type !== 'crm') continue
-      if (crmIdSet.has(ing.source_id)) continue
-      // Calcola concentrazione nella work
-      let concInWork: number
-      if (ing.modo_calcolo === 'dil' && ing.fattore_diluizione) {
-        concInWork = (ing.source_cv ?? 0) / ing.fattore_diluizione
-      } else if (ing.modo_calcolo === 'conc' && ing.conc_target_mgL != null) {
-        concInWork = ing.conc_target_mgL
-      } else {
-        concInWork = ing.source_cv ?? 0
-      }
-      const srcNome = ing.source_mix_nome ?? ing.source_mix_id ?? (ing.source_nome ?? '')
-      const key = ing.source_mix_id ? `mix:${ing.source_mix_id}:${ing.source_id}` : `sng:${ing.source_id}`
-      if (!seenExtraMixComp.has(key)) {
-        seenExtraMixComp.add(key)
-        extraComps.push({ nome: ing.source_nome ?? `ID ${ing.source_id}`, concInWork, unita: ing.source_unita_conc ?? 'mg/L', srcNome })
-      }
-    }
-  }
-
-  // Righe extra per tabella volumi: sorgenti crm non in schema (una riga per mix, una per singolo)
-  const extraVols: Array<{ nome: string; vol: number; dilFactor?: number; concTarget?: number }> = []
-  if (dbWork?.ingredienti) {
-    const seenExtraVol = new Set<string>()
-    for (const ing of dbWork.ingredienti as any[]) {
-      if (ing.source_type !== 'crm') continue
-      if (crmIdSet.has(ing.source_id)) continue
-      const key = ing.source_mix_id ? `mix:${ing.source_mix_id}` : `sng:${ing.source_id}`
-      if (seenExtraVol.has(key)) continue
-      seenExtraVol.add(key)
-      extraVols.push({
-        nome: ing.source_mix_nome ?? ing.source_nome ?? `ID ${ing.source_id}`,
-        vol: ing.volume_prelievo_ml ?? 0,
-        dilFactor: ing.fattore_diluizione ?? undefined,
-        concTarget: ing.conc_target_mgL ?? undefined,
-      })
-    }
-  }
-
-  const usedVol  = work.vols.reduce((a, v) => a + v.vol, 0) + extraVols.reduce((a, v) => a + v.vol, 0)
-  const solvVol  = Math.max(0, work.volFin - usedVol)
-  const neg      = usedVol > work.volFin
-
-  const workIdx = workCols[colIdx]?.findIndex(x => x.id === work.id) ?? -1
-
-  // Funzione ricorsiva per catena tracciabilità
-  function ChainNode({ w, ci, depth = 0 }: { w: WorkInSchema; ci: number; depth?: number }) {
-    const c = ci > 0 ? C.inter : C.work
-    return (
-      <>
-        <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11,
-                      paddingLeft: depth * 16 }}>
-          <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
-                        background:c.border }} />
-          <div>
-            <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>{w.nome}</div>
-            <div style={{ fontSize:10, color:C.page.th }}>
-              {w.conc ? `${w.conc} mg/L` : ''}{w.volFin ? ` · ${w.volFin} mL` : ''}
-            </div>
-          </div>
-        </div>
-        {w.srcs.map(src => {
-          if (src.tipo === 'work') {
-            let srcWork: WorkInSchema | undefined
-            for (const col2 of workCols) { srcWork = col2.find(x => x.id === src.id); if (srcWork) break }
-            if (srcWork) {
-              const srcCi = workCols.findIndex(col2 => col2.some(x => x.id === src.id))
-              return (
-                <div key={src.id}>
-                  <div style={{ width:1, height:10, background:C.page.brd,
-                                marginLeft: depth * 16 + 3 }} />
-                  <ChainNode w={srcWork} ci={srcCi} depth={depth + 1} />
-                </div>
-              )
-            }
-          }
-          // Foglia CRM
-          return (
-            <div key={src.id}>
-              <div style={{ width:1, height:10, background:C.page.brd,
-                            marginLeft: depth * 16 + 3 }} />
-              <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11,
-                            paddingLeft:(depth + 1) * 16 }}>
-                <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
-                              background: src.tipo === 'mix' ? C.mix.border : C.sng.border }} />
-                <div>
-                  <div style={{ fontFamily:'IBM Plex Mono, monospace' }}>
-                    {src.tipo === 'prep' ? `${src.nome} (stock)` : src.nome}
-                  </div>
-                  {src.tipo === 'prep' && (src.progressivo != null || src.lotto) && (
-                    <div style={{ fontSize:9, color:C.page.t2,
-                                  fontFamily:'IBM Plex Mono, monospace' }}>
-                      {`prep #${src.progressivo ?? '?'}${src.lotto ? ` da lotto ${src.lotto}` : ''} · Neat`}
-                    </div>
-                  )}
-                  {src.tipo === 'mix' && (() => {
-                    const lotto = crmItems.find(c => c.mix_id === src.id)?.lotto
-                    return lotto
-                      ? <div style={{ fontSize:9, color:C.page.t2,
-                                      fontFamily:'IBM Plex Mono, monospace' }}>{lotto}</div>
-                      : null
-                  })()}
-                  {src.tipo === 'sng' && (() => {
-                    const lotto = crmItems.find(c => String(c.id) === src.id)?.lotto
-                    return lotto
-                      ? <div style={{ fontSize:9, color:C.page.t2,
-                                      fontFamily:'IBM Plex Mono, monospace' }}>{lotto}</div>
-                      : null
-                  })()}
-                  <div style={{ fontSize:10, color:C.page.th }}>
-                    {src.tipo === 'prep' ? (
-                      `${src.cv} mg/L · Prep stock`
-                    ) : src.concVariabile ? (
-                      <>
-                        <span style={{ fontStyle:'italic' }}>variabile</span>
-                        {(() => {
-                          const comps = crmItems.filter(c => c.mix_id === src.id)
-                          if (comps.length === 0) return null
-                          const tip = comps.map(c => `${c.nome} · ${c.cv} ${c.unita_conc}`).join('\n')
-                          return (
-                            <span title={tip}
-                                  style={{ marginLeft:4, cursor:'help', opacity:0.6 }}>ⓘ</span>
-                          )
-                        })()}
-                        {' · CRM'}
-                      </>
-                    ) : (
-                      `${src.cv} mg/L · CRM`
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-        {(w.extraSrcs ?? []).map(s => (
-          <div key={`xs-${s.id}`}>
-            <div style={{ width:1, height:10, background:C.page.brd,
-                          marginLeft: depth * 16 + 3 }} />
-            <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11,
-                          paddingLeft:(depth + 1) * 16 }}>
-              <div style={{ width:8, height:8, borderRadius:2, flexShrink:0,
-                            background:'#f59e0b' }} />
-              <div>
-                <div style={{ fontFamily:'IBM Plex Mono, monospace', color:'#92400e' }}>
-                  ⚠ {s.nome}
-                </div>
-                <div style={{ fontSize:9, color:'#b45309' }}>fuori schema</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </>
-    )
-  }
-
-  return (
-    <SlidePanel open={!!work} onClose={onClose} title={work.nome}
-                subtitle={isInter ? `Intermedia lv.${colIdx}` : 'Work'} width="460px">
-      <div className="space-y-4">
-
-        {/* Badge validità + info */}
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, alignItems:'center' }}>
-          <span style={{
-            fontSize:10, padding:'2px 8px', borderRadius:3, fontWeight:700,
-            background: work.validitaMesi ? C.sng.chip : '#d3d1c7',
-            color: work.validitaMesi ? C.sng.text : C.page.t2,
-          }}>
-            {work.validitaMesi ? `valida ${work.validitaMesi} mesi` : 'al momento'}
-          </span>
-          {[
-            work.conc ? `${work.conc} mg/L` : (work.concVariabile ? 'variabile' : null),
-            work.volFin ? `${work.volFin} mL` : null,
-            work.solv || null,
-          ].filter(Boolean).map((kv, i) => (
-            <span key={i} style={{ fontSize:11, color:C.page.t2,
-                                   fontFamily:'IBM Plex Mono, monospace' }}>{kv}</span>
-          ))}
-        </div>
-
-        {/* Azioni */}
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="text-destructive"
-            onClick={() => { if (workIdx >= 0) { onDelete(colIdx, workIdx); onClose() } }}>
-            Elimina
-          </Button>
-        </div>
-
-        <Separator />
-
-        {/* Tabella volumi */}
-        <div>
-          <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
-                        textTransform:'uppercase', letterSpacing:'0.08em',
-                        marginBottom:6 }}>Volumi di prelievo</div>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-            <thead>
-              <tr>
-                {['Sorgente', 'Diluizione', 'Preleva (mL)'].map(h => (
-                  <th key={h} style={{ textAlign:'left', fontSize:10, fontWeight:700,
-                                      color:C.page.th, textTransform:'uppercase',
-                                      letterSpacing:'0.06em', padding:'3px 6px',
-                                      borderBottom:`1px solid ${C.page.brd}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {work.vols.map((v, i) => (
-                <tr key={i} style={{ background:col.bg }}>
-                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
-                    {v.nome}
-                  </td>
-                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                fontSize:11, borderBottom:`1px solid rgba(0,0,0,.04)` }}>
-                    {v.dilFactor ? `÷${v.dilFactor}` : (v.concTarget ? `${v.concTarget} mg/L` : '—')}
-                  </td>
-                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                fontSize:11, fontWeight:700,
-                                borderBottom:`1px solid rgba(0,0,0,.04)` }}>
-                    {v.vol.toFixed(3)}
-                  </td>
-                </tr>
-              ))}
-              {extraVols.map((v, i) => (
-                <tr key={`xv-${i}`} style={{ background:'#fffbeb' }}>
-                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                fontSize:11, borderBottom:'1px solid #fde68a', color:'#92400e' }}>
-                    ⚠ {v.nome}
-                  </td>
-                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                fontSize:11, borderBottom:'1px solid #fde68a', color:'#92400e' }}>
-                    {v.dilFactor ? `÷${v.dilFactor}` : (v.concTarget ? `${v.concTarget} mg/L` : '—')}
-                  </td>
-                  <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
-                                fontSize:11, fontWeight:700, borderBottom:'1px solid #fde68a',
-                                color:'#92400e' }}>
-                    {v.vol.toFixed(3)}
-                  </td>
-                </tr>
-              ))}
-              {/* Riga solvente / warning */}
-              <tr style={{ color:neg ? '#a32d2d' : C.page.th, fontStyle:'italic' }}>
-                {neg ? (
-                  <td colSpan={2} style={{ padding:'4px 6px', fontSize:11,
-                                           fontWeight:700, fontStyle:'normal',
-                                           fontFamily:'IBM Plex Mono, monospace' }}>
-                    ⚠ Prelievi ({usedVol.toFixed(3)} mL) superano il volume finale
-                  </td>
-                ) : (
-                  <>
-                    <td style={{ padding:'4px 6px', fontSize:11,
-                                 fontFamily:'IBM Plex Mono, monospace' }}>
-                      {work.solv || 'Solvente'} (completamento)
-                    </td>
-                    <td style={{ padding:'4px 6px', fontSize:11,
-                                 fontFamily:'IBM Plex Mono, monospace' }}>—</td>
-                  </>
-                )}
-                <td style={{ padding:'4px 6px', fontSize:11,
-                             fontFamily:'IBM Plex Mono, monospace',
-                             color: neg ? '#a32d2d' : C.page.th }}>
-                  {neg ? '—' : solvVol.toFixed(3)}
-                </td>
-              </tr>
-              {/* Riga totale */}
-              <tr style={{ fontWeight:700, borderTop:`2px solid ${C.page.brd}`,
-                           color: neg ? '#a32d2d' : undefined }}>
-                <td style={{ padding:'4px 6px', fontSize:11,
-                             fontFamily:'IBM Plex Mono, monospace' }}>Totale prelievi</td>
-                <td />
-                <td style={{ padding:'4px 6px', fontSize:11,
-                             fontFamily:'IBM Plex Mono, monospace' }}>
-                  {usedVol.toFixed(3)}
-                </td>
-              </tr>
-              {!neg && (
-                <tr style={{ fontWeight:700 }}>
-                  <td style={{ padding:'4px 6px', fontSize:11,
-                               fontFamily:'IBM Plex Mono, monospace' }}>Volume finale</td>
-                  <td />
-                  <td style={{ padding:'4px 6px', fontSize:11,
-                               fontFamily:'IBM Plex Mono, monospace' }}>
-                    {work.volFin.toFixed(3)}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <Separator />
-
-        {/* Catena tracciabilità */}
-        <div>
-          <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
-                        textTransform:'uppercase', letterSpacing:'0.08em',
-                        marginBottom:6 }}>Catena di tracciabilità</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-            <ChainNode w={work} ci={colIdx} />
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Lista composti */}
-        <div>
-          <div style={{ fontSize:10, fontWeight:700, color:C.page.t2,
-                        textTransform:'uppercase', letterSpacing:'0.08em',
-                        marginBottom:6 }}>
-            Composti ({allComps.length}{extraComps.length > 0 ? ` + ${extraComps.length} fuori schema` : ''})
-          </div>
-          <input
-            placeholder="Filtra composti..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{
-              width:'100%', padding:'6px 9px', border:`1px solid ${C.page.brd}`,
-              borderRadius:8, fontSize:12, fontFamily:'Lato, sans-serif',
-              outline:'none', background:'#fafafa', color:C.page.t1, marginBottom:8,
-            }}
-          />
-          {comps.length === 0 ? (
-            <div style={{ fontSize:11, color:C.page.th, fontStyle:'italic' }}>
-              {search ? 'Nessun composto corrisponde al filtro' : 'Nessun composto trovato'}
-            </div>
-          ) : comps.map((c, i) => (
-            <div key={i} style={{
-              display:'flex', justifyContent:'space-between', alignItems:'center',
-              padding:'5px 8px', borderBottom:`1px solid rgba(0,0,0,.04)`,
-              fontSize:11,
-            }}>
-              <div>
-                <div style={{ fontWeight:500, color:C.page.t1 }}>{c.nome}</div>
-                <div style={{ fontSize:10, color:C.page.th,
-                              fontFamily:'IBM Plex Mono, monospace' }}>{c.srcPath}</div>
-              </div>
-              <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:11,
-                            color:C.page.t2, fontWeight:500 }}>
-                {c.concInWork.toFixed(4)} {c.unita}
-              </div>
-            </div>
-          ))}
-          {extraComps.length > 0 && (
-            <>
-              <div style={{ fontSize:10, fontWeight:700, color:'#92400e',
-                            textTransform:'uppercase', letterSpacing:'0.08em',
-                            marginTop:10, marginBottom:4 }}>
-                Non in questo schema ({extraComps.length})
-              </div>
-              {extraComps.map((c, i) => (
-                <div key={i} style={{
-                  display:'flex', justifyContent:'space-between', alignItems:'center',
-                  padding:'5px 8px', background:'#fffbeb',
-                  borderBottom:'1px solid #fde68a', fontSize:11,
-                }}>
-                  <div>
-                    <div style={{ fontWeight:500, color:'#92400e' }}>⚠ {c.nome}</div>
-                    <div style={{ fontSize:10, color:'#b45309',
-                                  fontFamily:'IBM Plex Mono, monospace' }}>{c.srcNome}</div>
-                  </div>
-                  <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:11,
-                                color:'#92400e', fontWeight:500 }}>
-                    {c.concInWork.toFixed(4)} {c.unita}
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-
-      </div>
-    </SlidePanel>
-  )
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Componente principale SchemaCalibrazione
@@ -1387,14 +969,17 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       />
 
       {/* ── Drawer dettaglio Work ── */}
-      {drawerWork && (
-        <DrawerDettaglioWork
-          work={drawerWork}
-          colIdx={drawerCol}
-          workCols={workCols}
-          crmItems={crmItems}
+      {drawerWork?.dbId != null && (
+        <WorkDrawer
+          workId={drawerWork.dbId}
           onClose={() => setDrawerWork(null)}
-          onDelete={handleDeleteWork}
+          onEdit={() => {}}
+          onDelete={(id) => {
+            const workIdx = workCols[drawerCol]?.findIndex(x => x.dbId === id) ?? -1
+            if (workIdx >= 0) handleDeleteWork(drawerCol, workIdx)
+            setDrawerWork(null)
+          }}
+          metodiNomi={metodoNome ? { [metodoId]: metodoNome } : undefined}
         />
       )}
 
