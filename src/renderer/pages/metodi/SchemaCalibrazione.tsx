@@ -151,7 +151,7 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
 
         return (
           <div key={ci} style={{
-            width:270, flexShrink:0,
+            width:380, flexShrink:0,
             borderRight:`1px solid ${C.page.brd}`,
             display:'flex', flexDirection:'column', overflow:'hidden',
           }}>
@@ -754,7 +754,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     <div style={{
       position:'relative', background:C.page.bg,
       display:'flex', flexDirection:'column',
-      height:'calc(100vh - 48px - 32px)', margin:-16, overflow:'hidden',
+      height:'100%', margin:-16, overflow:'hidden',
       fontFamily:'Lato, sans-serif',
     }}>
       {/* ── Header ── */}

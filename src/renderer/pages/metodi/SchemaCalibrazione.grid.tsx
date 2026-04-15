@@ -22,7 +22,7 @@ const LAYOUT = {
   CHIP_GAP:      6,  // gap flex tra header e chip nelle card Neat
   PADDING_V:    14,  // padding verticale card Neat (7px top + 7px bottom)
   HEADER_H:     22,  // altezza header card Neat
-  CHIP_AREA:   236,  // larghezza disponibile per chip mix (card 254px − padding 18px)
+  CHIP_AREA:   266,  // larghezza disponibile per chip mix (card 284px − padding 18px)
   CHIP_CHAR_W:   6,  // larghezza stimata per carattere (IBM Plex Mono 9px)
   CHIP_PAD:     14,  // padding orizzontale chip
   CHIP_ROW_H:   18,  // altezza di una riga di chip
@@ -57,6 +57,7 @@ export function GrigliaAnalitiCrm({
   onOpenScenar, onChangeMixLotto, mixLottoSel: mixLottoSelProp,
 }: GrigliaProps) {
   const navigate = useNavigate()
+  const oggi = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   const goToComposto = (nome: string, mostraDismessi: boolean) => {
     onClose()
@@ -264,9 +265,9 @@ export function GrigliaAnalitiCrm({
       <div style={{ display:'flex', background:C.page.sur, borderRadius:'12px 12px 0 0',
                     borderBottom:'1px solid rgba(0,0,0,0.06)', flexShrink:0 }}>
         {([
-          { w:190, label:'Analiti',        sub:`${analiti.length} composti` },
-          { w:270, label:'CRM Mix',        sub:'clicca per selezionare', br:true },
-          { w:260, label:'Singoli / Neat', sub:'preparazioni non scadute' },
+          { w:210, label:'Analiti',        sub:`${analiti.length} composti` },
+          { w:300, label:'CRM Mix',        sub:'clicca per selezionare', br:true },
+          { w:290, label:'Singoli / Neat', sub:'preparazioni non scadute' },
         ] as { w:number; label:string; sub:string; br?:boolean }[]).map((h, i) => (
           <div key={i} style={{ width:h.w, padding:'9px 11px', flexShrink:0,
                                 borderRight: h.br ? `1px solid ${C.page.brd}` : undefined }}>
@@ -313,7 +314,7 @@ export function GrigliaAnalitiCrm({
                               borderBottom:`1px solid rgba(0,0,0,.05)`, flexShrink:0 }}>
 
                   {/* Cella Analita */}
-                  <div style={{ width:190, flexShrink:0, padding:'5px 9px',
+                  <div style={{ width:210, flexShrink:0, padding:'5px 9px',
                                 borderRight:`1px solid ${C.page.brd}`,
                                 display:'flex', alignItems:'center' }}>
                     <div style={{
@@ -340,11 +341,11 @@ export function GrigliaAnalitiCrm({
                   </div>
 
                   {/* Placeholder Mix (il blocco vero è assoluto) */}
-                  <div style={{ width:270, flexShrink:0,
+                  <div style={{ width:300, flexShrink:0,
                                 borderRight:`1px solid ${C.page.brd}` }} />
 
                   {/* Cella Singoli — una card per sngId */}
-                  <div style={{ width:260, flexShrink:0, padding:'3px 6px',
+                  <div style={{ width:290, flexShrink:0, padding:'3px 6px',
                                 display:'flex', flexDirection:'column', gap:3,
                                 justifyContent:'center' }}>
                     {a.sngIds.map(sngId => {
@@ -492,9 +493,10 @@ export function GrigliaAnalitiCrm({
                               </div>
                             )}
                             {crm.scadenza_prodotto && (
-                              <div style={{ fontSize:9, color:C.page.th,
+                              <div style={{ fontSize:9,
+                                            color: crm.scadenza_prodotto < oggi ? '#dc2626' : C.page.th,
                                             fontFamily:'IBM Plex Mono, monospace' }}>
-                                scad. {crm.scadenza_prodotto}
+                                scad. {crm.scadenza_prodotto}{crm.scadenza_prodotto < oggi ? '  ⚠ SCADUTA' : ''}
                               </div>
                             )}
                             {crm.ultima_rivalidazione && (
@@ -528,7 +530,7 @@ export function GrigliaAnalitiCrm({
 
         {/* Blocchi Mix in position:absolute rispetto al corpo scrollabile */}
         <div style={{
-          position:'absolute', left:190, width:270,
+          position:'absolute', left:210, width:300,
           height: totalMixHeight, pointerEvents:'none', overflow:'hidden',
         }}>
           {analiti.map(a => {
@@ -617,8 +619,14 @@ export function GrigliaAnalitiCrm({
                 <div style={{ fontSize:10, color:C.page.th, marginTop:2,
                               fontFamily:'IBM Plex Mono, monospace' }}>
                   {(mixCvSets.get(a.mixId)?.size ?? 0) <= 1 && info?.cv ? `${info.cv} mg/L` : ''}
-                  {info?.scadenza_prodotto ? ` · scad. ${info.scadenza_prodotto}` : ''}
                 </div>
+                {info?.scadenza_prodotto && (
+                  <div style={{ fontSize:10,
+                                color: info.scadenza_prodotto < oggi ? '#dc2626' : C.page.th,
+                                marginTop:1, fontFamily:'IBM Plex Mono, monospace' }}>
+                    scad. {info.scadenza_prodotto}{info.scadenza_prodotto < oggi ? '  ⚠ SCADUTA' : ''}
+                  </div>
+                )}
                 {info?.ultima_rivalidazione && (
                   <div style={{ fontSize:10, color:'#b45309', marginTop:2,
                                 fontFamily:'IBM Plex Mono, monospace' }}>
