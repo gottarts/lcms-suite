@@ -191,7 +191,8 @@ function _greedy(
     if (bestComp && bestGain > 0) {
       firme.push(bestComp.firma)
       for (const n of bestComp.analiti) coperta.add(n)
-      rimanenti.splice(rimanenti.indexOf(bestComp), 1)
+      const idx = rimanenti.indexOf(bestComp)
+      if (idx >= 0) rimanenti.splice(idx, 1)
       progresso = true
     }
   }
@@ -302,7 +303,8 @@ function _greedyFill(
     if (bestComp && bestGain > 0) {
       firme.push(bestComp.firma)
       for (const n of bestComp.analiti) coperta.add(n)
-      rimanenti.splice(rimanenti.indexOf(bestComp), 1)
+      const idx = rimanenti.indexOf(bestComp)
+      if (idx >= 0) rimanenti.splice(idx, 1)
       progresso = true
     }
   }

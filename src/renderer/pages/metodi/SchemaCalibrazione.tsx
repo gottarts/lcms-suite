@@ -20,7 +20,7 @@ import type {
 import { C } from './SchemaCalibrazione.types'
 import {
   useSchemaData, buildAnalitiData, targetColIdx,
-  salvaWorkNelDb, computeConnections,
+  salvaWorkNelDb, computeConnections, buildSorgenteMix,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
 import { ScenarDialog } from './ScenarDialog'
@@ -394,14 +394,16 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const [drawerWork,   setDrawerWork]   = useState<WorkInSchema | null>(null)
   const [drawerCol,    setDrawerCol]    = useState(0)
   const [schemaLoaded, setSchemaLoaded] = useState(false)
-  const [confirmReset, setConfirmReset] = useState<'full'|null>(null)
   const [blockedMap, setBlockedMap] = useState<Map<number, { bloccata: boolean; haScaduti: boolean; haStockScadute: boolean }>>(new Map())
-  const [ricaricaSchemaWorkId, setRicaricaSchemaWorkId] = useState<number | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [importOpen,      setImportOpen]      = useState(false)
-  const [scenarOpen,      setScenarOpen]      = useState(false)
   const [scenarioScelto,  setScenarioScelto]  = useState(false)
-  const [autoSelectOpen,  setAutoSelectOpen]  = useState(false)
+  const [dialogs, setDialogs] = useState<{
+    import: boolean
+    scenar: boolean
+    autoSelect: boolean
+    confirmReset: 'full' | null
+    ricaricaWorkId: number | null
+  }>({ import: false, scenar: false, autoSelect: false, confirmReset: null, ricaricaWorkId: null })
   const [filtroDestUso,   setFiltroDestUso]   = useState<DestUso>('taratura')
 
   // Filtra crmItems per destinazione d'uso selezionata e ricalcola analitiAll filtrati
@@ -491,7 +493,14 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     if (loading || schemaLoaded) return
     schemaCalApi.get(metodoId).then(saved => {
       if (saved?.workCols) setWorkCols(saved.workCols)
-      const savedRemovedMix = new Set<string>(saved?.removedMix ?? [])
+      // Filtra i mix_id salvati contro quelli realmente presenti in crmItems per evitare
+      // card fantasma o frecce SVG rotte nel caso un mix sia stato dismesso dopo il salvataggio
+      const mixIdDisponibili = new Set(
+        crmItems.map(c => c.mix_id).filter((id): id is string => id != null)
+      )
+      const savedRemovedMix = new Set<string>(
+        (saved?.removedMix ?? []).filter((mid: string) => mixIdDisponibili.has(mid))
+      )
       if (saved?.removedMix) setRemovedMix(savedRemovedMix)
       const giàScelto = !!saved?.scenarioScelto
       setScenarioScelto(giàScelto)
@@ -501,13 +510,13 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           .filter(c => c.mixIds.some(mid => !savedRemovedMix.has(mid)))
         const scenari = generaScenari(analitiAll, comps)
         if (scenari.length > 1) {
-          setScenarOpen(true)
+          setDialogs(d => ({ ...d, scenar: true }))
         } else {
           setScenarioScelto(true)
         }
       }
       setSchemaLoaded(true)
-    }).catch(() => { setScenarOpen(true); setSchemaLoaded(true) })
+    }).catch(() => { setDialogs(d => ({ ...d, scenar: true })); setSchemaLoaded(true) })
   }, [loading, metodoId, schemaLoaded])
 
   // ── Auto-save schema (debounced, solo dopo il caricamento iniziale) ────────
@@ -520,11 +529,15 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   }, [workCols, removedMix, scenarioScelto, metodoId, schemaLoaded])
 
   // ── Controlla quali work hanno lotti CRM dismessi ────────────────────────────
+  // Stabilizza la dipendenza su un array di id primitivi per evitare ri-fetch inutili
+  // a ogni render in cui workCols cambia riferimento ma non contenuto rilevante
+  const workDbIds = useMemo(
+    () => workCols.flatMap(col => col.map(w => w.dbId).filter((id): id is number => id != null)),
+    [workCols]
+  )
   useEffect(() => {
     if (!schemaLoaded) return
-    const allDbIds = workCols.flatMap(col =>
-      col.map(w => w.dbId).filter((id): id is number => id != null)
-    )
+    const allDbIds = workDbIds
     if (allDbIds.length === 0) { setBlockedMap(new Map()); return }
     let cancelled = false
     Promise.all(allDbIds.map(id => workApi.get(id))).then(results => {
@@ -536,8 +549,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       setBlockedMap(map)
     }).catch(() => {})
     return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schemaLoaded, workCols])
+  }, [schemaLoaded, workDbIds])
 
   // ── Reset schema ────────────────────────────────────────────────────────────
   const handleFullReset = useCallback(async () => {
@@ -546,7 +558,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setRemovedMix(new Set())
     setSelSrcs(new Map())
     setScenarioScelto(false)
-    setScenarOpen(true)
+    setDialogs(d => ({ ...d, scenar: true }))
     setSchemaLoaded(true) // stato già pulito, non ri-caricare dal DB
     await reload()
   }, [metodoId, reload])
@@ -558,19 +570,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setSelSrcs(prev => {
       const m = new Map(prev)
       if (m.has(mixId)) { m.delete(mixId) }
-      else {
-        const comps = crmItems.filter(c => c.mix_id === mixId)
-        const crm = comps[0]
-        const cvSet = new Set(comps.map(c => c.cv))
-        const eterogenea = cvSet.size > 1
-        m.set(mixId, {
-          id: mixId,
-          nome: crm?.mix ?? mixId,
-          cv: crm?.cv ?? 0,
-          tipo: 'mix',
-          concVariabile: eterogenea,
-        })
-      }
+      else { m.set(mixId, buildSorgenteMix(mixId, crmItems)) }
       return m
     })
   }, [crmItems])
@@ -621,16 +621,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       const m = new Map(prev)
       const entry = m.get(oldMixId)!
       m.delete(oldMixId)
-      const comps = crmItems.filter(c => c.mix_id === newMixId)
-      const crm = comps[0]
-      const cvSet = new Set(comps.map(c => c.cv))
-      m.set(newMixId, {
-        ...entry,
-        id: newMixId,
-        nome: crm?.mix ?? entry.nome,
-        cv: crm?.cv ?? entry.cv,
-        concVariabile: cvSet.size > 1,
-      })
+      m.set(newMixId, { ...entry, ...buildSorgenteMix(newMixId, crmItems) })
       return m
     })
   }, [crmItems])
@@ -658,7 +649,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     })
 
     setScenarioScelto(true)
-    setScenarOpen(false)
+    setDialogs(d => ({ ...d, scenar: false }))
   }, [crmItems])
 
   const handleAutoSelect = useCallback((mixIds: string[], sngIds: string[]) => {
@@ -668,11 +659,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setSelSrcs(prev => {
       const m = new Map(prev)
       for (const mixId of mixIds) {
-        const comps = crmItems.filter(c => c.mix_id === mixId)
-        const crm = comps[0]
-        const cvSet = new Set(comps.map(c => c.cv))
-        const eterogenea = cvSet.size > 1
-        m.set(mixId, { id: mixId, nome: crm?.mix ?? mixId, cv: crm?.cv ?? 0, tipo: 'mix', concVariabile: eterogenea })
+        m.set(mixId, buildSorgenteMix(mixId, crmItems))
       }
       for (const sngId of sngIds) {
         const crm = crmItems.find(c => String(c.id) === sngId)
@@ -694,7 +681,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       }
       return m
     })
-    setAutoSelectOpen(false)
+    setDialogs(d => ({ ...d, autoSelect: false }))
   }, [handleApplyScenario, crmItems])
 
   // ── Crea Work ──────────────────────────────────────────────────────────────
@@ -759,7 +746,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       if (cols.length <= colIdx + 1) cols.push([])
       return cols
     })
-    setImportOpen(false)
+    setDialogs(d => ({ ...d, import: false }))
   }, [])
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -831,7 +818,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onClose={onClose}
             registerCardRef={registerCardRef}
             gridBodyRef={gridBodyRef}
-            onOpenScenar={() => setScenarOpen(true)}
+            onOpenScenar={() => setDialogs(d => ({ ...d, scenar: true }))}
             onChangeMixLotto={handleChangeMixLotto}
             mixLottoSel={mixLottoSel}
           />
@@ -845,7 +832,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onAddCol={() => setWorkCols(prev => [...prev, []])}
             registerCardRef={registerCardRef}
             blockedMap={blockedMap}
-            onRicaricaWork={setRicaricaSchemaWorkId}
+            onRicaricaWork={(id) => setDialogs(d => ({ ...d, ricaricaWorkId: id }))}
           />
         </div>
       )}
@@ -876,18 +863,18 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
               )
             })}
           </div>
-          <button onClick={() => setConfirmReset('full')} style={{
+          <button onClick={() => setDialogs(d => ({ ...d, confirmReset: 'full' }))} style={{
             padding:'5px 12px', borderRadius:8, border:`1px solid ${C.con.border}`,
             background:C.page.sur, cursor:'pointer', fontSize:11,
             fontWeight:500, color:C.con.text,
           }}>Ricomincia da zero</button>
-          <button onClick={() => setAutoSelectOpen(true)} style={{
+          <button onClick={() => setDialogs(d => ({ ...d, autoSelect: true }))} style={{
             padding:'5px 12px', borderRadius:8, border:`1px solid ${C.mix.border}`,
             background:C.page.sur, cursor:'pointer', fontSize:11,
             fontWeight:500, color:C.mix.text,
           }}>Selezione automatica</button>
           {selSrcs.size > 0 && (
-            <button onClick={() => setSelSrcs(new Set())} style={{
+            <button onClick={() => setSelSrcs(new Map())} style={{
               padding:'5px 12px', borderRadius:8, border:`1px solid ${C.page.brd}`,
               background:C.page.sur, cursor:'pointer', fontSize:11,
               fontWeight:500, color:C.page.t2,
@@ -910,7 +897,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             }}
           >+ Crea Work</button>
           <button
-            onClick={() => setImportOpen(true)}
+            onClick={() => setDialogs(d => ({ ...d, import: true }))}
             style={{
               padding:'7px 18px', borderRadius:8, border:`1px solid ${C.work.border}`,
               cursor:'pointer', fontSize:13, fontWeight:700,
@@ -921,7 +908,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       </div>
 
       {/* ── Dialog scenari copertura CRM Mix ── */}
-      {scenarOpen && (
+      {dialogs.scenar && (
         <ScenarDialog
           analiti={analitiAll}
           crmItems={crmItems}
@@ -929,20 +916,20 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           mixNomiMap={mixNomiMap}
           removedMix={new Set()}
           obbligatorio={!scenarioScelto}
-          onClose={() => setScenarOpen(false)}
+          onClose={() => setDialogs(d => ({ ...d, scenar: false }))}
           onApply={handleApplyScenario}
         />
       )}
 
       {/* ── Dialog selezione automatica CRM ── */}
-      {autoSelectOpen && (
+      {dialogs.autoSelect && (
         <AutoSelectDialog
           analiti={analitiAllFiltrati}
           crmItems={crmItemsPerDestUso}
           firmaToMixIds={firmaToMixIdsFiltrati}
           mixNomiMap={mixNomiMapFiltrati}
           removedMix={removedMix}
-          onClose={() => setAutoSelectOpen(false)}
+          onClose={() => setDialogs(d => ({ ...d, autoSelect: false }))}
           onApply={handleAutoSelect}
         />
       )}
@@ -960,11 +947,11 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
 
       {/* ── Dialog importa Work ── */}
       <ImportaWorkDialog
-        open={importOpen}
+        open={dialogs.import}
         metodoId={metodoId}
         crmItems={crmItems}
         workCols={workCols}
-        onClose={() => setImportOpen(false)}
+        onClose={() => setDialogs(d => ({ ...d, import: false }))}
         onImported={handleImportWork}
       />
 
@@ -985,8 +972,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
 
       {/* ── Dialog ricarica lotti work ── */}
       <RicaricaDialog
-        workId={ricaricaSchemaWorkId}
-        onClose={() => setRicaricaSchemaWorkId(null)}
+        workId={dialogs.ricaricaWorkId}
+        onClose={() => setDialogs(d => ({ ...d, ricaricaWorkId: null }))}
         onSuccess={async () => {
           // Il backend ha già rigenerato schema_json con i nuovi srcs/vols nella
           // transazione di work:ricarica. Qui basta ricaricare CRM + schema dal DB:
@@ -996,7 +983,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           const saved = await schemaCalApi.get(metodoId)
           if (saved?.workCols) setWorkCols(saved.workCols)
           if (saved?.removedMix) setRemovedMix(new Set<string>(saved.removedMix))
-          setRicaricaSchemaWorkId(null)
+          setDialogs(d => ({ ...d, ricaricaWorkId: null }))
           setToastMsg('Work aggiornata. La precedente versione è stata archiviata.')
           setTimeout(() => setToastMsg(null), 4000)
         }}
@@ -1019,16 +1006,16 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
 
       {/* ── Dialog conferma reset ── */}
       <ConfirmDialog
-        open={confirmReset !== null}
+        open={dialogs.confirmReset !== null}
         title="Ricominciare da zero?"
         message="Tutti i Work e le rimozioni CRM verranno cancellati. I dati CRM verranno ricaricati dal database."
         confirmLabel="Ricomincia da zero"
         variant="danger"
         onConfirm={() => {
-          setConfirmReset(null)
+          setDialogs(d => ({ ...d, confirmReset: null }))
           handleFullReset()
         }}
-        onCancel={() => setConfirmReset(null)}
+        onCancel={() => setDialogs(d => ({ ...d, confirmReset: null }))}
       />
     </div>
   )

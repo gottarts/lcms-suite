@@ -8,13 +8,26 @@
 //   - GrigliaAnalitiCrm    → colonne Analiti | Mix CRM | Singoli
 //   - ModalCreaWork        → form modale per creare una Work
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef, PrepStockItem } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import { getConcInfo, calcolaVols, targetColIdx, getCompsFromWork } from './SchemaCalibrazione.logic'
 
 const ROW = 62 // px altezza riga singola
+
+// Costanti layout — aggiornare qui se cambiano padding/font nel CSS
+const LAYOUT = {
+  ROW_HEIGHT:   62,  // altezza riga minima (px)
+  CHIP_GAP:      6,  // gap flex tra header e chip nelle card Neat
+  PADDING_V:    14,  // padding verticale card Neat (7px top + 7px bottom)
+  HEADER_H:     22,  // altezza header card Neat
+  CHIP_AREA:   236,  // larghezza disponibile per chip mix (card 254px − padding 18px)
+  CHIP_CHAR_W:   6,  // larghezza stimata per carattere (IBM Plex Mono 9px)
+  CHIP_PAD:     14,  // padding orizzontale chip
+  CHIP_ROW_H:   18,  // altezza di una riga di chip
+  MIX_CARD_PAD: 20,  // padding extra card mix (post-chip)
+} as const
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Griglia Analiti | Mix CRM | Singoli
@@ -51,68 +64,81 @@ export function GrigliaAnalitiCrm({
   }
 
   // mix_id → array nomi analiti (usato per layout righe)
-  const mixAnaliti = new Map<string, string[]>()
-  for (const a of analiti) {
-    if (a.mixId) {
-      const arr = mixAnaliti.get(a.mixId) ?? []
-      arr.push(a.nome)
-      mixAnaliti.set(a.mixId, arr)
+  const mixAnaliti = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const a of analiti) {
+      if (a.mixId) {
+        const arr = m.get(a.mixId) ?? []
+        arr.push(a.nome)
+        m.set(a.mixId, arr)
+      }
     }
-  }
+    return m
+  }, [analiti])
 
   // mix_id → tutti i nomi componenti del mix (contenuto reale, inclusi non-analiti)
-  const mixAllComps = new Map<string, string[]>()
-  for (const c of crmItems) {
-    if (c.mix_id) {
-      const arr = mixAllComps.get(c.mix_id) ?? []
-      if (!arr.includes(c.nome)) arr.push(c.nome)
-      mixAllComps.set(c.mix_id, arr)
+  const mixAllComps = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const c of crmItems) {
+      if (c.mix_id) {
+        const arr = m.get(c.mix_id) ?? []
+        if (!arr.includes(c.nome)) arr.push(c.nome)
+        m.set(c.mix_id, arr)
+      }
     }
-  }
+    return m
+  }, [crmItems])
 
   // mix_id → primo CrmItem (per metadati)
-  const mixInfo = new Map<string, CrmItem>()
-  for (const c of crmItems) {
-    if (c.mix_id && !mixInfo.has(c.mix_id)) mixInfo.set(c.mix_id, c)
-  }
+  const mixInfo = useMemo(() => {
+    const m = new Map<string, CrmItem>()
+    for (const c of crmItems) {
+      if (c.mix_id && !m.has(c.mix_id)) m.set(c.mix_id, c)
+    }
+    return m
+  }, [crmItems])
 
   const mixLottoSel = mixLottoSelProp ?? new Map<string, string>()
 
   // mix_id → set di cv distinti (per rilevare mix eterogenei)
-  const mixCvSets = new Map<string, Set<number>>()
-  for (const c of crmItems) {
-    if (c.mix_id) {
-      const s = mixCvSets.get(c.mix_id) ?? new Set<number>()
-      s.add(c.cv)
-      mixCvSets.set(c.mix_id, s)
+  const mixCvSets = useMemo(() => {
+    const m = new Map<string, Set<number>>()
+    for (const c of crmItems) {
+      if (c.mix_id) {
+        const s = m.get(c.mix_id) ?? new Set<number>()
+        s.add(c.cv)
+        m.set(c.mix_id, s)
+      }
     }
-  }
+    return m
+  }, [crmItems])
 
   // nome analita → CrmItem del mix (per concentrazioni nei chip)
-  const mixItemByNome = new Map<string, CrmItem>()
-  for (const c of crmItems) {
-    if (c.mix_id) mixItemByNome.set(c.nome, c)
-  }
+  const mixItemByNome = useMemo(() => {
+    const m = new Map<string, CrmItem>()
+    for (const c of crmItems) {
+      if (c.mix_id) m.set(c.nome, c)
+    }
+    return m
+  }, [crmItems])
 
   // id (string) → CrmItem per i singoli
-  const sngById = new Map<string, CrmItem>()
-  for (const c of crmItems) {
-    if (!c.mix_id) sngById.set(String(c.id), c)
-  }
+  const sngById = useMemo(() => {
+    const m = new Map<string, CrmItem>()
+    for (const c of crmItems) {
+      if (!c.mix_id) m.set(String(c.id), c)
+    }
+    return m
+  }, [crmItems])
 
   // Stima altezza reale di una card singolo in base al contenuto
   const sngCardH = (crm: CrmItem): number => {
     const isNeat = String(crm.forma ?? '').toLowerCase() === 'neat'
     if (isNeat) {
       const preps = crm.prepStock ?? []
-      // Contenitore: padding top(7) + bottom(7) = 14px
-      // Gap flex tra figli (gap:6): header + N chip → N gap totali
-      const GAP = 6
-      const PADDING_V = 14  // 7px top + 7px bottom
-      const headerH = 22
       if (preps.length === 0) {
         // header + gap + riga "Nessuna prep attiva"
-        return PADDING_V + headerH + GAP + 20
+        return LAYOUT.PADDING_V + LAYOUT.HEADER_H + LAYOUT.CHIP_GAP + 20
       }
       const chipsH = preps.reduce((s, p) => {
         let rh = 12 + 14  // padding chip 6px top+bottom + riga concentrazione (font 10px → ~14px)
@@ -120,9 +146,9 @@ export function GrigliaAnalitiCrm({
         if (p.scadenza) rh += 13
         return s + rh
       }, 0)
-      const gapsH = GAP * preps.length  // gap tra header e chip1, poi tra chip i e i+1
+      const gapsH = LAYOUT.CHIP_GAP * preps.length  // gap tra header e chip1, poi tra chip i e i+1
       // padding cella: 6px; margine respiro: 8px
-      return PADDING_V + headerH + gapsH + chipsH + 6 + 8
+      return LAYOUT.PADDING_V + LAYOUT.HEADER_H + gapsH + chipsH + 6 + 8
     }
     // padding chip: 5px top + 5px bottom = 10px; riga concentrazione ~14px
     let h = 14 + 10
@@ -149,16 +175,15 @@ export function GrigliaAnalitiCrm({
   for (const [mixId, comps] of mixAllComps.entries()) {
     const nAna = (mixAnaliti.get(mixId) ?? []).length
     if (nAna === 0) continue
-    const CHIP_AREA = 236 // card 254px - padding 18px
     let rw = 0, cr = 1
     for (const name of comps) {
       const ci = mixItemByNome.get(name)
       const lbl = ci?.cv ? `${name} · ${ci.cv} mg/L` : name
-      const cw = lbl.length * 6 + 14 // char ~6px (IBM Plex Mono 9px) + padding 14px
-      if (rw > 0 && rw + 2 + cw > CHIP_AREA) { cr++; rw = cw }
+      const cw = lbl.length * LAYOUT.CHIP_CHAR_W + LAYOUT.CHIP_PAD
+      if (rw > 0 && rw + 2 + cw > LAYOUT.CHIP_AREA) { cr++; rw = cw }
       else { rw += (rw > 0 ? 2 : 0) + cw }
     }
-    mixChipsH[mixId] = 62 + cr * 18 + 20 // header + chip rows + padding — totale (non per-riga)
+    mixChipsH[mixId] = LAYOUT.ROW_HEIGHT + cr * LAYOUT.CHIP_ROW_H + LAYOUT.MIX_CARD_PAD // header + chip rows + padding
   }
 
   // Fase 2: altezze righe per ogni analita del mix

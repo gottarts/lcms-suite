@@ -22,20 +22,14 @@ function matchesFiltroDestUso(destinazione_uso: string | null, filtro: DestUso):
   return true
 }
 
-export function buildAnalitiData(
-  items: CrmItem[],
-  analitiRows: { id: number; nome: string }[],
-  filtroDestUso?: DestUso,
-): {
-  analiti: AnalitoItem[]
-  firmaToMixIds: Map<string, string[]>
+// Costruisce le mappe mix (privato): mixNomiMap, mixFirma, firmaToMixIds, mixMap, mixIdsByNome
+function _buildMixMaps(itemsFiltrati: CrmItem[]): {
   mixNomiMap: Map<string, Set<string>>
+  mixFirma: Map<string, string>
+  firmaToMixIds: Map<string, string[]>
+  mixMap: Map<string, string[]>
+  mixIdsByNome: Map<string, string[]>
 } {
-  // Filtra CRM per destinazione d'uso se richiesto
-  const itemsFiltrati = filtroDestUso
-    ? items.filter(item => matchesFiltroDestUso(item.destinazione_uso, filtroDestUso))
-    : items
-
   // Firma di un mix = nomi componenti ordinati alfabeticamente
   const mixNomiMap = new Map<string, Set<string>>()
   for (const item of itemsFiltrati) {
@@ -56,10 +50,7 @@ export function buildAnalitiData(
     firmaToMixIds.set(firma, arr)
   }
 
-  const mixMap      = new Map<string, string[]>()
-  const sngMap      = new Map<string, string[]>()
-  const isMap       = new Map<string, boolean>()
-
+  // nome analita → lista mix_id che lo contengono
   const mixIdsByNome = new Map<string, string[]>()
   for (const item of itemsFiltrati) {
     if (item.mix_id) {
@@ -70,23 +61,57 @@ export function buildAnalitiData(
     }
   }
 
+  // nome analita (uppercase) → lista mix_id attivi (collassa firme identiche)
+  const mixMap = new Map<string, string[]>()
+  for (const item of itemsFiltrati) {
+    if (!item.mix_id) continue
+    const key = item.nome.toUpperCase()
+    const tuttiMixIds = mixIdsByNome.get(key)!
+    const firme = new Set(tuttiMixIds.map(mid => mixFirma.get(mid)!))
+    if (firme.size === 1) {
+      if (!mixMap.has(key)) mixMap.set(key, tuttiMixIds)
+    } else {
+      mixMap.set(key, [item.mix_id])
+    }
+  }
+
+  return { mixNomiMap, mixFirma, firmaToMixIds, mixMap, mixIdsByNome }
+}
+
+// Costruisce le mappe singoli e IS (privato): sngMap, isMap
+function _buildSngMaps(itemsFiltrati: CrmItem[]): {
+  sngMap: Map<string, string[]>
+  isMap: Map<string, boolean>
+} {
+  const sngMap = new Map<string, string[]>()
+  const isMap  = new Map<string, boolean>()
   for (const item of itemsFiltrati) {
     const key = item.nome.toUpperCase()
-    if (item.mix_id) {
-      const tuttiMixIds = mixIdsByNome.get(key)!
-      const firme = new Set(tuttiMixIds.map(mid => mixFirma.get(mid)!))
-      if (firme.size === 1) {
-        if (!mixMap.has(key)) mixMap.set(key, tuttiMixIds)
-      } else {
-        mixMap.set(key, [item.mix_id])
-      }
-    } else {
+    if (!item.mix_id) {
       const arr = sngMap.get(key) ?? []
       arr.push(String(item.id))
       sngMap.set(key, arr)
     }
     if (item.isIS) isMap.set(key, true)
   }
+  return { sngMap, isMap }
+}
+
+export function buildAnalitiData(
+  items: CrmItem[],
+  analitiRows: { id: number; nome: string }[],
+  filtroDestUso?: DestUso,
+): {
+  analiti: AnalitoItem[]
+  firmaToMixIds: Map<string, string[]>
+  mixNomiMap: Map<string, Set<string>>
+} {
+  const itemsFiltrati = filtroDestUso
+    ? items.filter(item => matchesFiltroDestUso(item.destinazione_uso, filtroDestUso))
+    : items
+
+  const { mixNomiMap, firmaToMixIds, mixMap } = _buildMixMaps(itemsFiltrati)
+  const { sngMap, isMap } = _buildSngMaps(itemsFiltrati)
 
   const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
     nome:   row.nome,
@@ -97,6 +122,7 @@ export function buildAnalitiData(
     isIS:   isMap.get(row.nome.toUpperCase()) ?? false,
   }))
 
+  // Ordine: singoli senza mix → analiti con mix (raggruppati per mix) → senza CRM
   const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
   const conMix   = analitiCalc.filter(a =>  a.mixId)
   const senzaCrm = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0)
@@ -265,6 +291,22 @@ export function getConcInfo(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Costruisce un SorgenteSel di tipo 'mix' da un mix_id e dalla lista CRM
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildSorgenteMix(mixId: string, crmItems: CrmItem[]): SorgenteSel {
+  const comps = crmItems.filter(c => c.mix_id === mixId)
+  const crm = comps[0]
+  const cvSet = new Set(comps.map(c => c.cv))
+  return {
+    id: mixId,
+    nome: crm?.mix ?? mixId,
+    cv: crm?.cv ?? 0,
+    tipo: 'mix',
+    concVariabile: cvSet.size > 1,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Determina la colonna di destinazione della prossima Work
 // ─────────────────────────────────────────────────────────────────────────────
 export function targetColIdx(selSrcs: Map<string, SorgenteSel>): number {
@@ -320,7 +362,8 @@ export interface CompostoInWork {
 export function getCompsFromWork(
   w: WorkInSchema,
   workCols: WorkInSchema[][],
-  crmItems: CrmItem[]
+  crmItems: CrmItem[],
+  visited: Set<string> = new Set()
 ): CompostoInWork[] {
   const result: CompostoInWork[] = []
   for (let i = 0; i < w.srcs.length; i++) {
@@ -339,8 +382,10 @@ export function getCompsFromWork(
     if (src.tipo === 'work') {
       let srcWork: WorkInSchema | undefined
       for (const col of workCols) { srcWork = col.find(x => x.id === src.id); if (srcWork) break }
-      if (srcWork) {
-        getCompsFromWork(srcWork, workCols, crmItems).forEach(sc =>
+      if (srcWork && !visited.has(srcWork.id)) {
+        const nextVisited = new Set(visited)
+        nextVisited.add(w.id)
+        getCompsFromWork(srcWork, workCols, crmItems, nextVisited).forEach(sc =>
           result.push({ ...sc, concInWork: sc.concInWork * dilFactor })
         )
       }
