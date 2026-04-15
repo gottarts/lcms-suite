@@ -20,6 +20,7 @@ interface WorkDrawerProps {
   onArchivia?: (id: number) => void
   onVaiASchema?: (metodoId: string) => void
   metodiNomi?: Record<string, string>
+  openPrepForm?: boolean
 }
 
 const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
@@ -184,7 +185,7 @@ function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchem
 
 // ── Componente principale ────────────────────────────────────────────────────
 
-export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVaiASchema, metodiNomi }: WorkDrawerProps) {
+export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVaiASchema, metodiNomi, openPrepForm }: WorkDrawerProps) {
   const [work, setWork]           = useState<any>(null)
   const [workChain, setWorkChain] = useState<Map<number, any>>(new Map())
   const [storico, setStorico]     = useState<any[]>([])
@@ -219,7 +220,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
       reload(workId)
       setStorico([])
       setStoricoOpen(false)
-      setPrepForm(false)
+      setPrepForm(!!openPrepForm)
       setPrepData(new Date().toISOString().slice(0, 10))
       setPrepNote('')
       setPrepOp('')

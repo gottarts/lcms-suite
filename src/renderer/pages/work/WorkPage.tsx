@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Plus, Search, FlaskConical, AlertCircle, Archive } from 'lucide-react'
+import { Plus, Search, FlaskConical, AlertCircle, Archive, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 export function WorkPage() {
@@ -20,6 +20,7 @@ export function WorkPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editWork, setEditWork] = useState<any>(null)
   const [drawerId, setDrawerId] = useState<number | null>(null)
+  const [drawerPrepForm, setDrawerPrepForm] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [archiviaId, setArchiviaId] = useState<number | null>(null)
   const [mostraArchivio, setMostraArchivio] = useState(false)
@@ -155,22 +156,24 @@ export function WorkPage() {
           )}
         </div>
       ) : mostraArchivio ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="space-y-2">
           {filtered.map(w => (
-            <WorkCardArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} />
+            <WorkRowArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="space-y-2">
           {filtered.map(w => (
-            <WorkCard
+            <WorkRow
               key={w.id}
               work={w}
               metodiNomi={metodiNomi}
               onClick={() => setDrawerId(w.id)}
-              onPrepara={() => setDrawerId(w.id)}
+              onPrepara={() => { setDrawerPrepForm(true); setDrawerId(w.id) }}
               onGoSchema={w.metodi_ids?.length > 0 ? (mid: string) => navigate('/metodi', { state: { schemaMetodoId: mid } }) : undefined}
               onAddToSchema={() => setAddToSchemaWork({ id: w.id, nome: w.nome })}
+              onEdit={() => handleEdit(w)}
+              onArchivia={() => { setDrawerId(null); setArchiviaId(w.id) }}
             />
           ))}
         </div>
@@ -185,12 +188,13 @@ export function WorkPage() {
 
       <WorkDrawer
         workId={drawerId}
-        onClose={() => setDrawerId(null)}
+        onClose={() => { setDrawerId(null); setDrawerPrepForm(false) }}
         onEdit={handleEdit}
         onDelete={id => { setDrawerId(null); setDeleteId(id) }}
         onArchivia={!mostraArchivio ? id => { setDrawerId(null); setArchiviaId(id) } : undefined}
         onVaiASchema={(metodoId) => { setDrawerId(null); navigate('/metodi', { state: { schemaMetodoId: metodoId } }) }}
         metodiNomi={metodiNomi}
+        openPrepForm={drawerPrepForm}
       />
 
       <ConfirmDialog
@@ -224,57 +228,149 @@ export function WorkPage() {
   )
 }
 
-// ─── Card Work Archiviata ─────────────────────────────────────────────────────
+// ─── Riga Work Archiviata ─────────────────────────────────────────────────────
 
-function WorkCardArchivio({ work, metodiNomi, onClick }: { work: any; metodiNomi: Record<string, string>; onClick: () => void }) {
+function WorkRowArchivio({ work, metodiNomi, onClick }: { work: any; metodiNomi: Record<string, string>; onClick: () => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const [storico, setStorico] = useState<any[] | null>(null)
+  const [loadingStorico, setLoadingStorico] = useState(false)
+
+  const isTracciata = !!work.validita_mesi
+
+  const handleToggleStorico = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (expanded) { setExpanded(false); return }
+    setExpanded(true)
+    if (storico === null) {
+      setLoadingStorico(true)
+      const data = await workApi.preparazioniList(work.id)
+      setStorico(data)
+      setLoadingStorico(false)
+    }
+  }
+
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 opacity-75 cursor-pointer hover:shadow-md transition-shadow" onClick={onClick}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="font-heading font-semibold text-sm leading-tight">{work.nome}</div>
+    <div className="border rounded-md overflow-hidden opacity-75">
+      <div
+        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/20 transition-colors"
+        onClick={onClick}
+      >
+        <div className="font-medium text-sm flex-1 truncate">{work.nome}</div>
+        {work.archiviato_at && (
+          <span className="text-xs text-muted-foreground hidden sm:block">
+            {formatDate(work.archiviato_at.slice(0, 10))}
+          </span>
+        )}
+        {work.archiviato_motivo && (
+          <span className="text-xs text-muted-foreground italic truncate max-w-[160px] hidden md:block">
+            {work.archiviato_motivo}
+          </span>
+        )}
+        {work.metodi_ids && work.metodi_ids.length > 0 && (
+          <div className="flex gap-1 shrink-0">
+            {work.metodi_ids.map((mid: string) => (
+              <Badge key={mid} variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                {metodiNomi[mid] ?? mid}
+              </Badge>
+            ))}
+          </div>
+        )}
         <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 text-muted-foreground">
           <Archive className="h-2.5 w-2.5 mr-1" />
           Archiviata
         </Badge>
+        {isTracciata && (
+          <Button
+            size="sm" variant="ghost"
+            className="h-6 w-6 p-0 text-muted-foreground shrink-0"
+            onClick={handleToggleStorico}
+            title={expanded ? 'Nascondi storico preparazioni' : 'Mostra storico preparazioni'}
+          >
+            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </Button>
+        )}
       </div>
-      {work.archiviato_at && (
-        <div className="text-xs text-muted-foreground mb-1">
-          {formatDate(work.archiviato_at.slice(0, 10))}
-        </div>
-      )}
-      {work.archiviato_motivo && (
-        <div className="text-xs text-muted-foreground italic truncate">{work.archiviato_motivo}</div>
-      )}
-      {work.metodi_ids && work.metodi_ids.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {work.metodi_ids.map((mid: string) => (
-            <Badge key={mid} variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-              {metodiNomi[mid] ?? mid}
-            </Badge>
-          ))}
+      {expanded && (
+        <div className="divide-y divide-border">
+          {loadingStorico && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">Caricamento...</div>
+          )}
+          {!loadingStorico && storico && storico.length === 0 && (
+            <div className="px-3 py-2 text-xs text-muted-foreground italic">Nessuna preparazione registrata.</div>
+          )}
+          {!loadingStorico && storico && storico.map((p: any) => {
+            const scad = (() => {
+              if (!p.data_prep || !work.validita_mesi) return null
+              const d = new Date(p.data_prep)
+              d.setDate(d.getDate() + Math.round(work.validita_mesi * 30.44))
+              return d.toISOString().slice(0, 10)
+            })()
+            const oggi = new Date().toISOString().slice(0, 10)
+            const stato = scad
+              ? (scad < oggi ? 'scaduta' : scad <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) ? 'in_scadenza' : 'attiva')
+              : null
+            const sb = stato ? STATO_LAB_BADGE[stato] : null
+            return (
+              <div key={p.id} className="px-3 py-2 text-xs flex items-center gap-3 bg-background">
+                <span className="font-medium">{formatDate(p.data_prep)}</span>
+                {p.operatore && <span className="text-muted-foreground">· {p.operatore}</span>}
+                {p.note && <span className="italic text-muted-foreground truncate max-w-[200px]">{p.note}</span>}
+                {scad && <span className="text-muted-foreground ml-auto shrink-0">scad. {formatDate(scad)}</span>}
+                {sb && (
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${sb.className}`}>
+                    {sb.label}
+                  </Badge>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
 
-// ─── Card Work ────────────────────────────────────────────────────────────────
+// ─── Badge stato lab ──────────────────────────────────────────────────────────
 
 const STATO_LAB_BADGE: Record<string, { label: string; className: string }> = {
-  attiva:       { label: 'Attiva',       className: 'border-green-300 text-green-700 bg-green-50' },
-  in_scadenza:  { label: 'In scadenza',  className: 'border-amber-300 text-amber-700 bg-amber-50' },
-  scaduta:      { label: 'Scaduta',      className: 'border-red-300 text-red-700 bg-red-50' },
-  non_preparata:{ label: 'Non preparata',className: 'text-muted-foreground' },
+  attiva:        { label: 'Attiva',        className: 'border-green-300 text-green-700 bg-green-50' },
+  in_scadenza:   { label: 'In scadenza',   className: 'border-amber-300 text-amber-700 bg-amber-50' },
+  scaduta:       { label: 'Scaduta',       className: 'border-red-300 text-red-700 bg-red-50' },
+  non_preparata: { label: 'Non preparata', className: 'text-muted-foreground' },
 }
 
-function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiNomi }: { work: any; onClick: () => void; onPrepara?: () => void; onGoSchema?: (metodoId: string) => void; onAddToSchema?: () => void; metodiNomi?: Record<string, string> }) {
-  const isTracciata = !!work.validita_mesi
-  const isIntermedia = (work.livello ?? 0) > 0
-  const isBloccata = !!work.bloccata
-  const haScaduti = !!work.ha_crm_scaduti
-  const statoLab = work.stato_lab as string | null | undefined
-  const statoBadge = statoLab ? STATO_LAB_BADGE[statoLab] : null
+// ─── Riga Work ────────────────────────────────────────────────────────────────
 
-  // Calcola data scadenza per badge attiva/in_scadenza
+function WorkRow({
+  work,
+  metodiNomi,
+  onClick,
+  onPrepara,
+  onGoSchema,
+  onAddToSchema,
+  onEdit,
+  onArchivia,
+}: {
+  work: any
+  metodiNomi?: Record<string, string>
+  onClick: () => void
+  onPrepara?: () => void
+  onGoSchema?: (metodoId: string) => void
+  onAddToSchema?: () => void
+  onEdit?: () => void
+  onArchivia?: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [storico, setStorico] = useState<any[] | null>(null)
+  const [loadingStorico, setLoadingStorico] = useState(false)
+
+  const isTracciata   = !!work.validita_mesi
+  const isIntermedia  = (work.livello ?? 0) > 0
+  const isBloccata    = !!work.bloccata
+  const haScaduti     = !!work.ha_crm_scaduti
+  const statoLab      = work.stato_lab as string | null | undefined
+  const statoBadge    = statoLab ? STATO_LAB_BADGE[statoLab] : null
+
   const scadenzaLabel = (() => {
     if (!work.ultima_preparazione?.data_prep || !work.validita_mesi) return null
     const d = new Date(work.ultima_preparazione.data_prep)
@@ -282,103 +378,124 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiN
     return formatDate(d.toISOString().slice(0, 10))
   })()
 
+  const infoCompatta = [
+    work.concentrazione != null && !work.conc_variabile
+      ? `${work.concentrazione} ${work.unita_conc ?? 'mg/L'}`
+      : work.conc_variabile ? 'variabile' : null,
+    work.volume_ml ? `${work.volume_ml} mL` : null,
+    work.solvente ?? null,
+    work.operatore ? `Op: ${work.operatore}` : null,
+  ].filter(Boolean).join(' · ')
+
+  const handleToggleStorico = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (expanded) {
+      setExpanded(false)
+      return
+    }
+    setExpanded(true)
+    if (storico === null) {
+      setLoadingStorico(true)
+      const data = await workApi.preparazioniList(work.id)
+      setStorico(data)
+      setLoadingStorico(false)
+    }
+  }
+
   return (
-    <div
-      className="rounded-lg border bg-card text-card-foreground shadow-sm cursor-pointer hover:shadow-md transition-shadow p-4"
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="font-heading font-semibold text-sm leading-tight">{work.nome}</div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          {isBloccata && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-300 text-red-700 bg-red-50 flex items-center gap-1">
-              <AlertCircle className="h-2.5 w-2.5" />
-              CRM dismessi
-            </Badge>
-          )}
-          {!isBloccata && haScaduti && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
-              <AlertCircle className="h-2.5 w-2.5" />
-              CRM scaduti
-            </Badge>
-          )}
-          {!isBloccata && !!work.ha_prep_scadute && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
-              <AlertCircle className="h-2.5 w-2.5" />
-              Prep stock scadute
-            </Badge>
-          )}
-          {isIntermedia && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-700 bg-purple-50">
-              Intermedia
-            </Badge>
-          )}
-          {isTracciata ? (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-300 text-amber-700 bg-amber-50">
-              {work.validita_mesi} mesi
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-              al momento
-            </Badge>
-          )}
-          {statoBadge && (
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statoBadge.className}`}>
-              {statoBadge.label}{scadenzaLabel && (statoLab === 'attiva' || statoLab === 'in_scadenza') ? ` · ${scadenzaLabel}` : ''}
-            </Badge>
+    <div className="border rounded-md overflow-hidden">
+      {/* Header riga */}
+      <div
+        className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={onClick}
+      >
+        {/* Nome + pulsante Prepara/Rinnova */}
+        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+          <div className="font-medium text-sm min-w-0 truncate">{work.nome}</div>
+          {onPrepara && isTracciata && (
+            <div onClick={e => e.stopPropagation()}>
+              <Button
+                size="sm"
+                variant="outline"
+                className={`h-6 text-[11px] px-2.5 shrink-0 font-medium gap-1.5 ${
+                  isBloccata
+                    ? 'border-orange-300 text-orange-700 bg-orange-50/60 hover:bg-orange-100 cursor-not-allowed opacity-60'
+                    : work.ultima_preparazione
+                    ? 'border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100'
+                    : 'border-green-400 text-green-700 bg-green-50 hover:bg-green-100'
+                }`}
+                onClick={onPrepara}
+                disabled={isBloccata}
+                title={isBloccata ? 'Work bloccata: uno o più CRM sono stati dismessi' : undefined}
+              >
+                <FlaskConical className="h-3 w-3" />
+                {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}
+              </Button>
+            </div>
           )}
         </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-        {work.concentrazione != null && !work.conc_variabile && (
-          <div>
-            <span className="text-foreground font-medium">
-              {work.concentrazione} {work.unita_conc ?? 'mg/L'}
-            </span>
+        {/* Info compatta */}
+        {infoCompatta && (
+          <span className="text-xs text-muted-foreground hidden lg:block shrink-0 max-w-[260px] truncate">
+            {infoCompatta}
+          </span>
+        )}
+
+        {/* Badge alert */}
+        {isBloccata && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-red-300 text-red-700 bg-red-50 flex items-center gap-1">
+            <AlertCircle className="h-2.5 w-2.5" />CRM dismessi
+          </Badge>
+        )}
+        {!isBloccata && haScaduti && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
+            <AlertCircle className="h-2.5 w-2.5" />CRM scaduti
+          </Badge>
+        )}
+        {!isBloccata && !!work.ha_prep_scadute && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
+            <AlertCircle className="h-2.5 w-2.5" />Prep stock scadute
+          </Badge>
+        )}
+        {isIntermedia && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-purple-300 text-purple-700 bg-purple-50">
+            Intermedia
+          </Badge>
+        )}
+        {isTracciata ? (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
+            {work.validita_mesi} mesi
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 text-muted-foreground">
+            al momento
+          </Badge>
+        )}
+        {statoBadge && (
+          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${statoBadge.className}`}>
+            {statoBadge.label}{scadenzaLabel && (statoLab === 'attiva' || statoLab === 'in_scadenza') ? ` · ${scadenzaLabel}` : ''}
+          </Badge>
+        )}
+
+        {/* Metodi badge */}
+        {metodiNomi && work.metodi_ids && work.metodi_ids.length > 0 && (
+          <div className="flex gap-1 shrink-0 hidden sm:flex">
+            {work.metodi_ids.map((mid: string) => (
+              <Badge key={mid} variant="outline" className="text-[10px] px-1.5 py-0 border-indigo-300 text-indigo-700 bg-indigo-50">
+                {metodiNomi[mid] ?? mid}
+              </Badge>
+            ))}
           </div>
         )}
-        {work.conc_variabile === 1 && (
-          <div><span className="text-foreground italic">variabile</span></div>
-        )}
-        {work.volume_ml && (
-          <div>{work.volume_ml} mL</div>
-        )}
-        {work.solvente && (
-          <div className="col-span-2 truncate">{work.solvente}</div>
-        )}
-        {work.operatore && (
-          <div className="col-span-2 truncate">Op: {work.operatore}</div>
-        )}
-      </div>
-      {metodiNomi && work.metodi_ids && work.metodi_ids.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {work.metodi_ids.map((mid: string) => (
-            <Badge key={mid} variant="outline" className="text-[10px] px-1.5 py-0 border-indigo-300 text-indigo-700 bg-indigo-50">
-              {metodiNomi[mid] ?? mid}
-            </Badge>
-          ))}
-        </div>
-      )}
-      {(onPrepara || onGoSchema || onAddToSchema) && (
-        <div className="flex gap-1 mt-2 pt-2 border-t border-border/50" onClick={e => e.stopPropagation()}>
-          {onPrepara && work.validita_mesi && (
-            <Button
-              size="sm" variant="outline"
-              className="h-6 text-[10px] px-2 flex-1"
-              onClick={onPrepara}
-              disabled={isBloccata}
-              title={isBloccata ? 'Work bloccata: uno o più CRM sono stati dismessi' : undefined}
-            >
-              <FlaskConical className="h-3 w-3 mr-1" />
-              {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}
-            </Button>
-          )}
+
+        {/* Pulsanti azioni */}
+        <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
           {onGoSchema && work.metodi_ids && work.metodi_ids.length > 0 && (
             work.metodi_ids.length === 1 ? (
               <Button
                 size="sm" variant="outline"
-                className={`h-6 text-[10px] px-2 flex-1${isBloccata ? ' border-orange-300 text-orange-700 hover:bg-orange-50' : ''}`}
+                className={`h-6 text-[10px] px-2${isBloccata ? ' border-orange-300 text-orange-700 hover:bg-orange-50' : ''}`}
                 onClick={() => onGoSchema(work.metodi_ids[0])}
                 title={isBloccata ? 'Vai allo Schema per aggiornare i lotti e creare una nuova work' : undefined}
               >
@@ -389,13 +506,13 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiN
                 <DropdownMenuTrigger asChild>
                   <Button
                     size="sm" variant="outline"
-                    className={`h-6 text-[10px] px-2 flex-1${isBloccata ? ' border-orange-300 text-orange-700 hover:bg-orange-50' : ''}`}
+                    className={`h-6 text-[10px] px-2${isBloccata ? ' border-orange-300 text-orange-700 hover:bg-orange-50' : ''}`}
                     title={isBloccata ? 'Vai allo Schema per aggiornare i lotti e creare una nuova work' : undefined}
                   >
                     {isBloccata ? 'Aggiorna Schema ↗' : 'Schema ↗'}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent align="end">
                   {(work.metodi_ids as string[]).map((mid: string) => (
                     <DropdownMenuItem key={mid} onClick={() => onGoSchema(mid)}>
                       {metodiNomi?.[mid] ?? mid}
@@ -408,13 +525,82 @@ function WorkCard({ work, onClick, onPrepara, onGoSchema, onAddToSchema, metodiN
           {onAddToSchema && (
             <Button
               size="sm" variant="outline"
-              className="h-6 text-[10px] px-2 flex-1 border-blue-300 text-blue-700 hover:bg-blue-50"
+              className="h-6 text-[10px] px-2 border-blue-300 text-blue-700 hover:bg-blue-50"
               onClick={onAddToSchema}
               title="Aggiungi questa work a un metodo"
             >
               + Metodo ↗
             </Button>
           )}
+          {onEdit && (
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[10px] px-2"
+              onClick={onEdit}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+          {onArchivia && (
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[10px] px-2 text-amber-700 border-amber-300 hover:bg-amber-50"
+              onClick={onArchivia}
+              title="Archivia work"
+            >
+              <Archive className="h-3 w-3" />
+            </Button>
+          )}
+          {isTracciata && (
+            <Button
+              size="sm" variant="ghost"
+              className="h-6 w-6 p-0 text-muted-foreground"
+              onClick={handleToggleStorico}
+              title={expanded ? 'Nascondi storico preparazioni' : 'Mostra storico preparazioni'}
+            >
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Storico preparazioni */}
+      {expanded && (
+        <div className="divide-y divide-border">
+          {loadingStorico && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">Caricamento...</div>
+          )}
+          {!loadingStorico && storico && storico.length === 0 && (
+            <div className="px-3 py-2 text-xs text-muted-foreground italic">Nessuna preparazione registrata.</div>
+          )}
+          {!loadingStorico && storico && storico.map((p: any) => {
+            const scad = (() => {
+              if (!p.data_prep || !work.validita_mesi) return null
+              const d = new Date(p.data_prep)
+              d.setDate(d.getDate() + Math.round(work.validita_mesi * 30.44))
+              return d.toISOString().slice(0, 10)
+            })()
+            const oggi = new Date().toISOString().slice(0, 10)
+            const stato = scad
+              ? (scad < oggi ? 'scaduta' : scad <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) ? 'in_scadenza' : 'attiva')
+              : null
+            const sb = stato ? STATO_LAB_BADGE[stato] : null
+            return (
+              <div key={p.id} className="px-3 py-2 text-xs flex items-center gap-3 bg-background">
+                <span className="font-medium">{formatDate(p.data_prep)}</span>
+                {p.operatore && <span className="text-muted-foreground">· {p.operatore}</span>}
+                {p.note && <span className="italic text-muted-foreground truncate max-w-[200px]">{p.note}</span>}
+                {scad && (
+                  <span className="text-muted-foreground ml-auto shrink-0">scad. {formatDate(scad)}</span>
+                )}
+                {sb && (
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${sb.className}`}>
+                    {sb.label}
+                  </Badge>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
