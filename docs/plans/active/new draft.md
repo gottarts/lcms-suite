@@ -14,13 +14,9 @@
 
  ## importante
 
-
-Consolidate calibration drawer schemas
-(finire con nome metodo e fare resoconto sessione)
+Fix arrow display on recalibration reload
 
  ## altri
-  mettere link a db composti per tutti i badge dei crm in audit CRM della dashboard
- 
 
 
 

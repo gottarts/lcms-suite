@@ -569,7 +569,9 @@ export function registerWorkIpc(): void {
           SELECT MAX(nuova_scadenza) FROM composti_storia
           WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
         ) END AS ultima_rivalidazione,
-        cp.id AS prep_composto_id
+        cp.id AS prep_composto_id,
+        cp.data_dismissione AS prep_composto_dismissione,
+        cp.scadenza_prodotto AS prep_composto_scadenza
       FROM work_ingredienti wi
       LEFT JOIN composti c  ON wi.source_type = 'crm'  AND c.id  = wi.source_id
       LEFT JOIN preparazioni p  ON wi.source_type = 'prep' AND p.id  = COALESCE(wi.prep_id, wi.source_id)
@@ -604,16 +606,50 @@ export function registerWorkIpc(): void {
       ORDER BY p2.id DESC
     `)
 
+    // Preparazioni valide di altri composti con lo stesso nome (caso: composto padre
+    // dismesso/scaduto → nuovo lotto ha nuovo composto_id → servono le sue preparazioni).
+    const stmtSostitutiPrepAltriComposti = db.prepare(`
+      SELECT p2.id AS id, p2.flacone AS lotto, p2.concentrazione_reale AS concentrazione,
+        p2.unita_conc AS unita_conc, NULL AS mix_id
+      FROM preparazioni p2
+      JOIN composti c2 ON c2.id = p2.composto_id
+      WHERE c2.nome = ?
+        AND c2.id != ?
+        AND c2.data_dismissione IS NULL
+        AND (
+          c2.scadenza_prodotto IS NULL OR c2.scadenza_prodotto >= ?
+          OR (
+            SELECT MAX(nuova_scadenza) FROM composti_storia
+            WHERE composto_id = c2.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL
+          ) >= ?
+        )
+        AND p2.data_dismissione IS NULL
+        AND (p2.scadenza IS NULL OR p2.scadenza >= ?)
+      ORDER BY p2.id DESC
+    `)
+
     return ingredienti.map((ing: any) => {
       if (ing.source_type === 'prep') {
         const prepId = ing.prep_id ?? ing.source_id
-        const isScaduto = !ing.data_dismissione &&
+        const prepScaduto = !ing.data_dismissione &&
           ing.scadenza_prodotto && ing.scadenza_prodotto < oggi
+        const compostoScaduto = !ing.prep_composto_dismissione &&
+          ing.prep_composto_scadenza && ing.prep_composto_scadenza < oggi
+        const compostoDismesso = !!ing.prep_composto_dismissione
 
-        if (!ing.data_dismissione && !isScaduto) {
+        if (!ing.data_dismissione && !prepScaduto && !compostoScaduto && !compostoDismesso) {
           return { ...ing, stato: 'ok', sostituti: [] }
         }
-        const sostituti = stmtSostitutiPrep.all(ing.prep_composto_id, prepId, oggi) as any[]
+        // 1) Preparazioni ancora valide sullo STESSO composto padre (rara: il composto
+        //    è ancora OK ma il prep è scaduto/dismesso).
+        let sostituti = stmtSostitutiPrep.all(ing.prep_composto_id, prepId, oggi) as any[]
+        // 2) Se il composto padre è dismesso/scaduto (caso tipico della ricarica Neat),
+        //    cerca preparazioni su composti diversi con lo stesso nome.
+        if ((compostoDismesso || compostoScaduto) && sostituti.length === 0) {
+          sostituti = stmtSostitutiPrepAltriComposti.all(
+            ing.nome, ing.prep_composto_id, oggi, oggi, oggi
+          ) as any[]
+        }
         const stato =
           sostituti.length === 1 ? 'auto' :
           sostituti.length  >  1 ? 'ambiguo' : 'mancante'
@@ -713,6 +749,124 @@ export function registerWorkIpc(): void {
         WHERE id = ?
       `).run(newId, newId, params.old_work_id)
 
+      // Rileggi gli ingredienti della NUOVA work per rigenerare srcs/vols nello schema_json.
+      // Senza questo, le frecce tra sorgenti e Work non vengono disegnate: i src.id nello
+      // schema continuerebbero a puntare a mix_id/composto_id del lotto pre-ricarica.
+      const newIngr = db.prepare(
+        'SELECT * FROM work_ingredienti WHERE work_id = ?'
+      ).all(newId) as any[]
+
+      const getCompostoFull = db.prepare(
+        'SELECT id, nome, mix_id, forma_commerciale, concentrazione FROM composti WHERE id = ?'
+      )
+      const getPrepFull = db.prepare(`
+        SELECT p.id, p.composto_id, p.flacone,
+          (SELECT COUNT(*) FROM preparazioni p2
+           WHERE p2.composto_id = p.composto_id AND p2.id <= p.id) AS progressivo
+        FROM preparazioni p WHERE p.id = ?
+      `)
+
+      // Costruisce srcs[] + vols[] dai nuovi ingredienti, replicando la logica di
+      // ricostruisciWorkInSchema() lato renderer. Per source_type === 'work' richiede
+      // di trovare la work dipendente nello stesso schema.workCols (l'id locale della card).
+      function buildSrcsAndVols(workCols: any[][]): { srcs: any[]; vols: any[] } {
+        const srcs: any[] = []
+        const vols: any[] = []
+        const seenMix = new Set<string>()
+        for (const ing of newIngr) {
+          if (ing.source_type === 'crm') {
+            const c = getCompostoFull.get(ing.source_id) as any
+            if (!c) continue
+            if (c.mix_id) {
+              if (!seenMix.has(c.mix_id)) {
+                seenMix.add(c.mix_id)
+                srcs.push({
+                  id: c.mix_id,
+                  nome: c.forma_commerciale ?? c.nome ?? '',
+                  cv: Number(c.concentrazione) || 0,
+                  tipo: 'mix',
+                })
+              }
+            } else {
+              srcs.push({
+                id: String(c.id),
+                nome: c.nome ?? '',
+                cv: Number(c.concentrazione) || 0,
+                tipo: 'sng',
+              })
+            }
+            vols.push({
+              nome: c.mix_id ? (c.forma_commerciale ?? c.nome ?? '') : (c.nome ?? ''),
+              vol: ing.volume_prelievo_ml ?? 0,
+              concTarget: ing.conc_target_mgL ?? undefined,
+              dilFactor: ing.fattore_diluizione ?? undefined,
+              modo: ing.modo_calcolo ?? 'conc',
+            })
+          } else if (ing.source_type === 'work') {
+            // Cerca la work dipendente nello schema per riemettere l'id locale della card
+            let found: any | undefined
+            let foundColIdx = -1
+            for (let ci = 0; ci < workCols.length; ci++) {
+              const wf = (workCols[ci] ?? []).find((w: any) => w.dbId === ing.source_id)
+              if (wf) { found = wf; foundColIdx = ci; break }
+            }
+            if (!found) continue
+            srcs.push({
+              id: found.id,
+              nome: found.nome,
+              cv: found.concVariabile ? 1 : 0,
+              tipo: 'work',
+              colSrc: foundColIdx,
+            })
+            vols.push({
+              nome: found.nome,
+              vol: ing.volume_prelievo_ml ?? 0,
+              concTarget: ing.conc_target_mgL ?? undefined,
+              dilFactor: ing.fattore_diluizione ?? undefined,
+              modo: ing.modo_calcolo ?? 'conc',
+            })
+          } else if (ing.source_type === 'prep') {
+            // La chiave della card nell'UI è `prep_<preparazioni.id>`
+            // (vedi SchemaCalibrazione.grid.tsx: `prepKey = prep_${prep.id}`).
+            // Quindi src.id deve essere `prep_<newPrepId>` altrimenti computeConnections
+            // non trova la card sorgente e la freccia non viene disegnata.
+            const prepId = Number(ing.prep_id ?? ing.source_id)
+            const prep = getPrepFull.get(prepId) as any
+            if (!prep) continue
+            const c = getCompostoFull.get(prep.composto_id) as any
+            if (!c) continue
+            srcs.push({
+              id: `prep_${prepId}`,
+              nome: c.nome ?? '',
+              cv: Number(c.concentrazione) || 0,
+              tipo: 'prep',
+              prepId,
+              flacone: prep.flacone ?? null,
+              progressivo: prep.progressivo ?? null,
+              lotto: null,
+            })
+            vols.push({
+              nome: c.nome ?? '',
+              vol: ing.volume_prelievo_ml ?? 0,
+              concTarget: ing.conc_target_mgL ?? undefined,
+              dilFactor: ing.fattore_diluizione ?? undefined,
+              modo: ing.modo_calcolo ?? 'conc',
+            })
+          }
+        }
+        return { srcs, vols }
+      }
+
+      // Collega in composti_metodi i nuovi CRM alla work_metodi → altrimenti
+      // composti:list-for-schema non li restituirebbe e i CRM non comparirebbero come card.
+      const newCrmIds = new Set<number>()
+      for (const ing of newIngr) {
+        if (ing.source_type === 'crm') newCrmIds.add(Number(ing.source_id))
+      }
+      const insertCompMet = db.prepare(
+        'INSERT OR IGNORE INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
+      )
+
       // Aggiorna schema_json e collega work_metodi SOLO per i metodi dove la vecchia work era presente
       // (evita di propagare entries spurie in work_metodi)
       for (const mid of params.metodi_ids) {
@@ -720,15 +874,23 @@ export function registerWorkIpc(): void {
         if (!schemaRow) continue
         const schema = JSON.parse(schemaRow.schema_json)
         let changed = false
+        const { srcs: newSrcs, vols: newVols } = buildSrcsAndVols(schema.workCols ?? [])
         for (const col of schema.workCols ?? []) {
           for (const w of col) {
-            if (w.dbId === params.old_work_id) { w.dbId = Number(newId); changed = true }
+            if (w.dbId === params.old_work_id) {
+              w.dbId = Number(newId)
+              w.srcs = newSrcs
+              w.vols = newVols
+              if (w.extraSrcs) delete w.extraSrcs
+              changed = true
+            }
           }
         }
         if (changed) {
           db.prepare("UPDATE schema_calibrazione SET schema_json = ?, updated_at = datetime('now') WHERE metodo_id = ?")
             .run(JSON.stringify(schema), mid)
           db.prepare('INSERT OR IGNORE INTO work_metodi (work_id, metodo_id) VALUES (?, ?)').run(newId, mid)
+          for (const cid of newCrmIds) insertCompMet.run(cid, mid)
         }
         // else: la vecchia work non era nel schema di questo metodo → non creare link spuri
       }

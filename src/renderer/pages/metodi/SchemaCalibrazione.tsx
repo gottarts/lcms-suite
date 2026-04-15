@@ -987,18 +987,15 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       <RicaricaDialog
         workId={ricaricaSchemaWorkId}
         onClose={() => setRicaricaSchemaWorkId(null)}
-        onSuccess={newWorkId => {
-          // Aggiorna dbId nella colonna per puntare alla nuova work e salva subito
-          // (senza attendere il debounce, per evitare di perdere la modifica se l'utente naviga via)
-          if (ricaricaSchemaWorkId != null) {
-            setWorkCols(prev => {
-              const updated = prev.map(col =>
-                col.map(w => w.dbId === ricaricaSchemaWorkId ? { ...w, dbId: newWorkId } : w)
-              )
-              schemaCalApi.save(metodoId, updated, [], Array.from(removedMix), scenarioScelto)
-              return updated
-            })
-          }
+        onSuccess={async () => {
+          // Il backend ha già rigenerato schema_json con i nuovi srcs/vols nella
+          // transazione di work:ricarica. Qui basta ricaricare CRM + schema dal DB:
+          // React riallineerà le card sorgenti e computeConnections troverà i cardRefs
+          // con i nuovi mix_id, ridisegnando le frecce.
+          await reload()
+          const saved = await schemaCalApi.get(metodoId)
+          if (saved?.workCols) setWorkCols(saved.workCols)
+          if (saved?.removedMix) setRemovedMix(new Set<string>(saved.removedMix))
           setRicaricaSchemaWorkId(null)
           setToastMsg('Work aggiornata. La precedente versione è stata archiviata.')
           setTimeout(() => setToastMsg(null), 4000)
