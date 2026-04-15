@@ -1,6 +1,30 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db'
 
+// Ripara retroattivamente schemi danneggiati dal bug di buildSrcsAndVols
+// (commit 8917fff): per ogni work in workCols, se vols[] contiene entry
+// consecutive con stesso nome+vol, tiene solo la prima. Lossless perché
+// il flusso corretto produce al massimo una entry per mix.
+function dedupVols(schema: any): void {
+  const cols = schema?.workCols
+  if (!Array.isArray(cols)) return
+  for (const col of cols) {
+    if (!Array.isArray(col)) continue
+    for (const w of col) {
+      if (!Array.isArray(w?.vols)) continue
+      const seen = new Set<string>()
+      const out: any[] = []
+      for (const v of w.vols) {
+        const key = `${v?.nome ?? ''}|${v?.vol ?? ''}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(v)
+      }
+      w.vols = out
+    }
+  }
+}
+
 export function registerSchemaCalibrazioneIpc(): void {
 
   ipcMain.handle('schema-cal:get', (_, metodoId: string) => {
@@ -8,7 +32,9 @@ export function registerSchemaCalibrazioneIpc(): void {
     const row = db.prepare('SELECT schema_json FROM schema_calibrazione WHERE metodo_id = ?').get(metodoId) as any
     if (!row) return null
 
-    return JSON.parse(row.schema_json)
+    const schema = JSON.parse(row.schema_json)
+    dedupVols(schema)
+    return schema
   })
 
   ipcMain.handle('schema-cal:save', (_, metodoId: string, schemaJson: string) => {

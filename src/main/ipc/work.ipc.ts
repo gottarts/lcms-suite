@@ -778,15 +778,17 @@ export function registerWorkIpc(): void {
             const c = getCompostoFull.get(ing.source_id) as any
             if (!c) continue
             if (c.mix_id) {
-              if (!seenMix.has(c.mix_id)) {
-                seenMix.add(c.mix_id)
-                srcs.push({
-                  id: c.mix_id,
-                  nome: c.forma_commerciale ?? c.nome ?? '',
-                  cv: Number(c.concentrazione) || 0,
-                  tipo: 'mix',
-                })
-              }
+              // Dedup mix: una sola entry in srcs E in vols per mix_id
+              // (altrimenti la "tabella volumi mini" mostra N righe identiche,
+              // una per ogni componente del mix in work_ingredienti)
+              if (seenMix.has(c.mix_id)) continue
+              seenMix.add(c.mix_id)
+              srcs.push({
+                id: c.mix_id,
+                nome: c.forma_commerciale ?? c.nome ?? '',
+                cv: Number(c.concentrazione) || 0,
+                tipo: 'mix',
+              })
             } else {
               srcs.push({
                 id: String(c.id),

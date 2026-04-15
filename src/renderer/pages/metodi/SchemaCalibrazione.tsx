@@ -310,8 +310,8 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                     {/* Tabella volumi mini */}
                     <div style={{ marginTop:6, borderTop:`1px dashed ${C.page.brd}`,
                                   paddingTop:5 }}>
-                      {w.vols.map(v => (
-                        <div key={v.nome} style={{
+                      {w.vols.map((v, idx) => (
+                        <div key={`${v.nome}-${idx}`} style={{
                           display:'flex', justifyContent:'space-between',
                           fontSize:10, fontFamily:'IBM Plex Mono, monospace',
                           color:C.page.t2, padding:'1px 0',
