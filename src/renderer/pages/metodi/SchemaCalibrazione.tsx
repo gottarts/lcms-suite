@@ -509,9 +509,10 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
         const comps = buildMixComposizioni(analitiAll, crmItems, firmaToMixIds, mixNomiMap)
           .filter(c => c.mixIds.some(mid => !savedRemovedMix.has(mid)))
         const scenari = generaScenari(analitiAll, comps)
-        if (scenari.length > 1) {
+        if (scenari.length >= 1) {
           setDialogs(d => ({ ...d, scenar: true }))
         } else {
+          // Nessuna mix disponibile: non aprire il dialog
           setScenarioScelto(true)
         }
       }
@@ -558,8 +559,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     setRemovedMix(new Set())
     setSelSrcs(new Map())
     setScenarioScelto(false)
-    setDialogs(d => ({ ...d, scenar: true }))
-    setSchemaLoaded(true) // stato già pulito, non ri-caricare dal DB
+    setSchemaLoaded(false) // il useEffect si ri-attiva dopo reload e apre dialog solo se ci sono mix
     await reload()
   }, [metodoId, reload])
 

@@ -37,7 +37,7 @@ export function buildMixComposizioni(
   firmaToMixIds: Map<string, string[]>,
   mixNomiMap: Map<string, Set<string>>,
 ): MixComposizione[] {
-  const analitiNomi = new Set(analiti.map(a => a.nome))
+  const analitiNomi = new Set(analiti.map(a => a.nome.toLowerCase()))
 
   // mix_id → nome commerciale (dal primo CrmItem del mix)
   const mixNomeComm = new Map<string, string>()
@@ -53,10 +53,11 @@ export function buildMixComposizioni(
     // Componenti della composizione (da un qualsiasi lotto — tutti hanno la stessa firma)
     const nomiComp = mixNomiMap.get(mixIds[0]) ?? new Set<string>()
 
-    // Intersezione con gli analiti del metodo
+    // Intersezione con gli analiti del metodo (confronto case-insensitive)
     const analitiCoperti = new Set<string>()
     for (const n of nomiComp) {
-      if (analitiNomi.has(n)) analitiCoperti.add(n)
+      const nl = n.toLowerCase()
+      if (analitiNomi.has(nl)) analitiCoperti.add(nl)
     }
 
     if (analitiCoperti.size === 0) continue // nessun analita del metodo → salta
@@ -226,7 +227,7 @@ export function generaScenari(
   if (composizioni.length === 0 || analiti.length === 0) return []
 
   const totalAnaliti = analiti.length
-  const analitiNomi = analiti.map(a => a.nome)
+  const analitiNomi = analiti.map(a => a.nome.toLowerCase())
 
   const scenari: Scenario[] = []
   const nonAncoraUsati = new Set<string>(composizioni.map(c => c.firma))
