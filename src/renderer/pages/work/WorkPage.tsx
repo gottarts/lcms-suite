@@ -9,6 +9,9 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Plus, Search, FlaskConical, AlertCircle, Archive, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
@@ -22,8 +25,12 @@ export function WorkPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editWork, setEditWork] = useState<any>(null)
   const [drawerId, setDrawerId] = useState<number | null>(null)
-  const [drawerPrepForm, setDrawerPrepForm] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [preparaWorkId, setPreparaWorkId] = useState<number | null>(null)
+  const [preparaData, setPreparaData] = useState('')
+  const [preparaOp, setPreparaOp] = useState('')
+  const [preparaNote, setPreparaNote] = useState('')
+  const [preparaSaving, setPreparaSaving] = useState(false)
   const [archiviaId, setArchiviaId] = useState<number | null>(null)
   const [mostraArchivio, setMostraArchivio] = useState(false)
   const [addToSchemaWork, setAddToSchemaWork] = useState<{ id: number; nome: string } | null>(null)
@@ -113,6 +120,20 @@ export function WorkPage() {
     setFormOpen(true)
   }
 
+  const handlePrepara = async () => {
+    if (!preparaWorkId || !preparaData || !preparaOp.trim()) return
+    setPreparaSaving(true)
+    await workApi.prepara({
+      work_id: preparaWorkId,
+      data_prep: preparaData,
+      note: preparaNote || null,
+      operatore: preparaOp.trim(),
+    })
+    setPreparaSaving(false)
+    setPreparaWorkId(null)
+    load(mostraArchivio)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -194,7 +215,12 @@ export function WorkPage() {
               work={w}
               metodiNomi={metodiNomi}
               onClick={() => setDrawerId(w.id)}
-              onPrepara={() => { setDrawerPrepForm(true); setDrawerId(w.id) }}
+              onPrepara={() => {
+                setPreparaWorkId(w.id)
+                setPreparaData(new Date().toISOString().slice(0, 10))
+                setPreparaOp('')
+                setPreparaNote('')
+              }}
               onGoSchema={w.metodi_ids?.length > 0 ? (mid: string) => navigate('/metodi', { state: { schemaMetodoId: mid } }) : undefined}
               onAddToSchema={() => setAddToSchemaWork({ id: w.id, nome: w.nome })}
               onEdit={() => handleEdit(w)}
@@ -214,13 +240,12 @@ export function WorkPage() {
 
       <WorkDrawer
         workId={drawerId}
-        onClose={() => { setDrawerId(null); setDrawerPrepForm(false) }}
+        onClose={() => setDrawerId(null)}
         onEdit={handleEdit}
         onDelete={id => { setDrawerId(null); setDeleteId(id) }}
         onArchivia={!mostraArchivio ? id => { setDrawerId(null); setArchiviaId(id) } : undefined}
         onVaiASchema={(metodoId) => { setDrawerId(null); navigate('/metodi', { state: { schemaMetodoId: metodoId } }) }}
         metodiNomi={metodiNomi}
-        openPrepForm={drawerPrepForm}
       />
 
       <ConfirmDialog
@@ -250,6 +275,55 @@ export function WorkPage() {
         onClose={() => setAddToSchemaWork(null)}
       />
 
+      <Dialog open={preparaWorkId !== null} onOpenChange={v => { if (!v) setPreparaWorkId(null) }}>
+        <DialogContent className="max-w-sm" onPointerDownOutside={e => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Prepara / Rinnova Soluzione Work</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2">
+              <Label className="w-20 text-xs shrink-0">Data *</Label>
+              <input
+                type="date"
+                className="flex-1 border rounded px-2 py-1 text-sm"
+                value={preparaData}
+                onChange={e => setPreparaData(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="w-20 text-xs shrink-0">Operatore *</Label>
+              <Input
+                className="flex-1 text-sm"
+                placeholder="es. V.G."
+                value={preparaOp}
+                onChange={e => setPreparaOp(e.target.value)}
+              />
+            </div>
+            <div className="flex items-start gap-2">
+              <Label className="w-20 text-xs shrink-0 pt-1.5">Note</Label>
+              <Textarea
+                className="flex-1 text-sm"
+                placeholder="Opzionale..."
+                rows={2}
+                value={preparaNote}
+                onChange={e => setPreparaNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreparaWorkId(null)} disabled={preparaSaving}>
+              Annulla
+            </Button>
+            <Button
+              onClick={handlePrepara}
+              disabled={preparaSaving || !preparaData || !preparaOp.trim()}
+            >
+              {preparaSaving ? 'Salvo...' : 'Conferma'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
@@ -257,23 +331,20 @@ export function WorkPage() {
 // ─── Riga Work Archiviata ─────────────────────────────────────────────────────
 
 function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded }: { work: any; metodiNomi: Record<string, string>; onClick: () => void; initialExpanded?: boolean }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const [storico, setStorico] = useState<any[] | null>(null)
   const [loadingStorico, setLoadingStorico] = useState(false)
 
   const isTracciata = !!work.validita_mesi
 
   useEffect(() => {
-    if (!initialExpanded) return
-    setExpanded(true)
-    if (storico === null) {
-      setLoadingStorico(true)
-      workApi.preparazioniList(work.id).then(data => {
-        setStorico(data)
-        setLoadingStorico(false)
-      })
-    }
-  }, [initialExpanded])
+    if (!isTracciata) return
+    setLoadingStorico(true)
+    workApi.preparazioniList(work.id).then(data => {
+      setStorico(data)
+      setLoadingStorico(false)
+    })
+  }, [])
 
   const handleToggleStorico = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -288,7 +359,7 @@ function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded }: { work:
   }
 
   return (
-    <div className="border rounded-md overflow-hidden opacity-75">
+    <div className="border rounded-md overflow-hidden opacity-75" data-archivio-row>
       <div
         className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/20 transition-colors"
         onClick={onClick}
@@ -350,7 +421,7 @@ function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded }: { work:
             const sb = stato ? STATO_LAB_BADGE[stato] : null
             return (
               <div key={p.id} className="px-3 py-2 text-xs flex items-center gap-3 bg-background">
-                <span className="font-medium">{formatDate(p.data_prep)}</span>
+                <span className="font-medium">Soluzione Work preparata il {formatDate(p.data_prep)}</span>
                 {p.operatore && <span className="text-muted-foreground">· {p.operatore}</span>}
                 {p.note && <span className="italic text-muted-foreground truncate max-w-[200px]">{p.note}</span>}
                 {scad && <span className="text-muted-foreground ml-auto shrink-0">scad. {formatDate(scad)}</span>}
@@ -400,23 +471,20 @@ function WorkRow({
   onArchivia?: () => void
   initialExpanded?: boolean
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const [storico, setStorico] = useState<any[] | null>(null)
   const [loadingStorico, setLoadingStorico] = useState(false)
 
-  useEffect(() => {
-    if (!initialExpanded) return
-    setExpanded(true)
-    if (storico === null) {
-      setLoadingStorico(true)
-      workApi.preparazioniList(work.id).then(data => {
-        setStorico(data)
-        setLoadingStorico(false)
-      })
-    }
-  }, [initialExpanded])
-
   const isTracciata   = !!work.validita_mesi
+
+  useEffect(() => {
+    if (!isTracciata) return
+    setLoadingStorico(true)
+    workApi.preparazioniList(work.id).then(data => {
+      setStorico(data)
+      setLoadingStorico(false)
+    })
+  }, [])
   const isIntermedia  = (work.livello ?? 0) > 0
   const isBloccata    = !!work.bloccata
   const haScaduti     = !!work.ha_crm_scaduti
@@ -639,7 +707,7 @@ function WorkRow({
             const sb = stato ? STATO_LAB_BADGE[stato] : null
             return (
               <div key={p.id} className="px-3 py-2 text-xs flex items-center gap-3 bg-background">
-                <span className="font-medium">{formatDate(p.data_prep)}</span>
+                <span className="font-medium">Soluzione Work preparata il {formatDate(p.data_prep)}</span>
                 {p.operatore && <span className="text-muted-foreground">· {p.operatore}</span>}
                 {p.note && <span className="italic text-muted-foreground truncate max-w-[200px]">{p.note}</span>}
                 {scad && (
