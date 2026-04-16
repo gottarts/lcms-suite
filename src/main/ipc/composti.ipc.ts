@@ -337,9 +337,13 @@ FROM composti c`
       'DELETE FROM metodo_analiti WHERE metodo_id = ? AND LOWER(nome) = LOWER(?)'
     )
 
-    const vecchioLotto = row.mix_id
-      ? (db.prepare('SELECT lotto FROM composti WHERE id = ?').get(id) as any)?.lotto ?? null
-      : null
+    const vecchioRow = db.prepare('SELECT nome, lotto FROM composti WHERE id = ?').get(id) as { nome: string; lotto: string | null } | undefined
+    const vecchioNome = vecchioRow?.nome ?? null
+    const vecchioLotto = row.mix_id ? (vecchioRow?.lotto ?? null) : null
+
+    const renameAnalita = db.prepare(
+      'UPDATE metodo_analiti SET nome = ? WHERE metodo_id = ? AND LOWER(nome) = LOWER(?)'
+    )
 
     db.transaction(() => {
       // Per componenti di mix: se la concentrazione è null (campo vuoto nel form),
@@ -438,10 +442,24 @@ FROM composti c`
         .map(r => r.metodo_id)
       const newMetodiSet = new Set(metodiIds.map(String))
 
+      const nuovoNome = (row.nome as string).toUpperCase()
+      const nomeChangiato = vecchioNome !== null && vecchioNome.toUpperCase() !== nuovoNome
+
       deleteLinks.run(id)
       for (const mid of metodiIds) {
         insertLink.run(id, mid)
-        insertAnalitaUpd.run(mid, (row.nome as string).toUpperCase())
+        if (nomeChangiato) {
+          // Se il parametro con il vecchio nome esiste e nessun altro composto lo usa ancora,
+          // rinominalo invece di crearne uno nuovo (preserva ordine, accreditato, alias)
+          const altriConVecchioNome = (checkAltriComposti.get(mid, vecchioNome!) as { n: number }).n
+          if (altriConVecchioNome === 0) {
+            renameAnalita.run(nuovoNome, mid, vecchioNome!)
+          } else {
+            insertAnalitaUpd.run(mid, nuovoNome)
+          }
+        } else {
+          insertAnalitaUpd.run(mid, nuovoNome)
+        }
       }
 
       // Per i metodi rimossi: cancella il nome da metodo_analiti
@@ -612,7 +630,7 @@ FROM composti c`
         const newId = result.lastInsertRowid
         for (const mid of metodiIds) {
           insertLink.run(newId, mid)
-          insertAnalitaMix.run(mid, comp.nome)
+          insertAnalitaMix.run(mid, comp.nome.toUpperCase())
         }
       }
       return componenti.length
