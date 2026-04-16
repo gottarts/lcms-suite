@@ -35,13 +35,22 @@ export function Sidebar() {
     const fetchSessions = () =>
       window.electronAPI.listSessions().then(setSessions).catch(() => {})
     fetchSessions()
-    const timer = setInterval(fetchSessions, 30_000)
+    const timer = setInterval(fetchSessions, 10_000)
     return () => clearInterval(timer)
   }, [])
 
   async function handleChangeFolder() {
-    const result = await window.electronAPI.selectFolder()
-    if (result.ok) setDbPath(result.dbPath)
+    try {
+      const result = await window.electronAPI.selectFolder()
+      if (result.ok) {
+        setDbPath(result.dbPath ?? null)
+      } else if (result.error) {
+        alert(`Impossibile aprire la cartella selezionata:\n${result.error}`)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Errore imprevisto durante il cambio cartella:\n${msg}`)
+    }
   }
 
   const shortPath = dbPath
@@ -94,7 +103,7 @@ export function Sidebar() {
             </button>
             {sessionsExpanded && (
               <ul className="pl-3 mt-0.5 space-y-0.5 text-xs text-muted-foreground">
-                {sessions.map(s => <li key={s.hostname}>{s.hostname}</li>)}
+                {sessions.map((s, idx) => <li key={`${s.hostname}-${idx}`}>{s.hostname}</li>)}
               </ul>
             )}
           </div>

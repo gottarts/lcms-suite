@@ -5,8 +5,8 @@ import { randomUUID } from 'crypto'
 
 const SESSION_ID = randomUUID()
 const HOSTNAME = os.hostname()
-const HEARTBEAT_INTERVAL_MS = 30_000
-const SESSION_TIMEOUT_S = 90
+const HEARTBEAT_INTERVAL_MS = 15_000
+const SESSION_TIMEOUT_S = 45
 
 let heartbeatTimer: NodeJS.Timeout | null = null
 
@@ -33,7 +33,7 @@ export function stopSession(): void {
 export function registerSessionsIpc(): void {
   ipcMain.handle('sessions:list', () => {
     return getDb()
-      .prepare(`SELECT hostname FROM sessions WHERE last_seen >= unixepoch() - ?`)
+      .prepare(`SELECT DISTINCT hostname FROM sessions WHERE last_seen >= unixepoch() - ?`)
       .all(SESSION_TIMEOUT_S) as { hostname: string }[]
   })
 }

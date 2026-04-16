@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { compostiApi } from '@/lib/api'
 import { computeStato } from '@/components/shared/StatusBadge'
 import type { CompostoStato } from '@/components/shared/StatusBadge'
+import { useDbChange } from '@/lib/useDbChange'
 
 type KpiBucket = {
   label: string
@@ -30,12 +31,15 @@ export function KpiCards() {
   const [composti, setComposti] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     compostiApi.list().then(rows => {
       setComposti(rows ?? [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useDbChange(load)
 
   const stats = useMemo(() => {
     const counts = { scaduti: 0, in_scadenza: 0, attivi: 0, dismessi: 0, da_aprire: 0 }

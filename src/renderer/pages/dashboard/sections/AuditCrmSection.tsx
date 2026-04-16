@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useDbChange } from '@/lib/useDbChange'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -153,11 +154,14 @@ export function AuditCrmSection() {
   const [error, setError] = useState<string | null>(null)
   const [model, setModel] = useState<AuditModel | null>(null)
 
-  useEffect(() => {
+  const loadMetodi = useCallback(() => {
     metodiApi.list()
       .then(rows => setMetodi(rows ?? []))
       .catch(err => setError(String(err?.message ?? err)))
   }, [])
+
+  useEffect(() => { loadMetodi() }, [loadMetodi])
+  useDbChange(loadMetodi)
 
   const handleRun = async () => {
     if (!metodoId) return

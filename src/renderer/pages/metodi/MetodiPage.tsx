@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { metodiApi, strumentiApi } from '@/lib/api'
+import { useDbChange } from '@/lib/useDbChange'
 import { MetodoCard } from './MetodoCard'
 import { MetodoForm } from './MetodoForm'
 import { MetodoDrawer } from './MetodoDrawer'
@@ -40,6 +41,7 @@ export function MetodiPage() {
   }
 
   useEffect(() => { load() }, [])
+  useDbChange(load)
 
   const filtered = useMemo(() => {
     let result = metodi

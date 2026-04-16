@@ -14,14 +14,25 @@ export function SetupPage({ onComplete }: SetupPageProps) {
   const [error, setError] = useState<string>('')
 
   const handleSelectFolder = async () => {
-    const result = await window.electronAPI.selectFolder()
-    if (!result.ok) return
-    setDbPath(result.dbPath || '')
-    setIsNew(result.isNew || false)
-    if (result.isNew) {
-      setStep('choose-import')
-    } else {
-      setStep('done')
+    try {
+      const result = await window.electronAPI.selectFolder()
+      if (!result.ok) {
+        if (result.error) {
+          setError(result.error)
+          setStep('error')
+        }
+        return
+      }
+      setDbPath(result.dbPath || '')
+      setIsNew(result.isNew || false)
+      if (result.isNew) {
+        setStep('choose-import')
+      } else {
+        setStep('done')
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+      setStep('error')
     }
   }
 

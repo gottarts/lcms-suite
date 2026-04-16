@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { loadConfig, saveConfig } from './config'
 import { openDatabase, closeDatabase, createDatabase, dbFileExists } from './db'
 import { registerStrumentiIpc } from './ipc/strumenti.ipc'
@@ -19,6 +20,28 @@ import { registerDashboardIpc } from './ipc/dashboard.ipc'
 import { registerSessionsIpc, startSession, stopSession } from './ipc/sessions.ipc'
 
 let mainWindow: BrowserWindow | null = null
+
+let watchedDbPath: string | null = null
+const WATCH_POLL_MS = 2000
+
+function stopDbWatcher(): void {
+  if (watchedDbPath) {
+    try { fs.unwatchFile(watchedDbPath) } catch (_) { /* ignore */ }
+    watchedDbPath = null
+  }
+}
+
+function startDbWatcher(dbPath: string): void {
+  stopDbWatcher()
+  if (!fs.existsSync(dbPath)) return
+  watchedDbPath = dbPath
+  fs.watchFile(dbPath, { interval: WATCH_POLL_MS, persistent: false }, (curr, prev) => {
+    if (curr.mtimeMs <= prev.mtimeMs) return
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('db:external-change')
+    }
+  })
+}
 
 function createWindow(): void {
   const config = loadConfig()
@@ -63,31 +86,42 @@ ipcMain.handle('config:get', () => {
 })
 
 ipcMain.handle('config:select-folder', async () => {
-  const dialogOpts: Electron.OpenDialogOptions = {
-    properties: ['openDirectory'],
-    title: 'Seleziona cartella per il database',
+  try {
+    const dialogOpts: Electron.OpenDialogOptions = {
+      properties: ['openDirectory'],
+      title: 'Seleziona cartella per il database',
+    }
+    const result = process.platform === 'darwin'
+      ? await dialog.showOpenDialog(dialogOpts)
+      : await dialog.showOpenDialog(mainWindow!, dialogOpts)
+    if (result.canceled || !result.filePaths.length) return { ok: false }
+
+    const folder = result.filePaths[0]
+    const dbPath = path.join(folder, 'lcms.db')
+    const exists = dbFileExists(dbPath)
+
+    stopSession()
+    stopDbWatcher()
+    closeDatabase()
+
+    if (exists) {
+      openDatabase(dbPath)
+    } else {
+      createDatabase(dbPath)
+    }
+    startSession()
+    startDbWatcher(dbPath)
+
+    const config = loadConfig()
+    config.dbPath = dbPath
+    saveConfig(config)
+
+    return { ok: true, dbPath, isNew: !exists }
+  } catch (e) {
+    const msg = (e as Error)?.message || String(e)
+    console.error('[config:select-folder] errore:', e)
+    return { ok: false, error: msg }
   }
-  const result = process.platform === 'darwin'
-    ? await dialog.showOpenDialog(dialogOpts)
-    : await dialog.showOpenDialog(mainWindow!, dialogOpts)
-  if (result.canceled || !result.filePaths.length) return { ok: false }
-
-  const folder = result.filePaths[0]
-  const dbPath = path.join(folder, 'lcms.db')
-  const exists = dbFileExists(dbPath)
-
-  if (exists) {
-    openDatabase(dbPath)
-  } else {
-    createDatabase(dbPath)
-  }
-  startSession()
-
-  const config = loadConfig()
-  config.dbPath = dbPath
-  saveConfig(config)
-
-  return { ok: true, dbPath, isNew: !exists }
 })
 
 ipcMain.handle('config:select-json', async () => {
@@ -124,13 +158,14 @@ app.whenReady().then(() => {
 
   const config = loadConfig()
   if (config.dbPath && dbFileExists(config.dbPath)) {
-    try { openDatabase(config.dbPath); startSession() }
+    try { openDatabase(config.dbPath); startSession(); startDbWatcher(config.dbPath) }
     catch (e) { console.error('Failed to open DB:', e) }
   }
 })
 
 app.on('window-all-closed', () => {
   stopSession()
+  stopDbWatcher()
   closeDatabase()
   app.quit()
 })

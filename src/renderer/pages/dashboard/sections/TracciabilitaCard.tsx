@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { dashboardApi } from '@/lib/api'
+import { useDbChange } from '@/lib/useDbChange'
 
 type Stats = {
   work_con_lotto_mismatch: number
@@ -22,7 +23,7 @@ export function TracciabilitaCard() {
   const [workIssues, setWorkIssues] = useState<WorkItem[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     dashboardApi.summary()
       .then(s => {
         setStats(s.stats_tracciabilita)
@@ -35,6 +36,9 @@ export function TracciabilitaCard() {
       })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useDbChange(load)
 
   return (
     <Card>

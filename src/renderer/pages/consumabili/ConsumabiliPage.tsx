@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { consumabiliApi, metodiApi } from '@/lib/api'
+import { useDbChange } from '@/lib/useDbChange'
 import { ConsumabileForm } from './ConsumabileForm'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable, type Column } from '@/components/shared/DataTable'
@@ -34,6 +35,7 @@ export function ConsumabiliPage() {
   }
 
   useEffect(() => { load() }, [])
+  useDbChange(load)
 
   const filtered = useMemo(() => {
     let result = consumabili

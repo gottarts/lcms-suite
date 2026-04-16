@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { data, useLocation } from 'react-router-dom'
 import { compostiApi } from '@/lib/api'
+import { useDbChange } from '@/lib/useDbChange'
 import { CompostiTable } from './CompostiTable'
 import { CompostoForm } from './CompostoForm'
 import { CompostoPanel } from './CompostoPanel'
@@ -477,6 +478,7 @@ export function CompostiPage() {
     window.electronAPI.invoke('metodi:list').then(setMetodi), [])
 
   useEffect(() => { load(); loadMetodi() }, [load, loadMetodi])
+  useDbChange(() => { load(); loadMetodi() })
 
   useEffect(() => {
     setSelectedIds(new Set())

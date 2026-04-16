@@ -207,9 +207,11 @@ export interface SnapshotResult {
 export interface ElectronAPI {
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
   getConfig: () => Promise<{ dbPath: string | null; dbExists: boolean }>
-  selectFolder: () => Promise<{ ok: boolean; dbPath?: string; isNew?: boolean }>
+  selectFolder: () => Promise<{ ok: boolean; dbPath?: string; isNew?: boolean; error?: string }>
   selectJson: () => Promise<{ ok: boolean; path?: string }>
   importLegacyJson: (jsonPath: string) => Promise<{ ok: boolean; error?: string; counts?: Record<string, number> }>
+  listSessions: () => Promise<{ hostname: string }[]>
+  onDbChange: (callback: () => void) => () => void
 }
 
 // ── Work ──

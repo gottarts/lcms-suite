@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { anagraficheApi } from '@/lib/api'
+import { useDbChange } from '@/lib/useDbChange'
 import { AnagraficaCard } from './AnagraficaCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +41,7 @@ export function AnagrafichePage() {
   }
 
   useEffect(() => { load() }, [])
+  useDbChange(load)
 
   const handleCreate = async () => {
     if (!newName.trim()) return

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { strumentiApi } from '@/lib/api'
+import { useDbChange } from '@/lib/useDbChange'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +28,7 @@ export function StrumentiPage() {
   }
 
   useEffect(() => { load() }, [])
+  useDbChange(load)
 
   const selected = strumenti.find(s => s.id === selectedId)
 

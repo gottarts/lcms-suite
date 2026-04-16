@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useDbChange } from '@/lib/useDbChange'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -212,7 +213,7 @@ export function ScadenzeTimeline() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     dashboardApi.summary()
       .then(s => {
         setItems(buildScadenzeItems(s))
@@ -223,6 +224,9 @@ export function ScadenzeTimeline() {
         setLoading(false)
       })
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useDbChange(load)
 
   const crm = useMemo(() => items.filter((i): i is ScadenzaItem & { kind: 'composto' } => i.kind === 'composto'), [items])
   const prep = useMemo(() => items.filter((i): i is ScadenzaItem & { kind: 'preparazione' } => i.kind === 'preparazione'), [items])

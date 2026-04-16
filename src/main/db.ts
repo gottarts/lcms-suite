@@ -12,7 +12,15 @@ export function getDb(): Database.Database {
 
 export function openDatabase(dbPath: string): void {
   db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
+  db.pragma('busy_timeout = 5000')
+  try { db.pragma('wal_checkpoint(TRUNCATE)') } catch (e) {
+    console.warn('[db] wal_checkpoint skipped:', (e as Error)?.message)
+  }
+  const mode = db.pragma('journal_mode = DELETE', { simple: true })
+  if (mode !== 'delete') {
+    console.warn(`[db] journal_mode è "${mode}" (atteso "delete"): altro processo tiene lock WAL?`)
+  }
+  db.pragma('synchronous = FULL')
   db.pragma('foreign_keys = ON')
   runMigrations()
 }

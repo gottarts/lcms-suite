@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { workApi, metodiApi } from '@/lib/api'
+import { useDbChange } from '@/lib/useDbChange'
 import { WorkDrawer } from './WorkDrawer'
 import { WorkForm } from './WorkForm'
 import { AggiungiASchemaDialog } from './AggiungiASchemaDialog'
@@ -42,6 +43,7 @@ export function WorkPage() {
   }
 
   useEffect(() => { load(mostraArchivio) }, [mostraArchivio])
+  useDbChange(() => load(mostraArchivio))
 
   // Apertura automatica da link esterno (es. Audit) — espande lo storico preparazioni
   useEffect(() => {
