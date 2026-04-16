@@ -329,7 +329,7 @@ export function registerDashboardIpc(): void {
       SELECT DISTINCT
         c.id, c.nome, c.lotto, c.scadenza_prodotto, c.mix_id,
         c.forma, c.forma_commerciale AS mix, c.concentrazione, c.unita_conc,
-        c.data_apertura, c.data_dismissione,
+        c.data_apertura, c.data_dismissione, c.produttore, c.destinazione_uso,
         (SELECT MAX(cs.nuova_scadenza) FROM composti_storia cs
           WHERE cs.composto_id = c.id AND cs.tipo='Rivalidazione'
             AND cs.nuova_scadenza IS NOT NULL AND cs.data <= @data) AS ultima_rivalidazione

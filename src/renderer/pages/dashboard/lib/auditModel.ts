@@ -64,6 +64,8 @@ export type AuditModel = {
   data: string
   righe_work: AuditWorkRow[]
   righe_scoperte: AuditScopertoRow[]
+  /** ID composti unici coinvolti (per fetch dati completi da composti:export-data) */
+  crm_coinvolti_ids: number[]
   stats: {
     n_accreditati: number
     n_coperti: number         // analiti coperti da almeno un Work
@@ -72,6 +74,7 @@ export type AuditModel = {
     n_work_in_scadenza: number
     n_work_scadute: number
     n_work_bloccate: number
+    n_crm: number
   }
 }
 
@@ -318,6 +321,17 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
     })
   }
 
+  // CRM coinvolti: IDs unici dei composti che compaiono in analiti_coperti di almeno una work
+  const crmCoinvoltiIds = new Set<number>()
+  for (const w of righe_work) {
+    for (const a of w.analiti_coperti) {
+      for (const c of a.crm_ingredienti) {
+        crmCoinvoltiIds.add(c.composto_id)
+      }
+    }
+  }
+  const crm_coinvolti_ids = [...crmCoinvoltiIds]
+
   // Stats
   const n_accreditati = input.analiti_accreditati?.length ?? 0
   const n_coperti = analitiCopertiSet.size
@@ -326,6 +340,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
   const n_work_in_scadenza = righe_work.filter(r => r.stato_work === 'in_scadenza').length
   const n_work_scadute = righe_work.filter(r => r.stato_work === 'scaduta').length
   const n_work_bloccate = righe_work.filter(r => r.bloccata).length
+  const n_crm = crm_coinvolti_ids.length
 
   return {
     metodo_id: input.metodo_id,
@@ -333,9 +348,11 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
     data: input.data,
     righe_work,
     righe_scoperte,
+    crm_coinvolti_ids,
     stats: {
       n_accreditati, n_coperti, n_scoperti,
       n_works, n_work_in_scadenza, n_work_scadute, n_work_bloccate,
+      n_crm,
     },
   }
 }

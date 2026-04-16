@@ -225,7 +225,18 @@ export function AuditCrmSection() {
           <Button
             variant="outline"
             disabled={!model}
-            onClick={() => model && exportAuditPdf(model)}
+            onClick={async () => {
+              if (!model) return
+              let crmData: any[] = []
+              if (model.crm_coinvolti_ids.length > 0) {
+                crmData = (await window.electronAPI.invoke(
+                  'composti:export-data',
+                  'filtered',
+                  model.crm_coinvolti_ids,
+                )) as any[]
+              }
+              exportAuditPdf(model, crmData)
+            }}
           >
             Esporta PDF
           </Button>

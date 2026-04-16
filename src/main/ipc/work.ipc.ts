@@ -69,7 +69,9 @@ export function registerWorkIpc(): void {
         (SELECT GROUP_CONCAT(metodo_id) FROM work_metodi WHERE work_id = w.id) AS _metodi_ids_raw
       FROM work w
       WHERE w.archiviato = 0 OR w.archiviato IS NULL
-      ORDER BY w.created_at DESC
+      ORDER BY
+        CASE WHEN (SELECT wp.data_prep FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) IS NULL THEN 0 ELSE 1 END ASC,
+        (SELECT wp.data_prep FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) ASC
     `).all() as any[]
 
     return works.map((w: any) => {
