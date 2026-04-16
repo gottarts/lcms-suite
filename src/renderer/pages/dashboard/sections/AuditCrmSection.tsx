@@ -47,7 +47,11 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
           <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">⚠ CRM scaduti</Badge>
         )}
         {row.ha_prep_scadute_at_data && !row.bloccata && (
-          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">⚠ Prep Neat scadute</Badge>
+          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">
+            {row.ha_prep_scadute_solo_non_accreditati
+              ? '⚠ Prep Neat scadute (analiti non accreditati nel metodo)'
+              : '⚠ Prep Neat scadute'}
+          </Badge>
         )}
         {row.archiviate_alla_data && (
           <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">Archiviata</Badge>
@@ -56,7 +60,7 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
           <Badge variant="outline" className={statoLabTone[stato]}>{statoLabLabel[stato]}</Badge>
         )}
         {row.work_scadenza && (
-          <span className="text-[11px] text-muted-foreground">scad. {row.work_scadenza}</span>
+          <span className="text-[11px] text-muted-foreground shrink-0">scad. {row.work_scadenza}</span>
         )}
       </div>
       {row.analiti_coperti.length === 0 ? (

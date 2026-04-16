@@ -109,7 +109,7 @@ export function exportAuditPdf(model: AuditModel, crmData: any[] = []): void {
         w.work_scadenza ?? '—',
         statoLabel(w.stato_work),
         String(w.analiti_coperti.length),
-        [w.bloccata ? 'BLOCC' : null, w.ha_crm_scaduti ? 'CRM SCAD' : null, w.ha_prep_scadute_at_data ? 'PREP SCAD' : null]
+        [w.bloccata ? 'BLOCC' : null, w.ha_crm_scaduti ? 'CRM SCAD' : null, w.ha_prep_scadute_at_data ? (w.ha_prep_scadute_solo_non_accreditati ? 'PREP SCAD (non accr.)' : 'PREP SCAD') : null]
           .filter(Boolean).join(' · ') || '—',
       ]),
       styles: tableBodyStyle,
@@ -428,9 +428,11 @@ function drawWorkSheet(doc: jsPDF, w: AuditWorkRow): void {
   }
   if (w.ha_prep_scadute_at_data) {
     doc.setFillColor(...PDF_COLORS.statoInScadenza)
-    doc.roundedRect(flagX, 14, 28, 7, 2, 2, 'F')
+    const prepLabel = w.ha_prep_scadute_solo_non_accreditati ? 'PREP SCAD (non accr.)' : 'PREP SCADUTE'
+    const prepWidth = w.ha_prep_scadute_solo_non_accreditati ? 40 : 28
+    doc.roundedRect(flagX, 14, prepWidth, 7, 2, 2, 'F')
     doc.setTextColor(255, 255, 255)
-    doc.text('PREP SCADUTE', flagX + 14, 19, { align: 'center' })
+    doc.text(prepLabel, flagX + prepWidth / 2, 19, { align: 'center' })
   }
 
   doc.setTextColor(80, 80, 80)
@@ -438,8 +440,9 @@ function drawWorkSheet(doc: jsPDF, w: AuditWorkRow): void {
   doc.setFont('helvetica', 'normal')
   doc.text(
     `Scadenza work: ${w.work_scadenza ?? '—'}   |   Analiti coperti: ${w.analiti_coperti.length}`,
-    DEFAULT_MARGINS.left + 64,
+    PAGE_A4.w - DEFAULT_MARGINS.right,
     19,
+    { align: 'right' },
   )
 
   doc.setDrawColor(...PDF_COLORS.divider)
