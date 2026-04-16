@@ -96,7 +96,7 @@ export const CompostiTable = memo(function CompostiTable({
                 {row.forma === 'Neat' && (
                   <Badge variant="outline" className="ml-2 text-xs cursor-pointer hover:bg-accent"
                     onClick={(e) => { e.stopPropagation(); onOpenPreparazioni?.(row) }}>
-                    prep {row.prep_attive_count ?? 0}
+                    prep {row.prep_totale_count ?? 0}
                   </Badge>
                 )}
                 {row.prep_scadute_count > 0 && <Badge variant="destructive" className="ml-2 text-xs">⚠</Badge>}

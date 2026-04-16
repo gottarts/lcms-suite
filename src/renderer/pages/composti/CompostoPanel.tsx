@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { SlidePanel } from '@/components/shared/SlidePanel'
 import { StatusBadge, computeStato } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,6 @@ import { parseConcentrazione } from '@/lib/unita'
 import { PreparazioniTab } from './PreparazioniTab'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { MetodoDrawer } from '../metodi/MetodoDrawer'
 
 // Helper: calcola stato visualizzato di una preparazione (non modifica il DB)
 function computeStatoPrep(prep: any): string {
@@ -57,7 +57,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
 
   // FEAT-metodi-campo: metodi associati al composto
   const [metodiAssociati, setMetodiAssociati] = useState<any[]>([])
-  const [selectedMetodoId, setSelectedMetodoId] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   const load = async () => {
     if (!compostoId) return
@@ -264,7 +264,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                         key={m.id}
                         variant="outline"
                         className="text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
-                        onClick={() => setSelectedMetodoId(String(m.id))}
+                        onClick={() => navigate('/metodi', { state: { filtroMetodoId: String(m.id) } })}
                       >
                         {m.nome}
                       </Badge>
@@ -500,14 +500,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
       />
     </SlidePanel>
 
-    <MetodoDrawer
-      metodoId={selectedMetodoId}
-      onClose={() => setSelectedMetodoId(null)}
-      onEdit={() => {}}
-      onDelete={() => {}}
-      onOpenSchema={() => {}}
-      onOpenParametri={() => {}}
-    />
-    </>
+</>
   )
 }

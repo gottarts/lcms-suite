@@ -27,12 +27,21 @@ export function MetodiPage() {
   const [parametriMetodoId, setParametriMetodoId] = useState<string | null>(null)
 
   useEffect(() => {
-    const state = location.state as { schemaMetodoId?: string } | null
+    const state = location.state as { schemaMetodoId?: string; filtroMetodoId?: string } | null
     if (state?.schemaMetodoId) {
       setSchemaMetodoId(state.schemaMetodoId)
       window.history.replaceState({}, '')
     }
   }, [location.state])
+
+  useEffect(() => {
+    const state = location.state as { filtroMetodoId?: string } | null
+    if (state?.filtroMetodoId && metodi.length > 0) {
+      const metodo = metodi.find((m: any) => m.id === state.filtroMetodoId)
+      if (metodo) setSearch(metodo.nome)
+      window.history.replaceState({}, '')
+    }
+  }, [metodi])
 
   const load = async () => {
     const [m, s] = await Promise.all([metodiApi.list(), strumentiApi.list()])
