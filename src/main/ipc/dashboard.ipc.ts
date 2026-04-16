@@ -256,6 +256,11 @@ export function registerDashboardIpc(): void {
           (SELECT p.flacone FROM preparazioni p WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
         END AS source_prep_flacone,
         CASE WHEN wi.source_type = 'prep' THEN
+          (SELECT COUNT(*) FROM preparazioni p2
+           WHERE p2.composto_id = (SELECT composto_id FROM preparazioni WHERE id = COALESCE(wi.prep_id, wi.source_id))
+             AND p2.id <= COALESCE(wi.prep_id, wi.source_id))
+        END AS source_prep_progressivo,
+        CASE WHEN wi.source_type = 'prep' THEN
           (SELECT p.data_prep FROM preparazioni p WHERE p.id = COALESCE(wi.prep_id, wi.source_id))
         END AS source_prep_data_prep,
         CASE WHEN wi.source_type = 'prep' THEN

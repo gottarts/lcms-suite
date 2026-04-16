@@ -470,7 +470,7 @@ function drawWorkSheet(doc: jsPDF, w: AuditWorkRow): void {
             .map(c => {
               let riga = `${cleanText(c.composto_nome)}${c.lotto ? ` · ${c.lotto}` : ''}${c.scadenza_effettiva ? ` · scad. ${c.scadenza_effettiva}` : ''}`
               if (c.prep_flacone != null) {
-                riga += `\n  prep: ${c.prep_flacone ?? '—'}${c.prep_data_prep ? ` · ${c.prep_data_prep}` : ''}${c.prep_scadenza ? ` · scad. ${c.prep_scadenza}` : ''}${c.prep_scaduta ? ' [SCADUTA]' : ''}`
+                riga += `\n  prep #${c.prep_progressivo ?? '?'}${c.prep_data_prep ? ` · ${c.prep_data_prep}` : ''}${c.prep_scadenza ? ` · scad. ${c.prep_scadenza}` : ''}${c.prep_scaduta ? ' [SCADUTA]' : ''}`
               }
               return riga
             })

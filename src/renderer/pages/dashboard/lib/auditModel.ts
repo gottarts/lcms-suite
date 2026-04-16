@@ -23,6 +23,7 @@ export type CrmUsato = {
   scadenza_effettiva: string | null  // ultima_rivalidazione ?? scadenza_prodotto
   // Presenti solo se il CRM è usato via preparazione Neat (source_type='prep')
   prep_flacone?: string | null
+  prep_progressivo?: number | null
   prep_data_prep?: string | null
   prep_scadenza?: string | null
   prep_scaduta?: boolean             // prep_scadenza < data audit
@@ -187,7 +188,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
     const crmUsatiInWork = new Map<string, CrmItem>()  // keyed by id
     // Info preparazione Neat associata a un composto (per source_type='prep')
     // Keyed by composto_id; in caso di più prep dello stesso composto teniamo la più problematica
-    type PrepInfo = { flacone: string | null; data_prep: string | null; scadenza: string | null; scaduta: boolean }
+    type PrepInfo = { flacone: string | null; progressivo: number | null; data_prep: string | null; scadenza: string | null; scaduta: boolean }
     const prepInfoByCompostoId = new Map<number, PrepInfo>()
 
     for (const ing of wRaw.ingredienti ?? []) {
@@ -213,6 +214,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
           if (!existing || (scaduta && !existing.scaduta)) {
             prepInfoByCompostoId.set(found.id, {
               flacone: ing.source_prep_flacone ?? null,
+              progressivo: ing.source_prep_progressivo ?? null,
               data_prep: ing.source_prep_data_prep ?? null,
               scadenza: ing.source_prep_scadenza ?? null,
               scaduta,
@@ -248,6 +250,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
           scadenza_effettiva: c.ultima_rivalidazione ?? c.scadenza_prodotto ?? null,
           ...(prepInfo ? {
             prep_flacone: prepInfo.flacone,
+            prep_progressivo: prepInfo.progressivo,
             prep_data_prep: prepInfo.data_prep,
             prep_scadenza: prepInfo.scadenza,
             prep_scaduta: prepInfo.scaduta,

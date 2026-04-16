@@ -94,7 +94,7 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
                       </span>
                       {c.prep_flacone != null && (
                         <span className={`text-[10px] ${c.prep_scaduta ? 'text-red-700' : 'opacity-70'}`}>
-                          prep: {c.prep_flacone ?? '—'}
+                          prep #{c.prep_progressivo ?? '?'}
                           {c.prep_data_prep && <span className="ml-1">· {c.prep_data_prep}</span>}
                           {c.prep_scadenza && <span className="ml-1">· scad. {c.prep_scadenza}</span>}
                         </span>
