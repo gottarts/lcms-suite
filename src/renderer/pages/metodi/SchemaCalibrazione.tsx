@@ -974,13 +974,15 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       <RicaricaDialog
         workId={dialogs.ricaricaWorkId}
         onClose={() => setDialogs(d => ({ ...d, ricaricaWorkId: null }))}
-        onSuccess={async () => {
+        onSuccess={async (newWorkId) => {
           // Il backend ha già rigenerato schema_json con i nuovi srcs/vols nella
           // transazione di work:ricarica. Qui basta ricaricare CRM + schema dal DB:
           // React riallineerà le card sorgenti e computeConnections troverà i cardRefs
           // con i nuovi mix_id, ridisegnando le frecce.
+          console.log('[SchemaCalibrazione] onSuccess ricarica, newWorkId=', newWorkId)
           await reload()
           const saved = await schemaCalApi.get(metodoId)
+          console.log('[SchemaCalibrazione] schema ricaricato dal DB:', saved?.workCols)
           if (saved?.workCols) setWorkCols(saved.workCols)
           if (saved?.removedMix) setRemovedMix(new Set<string>(saved.removedMix))
           setDialogs(d => ({ ...d, ricaricaWorkId: null }))

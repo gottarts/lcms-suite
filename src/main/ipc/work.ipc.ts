@@ -678,9 +678,18 @@ export function registerWorkIpc(): void {
     nuovi_ingredienti: Array<{ old_source_id: number; new_source_id: number }>
     metodi_ids: string[]
   }) => {
+    console.log('[work:ricarica] START params=', JSON.stringify(params))
     const db = getDb()
     const old = db.prepare('SELECT * FROM work WHERE id = ?').get(params.old_work_id) as any
     if (!old) throw new Error('Work non trovata')
+
+    // Fallback: se il renderer non ha passato metodi_ids (o li ha passati vuoti),
+    // recuperarli autonomamente da work_metodi per evitare che schema_json non venga aggiornato.
+    if (!params.metodi_ids || params.metodi_ids.length === 0) {
+      const rows = db.prepare('SELECT metodo_id FROM work_metodi WHERE work_id = ?').all(params.old_work_id) as any[]
+      params = { ...params, metodi_ids: rows.map(r => String(r.metodo_id)) }
+      console.log('[work:ricarica] metodi_ids era vuoto, recuperati dal DB:', params.metodi_ids)
+    }
 
     const oldIngr = db.prepare(
       'SELECT * FROM work_ingredienti WHERE work_id = ?'
@@ -691,6 +700,7 @@ export function registerWorkIpc(): void {
     const getLotto = db.prepare('SELECT lotto FROM composti WHERE id = ?')
 
     let newId: number | bigint = 0
+    try {
     db.transaction(() => {
       // Crea nuova work con gli stessi metadati
       const r = db.prepare(`
@@ -897,7 +907,12 @@ export function registerWorkIpc(): void {
         // else: la vecchia work non era nel schema di questo metodo → non creare link spuri
       }
     })()
+    } catch (err) {
+      console.error('[work:ricarica] ERRORE transazione:', err)
+      throw err
+    }
 
+    console.log('[work:ricarica] OK new_work_id=', Number(newId))
     return { ok: true, new_work_id: Number(newId) }
   })
 

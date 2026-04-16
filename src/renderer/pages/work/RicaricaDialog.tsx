@@ -68,10 +68,12 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
     setLoading(true)
     setLotStatus([])
     setScelte({})
+    console.log('[RicaricaDialog] carico lotti per workId=', workId)
     Promise.all([
       workApi.checkLotStatus(workId),
       workApi.get(workId),
     ]).then(([status, work]) => {
+      console.log('[RicaricaDialog] lotStatus=', status, '| metodi_ids=', work?.metodi_ids)
       setLotStatus(status)
       setMetodiIds(work?.metodi_ids ?? [])
       // Pre-popola scelte per gli "auto" (1 solo sostituto)
@@ -97,8 +99,13 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
           old_source_id: i.source_id,
           new_source_id: scelte[i.source_id] ?? i.source_id,
         }))
+      console.log('[RicaricaDialog] ricarica params:', { old_work_id: workId, nuovi_ingredienti, metodi_ids })
       const result = await workApi.ricarica({ old_work_id: workId, nuovi_ingredienti, metodi_ids })
+      console.log('[RicaricaDialog] ricarica result:', result)
       onSuccess(result.new_work_id)
+    } catch (err) {
+      console.error('[RicaricaDialog] ricarica ERRORE:', err)
+      throw err
     } finally {
       setSaving(false)
     }
