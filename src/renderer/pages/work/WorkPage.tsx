@@ -37,6 +37,7 @@ export function WorkPage() {
   const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null)
   const [expandId, setExpandId] = useState<number | null>(null)
   const [pendingExpandId, setPendingExpandId] = useState<number | null>(null)
+  const [prepCount, setPrepCount] = useState<Record<number, number>>({})
 
   const load = async (archivio = false) => {
     const [data, metodi] = await Promise.all([
@@ -123,14 +124,16 @@ export function WorkPage() {
   const handlePrepara = async () => {
     if (!preparaWorkId || !preparaData || !preparaOp.trim()) return
     setPreparaSaving(true)
+    const workId = preparaWorkId
     await workApi.prepara({
-      work_id: preparaWorkId,
+      work_id: workId,
       data_prep: preparaData,
       note: preparaNote || null,
       operatore: preparaOp.trim(),
     })
     setPreparaSaving(false)
     setPreparaWorkId(null)
+    setPrepCount(prev => ({ ...prev, [workId]: (prev[workId] ?? 0) + 1 }))
     load(mostraArchivio)
   }
 
@@ -211,7 +214,7 @@ export function WorkPage() {
         <div className="space-y-2">
           {filtered.map(w => (
             <WorkRow
-              key={w.id}
+              key={`${w.id}-${prepCount[w.id] ?? 0}`}
               work={w}
               metodiNomi={metodiNomi}
               onClick={() => setDrawerId(w.id)}
