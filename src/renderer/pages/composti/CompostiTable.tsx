@@ -30,6 +30,8 @@ interface CompostiTableProps {
   // Filtri per colonna
   colFilters?: Record<string, string>
   onColFilter?: (key: string, value: string) => void
+  // Mappa id → nome metodo (per colonna metodi)
+  metodiNomeMap?: Record<string, string>
 }
 
 export const CompostiTable = memo(function CompostiTable({
@@ -47,6 +49,7 @@ export const CompostiTable = memo(function CompostiTable({
   colOrder,
   colFilters,
   onColFilter,
+  metodiNomeMap = {},
 }: CompostiTableProps) {
   const [apriTarget, setApriTarget] = useState<{
     compostoId: number; fialaNumero: number; nome: string; lotto: string | null
@@ -133,6 +136,20 @@ export const CompostiTable = memo(function CompostiTable({
       { key: 'mw', label: 'MW', render: (v) => v || '—' },
       { key: 'formula', label: 'Formula', filterValue: colFilters?.['formula'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('formula', v) : undefined, render: (v) => v || '—' },
       {
+        key: 'metodi_analitici', label: 'Metodi', sortable: false,
+        render: (_, row) => {
+          const ids: string[] = row.metodi_ids ?? []
+          if (ids.length === 0) return <span className="text-muted-foreground">—</span>
+          return (
+            <div className="flex flex-wrap gap-1">
+              {ids.map((id: string) => (
+                <Badge key={id} variant="outline" className="text-xs">{metodiNomeMap[id] ?? id}</Badge>
+              ))}
+            </div>
+          )
+        },
+      },
+      {
         key: 'stato', label: 'Stato', sortable: false,
         render: (_, row) => {
           const stato = computeStato(row)
@@ -206,7 +223,7 @@ export const CompostiTable = memo(function CompostiTable({
   }, [
     onRowClick, onNewLotto, onRivalida, onDismetti, onOpenStorico, onOpenPreparazioni,
     selectedIds, onSelectionChange, handleCheckboxChange,
-    colVisible, colOrder, colFilters, onColFilter,
+    colVisible, colOrder, colFilters, onColFilter, metodiNomeMap,
   ])
 
   return (

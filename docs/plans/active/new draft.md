@@ -14,7 +14,6 @@
 
  ## importante
 
-Fix arrow display on recalibration reload
 
  ## altri
 

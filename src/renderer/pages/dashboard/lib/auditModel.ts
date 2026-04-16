@@ -44,6 +44,7 @@ export type AuditWorkRow = {
   bloccata: boolean
   ha_crm_scaduti: boolean
   ha_prep_scadute_at_data: boolean
+  archiviate_alla_data: boolean
   analiti_coperti: AuditAnalitaCoperto[]
 }
 
@@ -283,6 +284,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       bloccata: !!wRaw.bloccata,
       ha_crm_scaduti: !!wRaw.ha_crm_scaduti,
       ha_prep_scadute_at_data: !!wRaw.ha_prep_scadute_at_data,
+      archiviate_alla_data: !!(wRaw.archiviato_at && wRaw.archiviato_at.slice(0, 10) <= input.data),
       analiti_coperti: coperti,
     })
   }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { workApi, metodiApi } from '@/lib/api'
 import { WorkDrawer } from './WorkDrawer'
 import { WorkForm } from './WorkForm'
@@ -14,6 +14,7 @@ import { formatDate } from '@/lib/utils'
 
 export function WorkPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [works, setWorks] = useState<any[]>([])
   const [metodiNomi, setMetodiNomi] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
@@ -26,6 +27,8 @@ export function WorkPage() {
   const [mostraArchivio, setMostraArchivio] = useState(false)
   const [addToSchemaWork, setAddToSchemaWork] = useState<{ id: number; nome: string } | null>(null)
   const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null)
+  const [expandId, setExpandId] = useState<number | null>(null)
+  const [pendingExpandId, setPendingExpandId] = useState<number | null>(null)
 
   const load = async (archivio = false) => {
     const [data, metodi] = await Promise.all([
@@ -39,6 +42,26 @@ export function WorkPage() {
   }
 
   useEffect(() => { load(mostraArchivio) }, [mostraArchivio])
+
+  // Apertura automatica da link esterno (es. Audit) — espande lo storico preparazioni
+  useEffect(() => {
+    const state = location.state as { openWorkId?: number; archiviata?: boolean } | null
+    if (!state?.openWorkId) return
+    if (state.archiviata) {
+      setPendingExpandId(state.openWorkId)
+      setMostraArchivio(true)
+    } else {
+      setExpandId(state.openWorkId)
+    }
+  }, [])
+
+  // Consuma pendingExpandId non appena le works archiviate sono caricate
+  useEffect(() => {
+    if (pendingExpandId !== null && works.some(w => w.id === pendingExpandId)) {
+      setExpandId(pendingExpandId)
+      setPendingExpandId(null)
+    }
+  }, [pendingExpandId, works])
 
   const filtered = useMemo(() => {
     let result = works
@@ -158,7 +181,7 @@ export function WorkPage() {
       ) : mostraArchivio ? (
         <div className="space-y-2">
           {filtered.map(w => (
-            <WorkRowArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} />
+            <WorkRowArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} initialExpanded={expandId === w.id} />
           ))}
         </div>
       ) : (
@@ -174,6 +197,7 @@ export function WorkPage() {
               onAddToSchema={() => setAddToSchemaWork({ id: w.id, nome: w.nome })}
               onEdit={() => handleEdit(w)}
               onArchivia={() => { setDrawerId(null); setArchiviaId(w.id) }}
+              initialExpanded={expandId === w.id}
             />
           ))}
         </div>
@@ -230,12 +254,24 @@ export function WorkPage() {
 
 // ─── Riga Work Archiviata ─────────────────────────────────────────────────────
 
-function WorkRowArchivio({ work, metodiNomi, onClick }: { work: any; metodiNomi: Record<string, string>; onClick: () => void }) {
+function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded }: { work: any; metodiNomi: Record<string, string>; onClick: () => void; initialExpanded?: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const [storico, setStorico] = useState<any[] | null>(null)
   const [loadingStorico, setLoadingStorico] = useState(false)
 
   const isTracciata = !!work.validita_mesi
+
+  useEffect(() => {
+    if (!initialExpanded) return
+    setExpanded(true)
+    if (storico === null) {
+      setLoadingStorico(true)
+      workApi.preparazioniList(work.id).then(data => {
+        setStorico(data)
+        setLoadingStorico(false)
+      })
+    }
+  }, [initialExpanded])
 
   const handleToggleStorico = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -350,6 +386,7 @@ function WorkRow({
   onAddToSchema,
   onEdit,
   onArchivia,
+  initialExpanded,
 }: {
   work: any
   metodiNomi?: Record<string, string>
@@ -359,10 +396,23 @@ function WorkRow({
   onAddToSchema?: () => void
   onEdit?: () => void
   onArchivia?: () => void
+  initialExpanded?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [storico, setStorico] = useState<any[] | null>(null)
   const [loadingStorico, setLoadingStorico] = useState(false)
+
+  useEffect(() => {
+    if (!initialExpanded) return
+    setExpanded(true)
+    if (storico === null) {
+      setLoadingStorico(true)
+      workApi.preparazioniList(work.id).then(data => {
+        setStorico(data)
+        setLoadingStorico(false)
+      })
+    }
+  }, [initialExpanded])
 
   const isTracciata   = !!work.validita_mesi
   const isIntermedia  = (work.livello ?? 0) > 0

@@ -29,13 +29,16 @@ function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function WorkRowBlock({ row }: { row: AuditWorkRow }) {
+function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id: number, archiviata: boolean) => void }) {
   const stato = row.stato_work
   const navigate = useNavigate()
   return (
     <div className="border rounded-md overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b">
-        <div className="font-medium text-sm flex-1 truncate">{row.work_nome}</div>
+        <div
+          className="font-medium text-sm flex-1 truncate cursor-pointer hover:text-primary hover:underline transition-colors"
+          onClick={() => onOpenWork(row.work_id, row.archiviate_alla_data)}
+        >{row.work_nome}</div>
         {row.bloccata && (
           <Badge variant="outline" className="bg-red-50 text-red-800 border-red-300">⛔ bloccata</Badge>
         )}
@@ -44,6 +47,9 @@ function WorkRowBlock({ row }: { row: AuditWorkRow }) {
         )}
         {row.ha_prep_scadute_at_data && !row.bloccata && (
           <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">⚠ Prep Neat scadute</Badge>
+        )}
+        {row.archiviate_alla_data && (
+          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">Archiviata</Badge>
         )}
         {stato && (
           <Badge variant="outline" className={statoLabTone[stato]}>{statoLabLabel[stato]}</Badge>
@@ -139,6 +145,7 @@ function ScopertoRowBlock({ row }: { row: AuditScopertoRow }) {
 }
 
 export function AuditCrmSection() {
+  const navigate = useNavigate()
   const [metodi, setMetodi] = useState<any[]>([])
   const [metodoId, setMetodoId] = useState<string>('')
   const [data, setData] = useState<string>(today())
@@ -266,7 +273,11 @@ export function AuditCrmSection() {
               ) : (
                 <div className="space-y-2">
                   {model.righe_work.map(r => (
-                    <WorkRowBlock key={r.work_id} row={r} />
+                    <WorkRowBlock
+                      key={r.work_id}
+                      row={r}
+                      onOpenWork={(id, archiviata) => navigate('/work', { state: { openWorkId: id, archiviata } })}
+                    />
                   ))}
                 </div>
               )}

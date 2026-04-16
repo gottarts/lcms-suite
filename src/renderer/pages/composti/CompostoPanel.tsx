@@ -16,6 +16,7 @@ import { parseConcentrazione } from '@/lib/unita'
 import { PreparazioniTab } from './PreparazioniTab'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { MetodoDrawer } from '../metodi/MetodoDrawer'
 
 // Helper: calcola stato visualizzato di una preparazione (non modifica il DB)
 function computeStatoPrep(prep: any): string {
@@ -56,6 +57,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
 
   // FEAT-metodi-campo: metodi associati al composto
   const [metodiAssociati, setMetodiAssociati] = useState<any[]>([])
+  const [selectedMetodoId, setSelectedMetodoId] = useState<string | null>(null)
 
   const load = async () => {
     if (!compostoId) return
@@ -198,6 +200,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
   }
 
   return (
+    <>
     <SlidePanel open={!!compostoId} onClose={onClose} title={composto.nome} subtitle={composto.codice_interno || undefined} width="520px">
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -257,7 +260,14 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
                   <span className="text-xs text-muted-foreground">Metodi Analitici</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {metodiAssociati.map((m: any) => (
-                      <Badge key={m.id} variant="outline" className="text-xs">{m.nome}</Badge>
+                      <Badge
+                        key={m.id}
+                        variant="outline"
+                        className="text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                        onClick={() => setSelectedMetodoId(String(m.id))}
+                      >
+                        {m.nome}
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -489,5 +499,15 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
         }}
       />
     </SlidePanel>
+
+    <MetodoDrawer
+      metodoId={selectedMetodoId}
+      onClose={() => setSelectedMetodoId(null)}
+      onEdit={() => {}}
+      onDelete={() => {}}
+      onOpenSchema={() => {}}
+      onOpenParametri={() => {}}
+    />
+    </>
   )
 }

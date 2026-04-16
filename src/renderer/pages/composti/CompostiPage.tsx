@@ -61,6 +61,7 @@ const COL_DEFS: { key: string; label: string }[] = [
   { key: 'matrice',          label: 'Matrice' },
   { key: 'mw',               label: 'MW' },
   { key: 'formula',          label: 'Formula' },
+  { key: 'metodi_analitici', label: 'Metodi' },
 ]
 
 const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
@@ -85,6 +86,7 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
   matrice:           false,
   mw:                false,
   formula:           false,
+  metodi_analitici:  false,
 }
 
 // ─── Tipi mix-scope (per decidere selected/all sui mix parziali) ──────────────
@@ -485,6 +487,12 @@ export function CompostiPage() {
   const metodiNomeMap = useMemo(() => {
     const map: Record<string, string> = {}
     for (const m of metodi) map[m.id] = m.nome?.toLowerCase() ?? ''
+    return map
+  }, [metodi])
+
+  const metodiDisplayMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const m of metodi) map[m.id] = m.nome ?? ''
     return map
   }, [metodi])
 
@@ -1101,6 +1109,7 @@ export function CompostiPage() {
         selectedIds={selectedIds} onSelectionChange={setSelectedIds}
         colVisible={colVisible} colOrder={colOrder}
         colFilters={colFilters} onColFilter={handleColFilter}
+        metodiNomeMap={metodiDisplayMap}
       />
 
       <CompostoForm open={formOpen} onClose={() => { setFormOpen(false); setTemplate(null) }} composto={editComposto} template={template} onSave={() => { load(); setTemplate(null) }} />

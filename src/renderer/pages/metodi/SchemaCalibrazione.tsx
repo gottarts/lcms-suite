@@ -762,7 +762,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                     padding:'12px 24px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="h-8 px-3 rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors" style={{ background:'transparent', border:'none', cursor:'pointer' }}>← Torna a Metodi</button>
+          <button onClick={onClose} className="h-9 px-4 rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors" style={{ background:'transparent', border:'none', cursor:'pointer' }}>← Torna a Metodi</button>
           <div className="h-4 w-px bg-border" />
           <span className="font-heading text-lg font-semibold">Schema Calibrazione</span>
           <span className="text-sm text-muted-foreground bg-muted rounded-full px-3 py-0.5 font-mono">{metodoNome}</span>
