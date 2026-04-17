@@ -156,6 +156,10 @@ export const metodoAnalitiApi = {
     api.invoke('metodo-analiti:bulk-set-accreditato', metodoId, nomi, accreditato) as Promise<{ ok: boolean }>,
   bulkUpdateAlias: (metodoId: string, updates: Array<{ nome: string; alias_lims?: string | null; alias_oqlab?: string | null; alias_strumento?: string | null }>) =>
     api.invoke('metodo-analiti:bulk-update-alias', metodoId, updates) as Promise<{ ok: boolean }>,
+  versioni: (metodoId: string) =>
+    api.invoke('metodo-analiti:versioni', metodoId) as Promise<Array<{
+      id: number; metodo_id: string; snapshot: string; motivo: string | null; created_at: string
+    }>>,
 }
 
 export const dashboardApi = {

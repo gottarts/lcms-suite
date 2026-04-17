@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db'
+import { snapshotMetodoAnaliti } from './metodo-analiti-snapshot'
 
 export function registerMetodoAnalitiIpc(): void {
   ipcMain.handle('metodo-analiti:list', (_, metodoId: string) => {
@@ -29,18 +30,25 @@ export function registerMetodoAnalitiIpc(): void {
     if ('alias_oqlab' in patch && cols.includes('alias_oqlab')) { fields.push('alias_oqlab = ?'); values.push(patch.alias_oqlab ?? null) }
     if (fields.length === 0) return { ok: true }
     values.push(id)
-    db.prepare(`UPDATE metodo_analiti SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    db.transaction(() => {
+      db.prepare(`UPDATE metodo_analiti SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+      const row = db.prepare('SELECT metodo_id FROM metodo_analiti WHERE id = ?').get(id) as { metodo_id: string } | undefined
+      if (row) snapshotMetodoAnaliti(db, row.metodo_id, 'update')
+    })()
     return { ok: true }
   })
 
   ipcMain.handle('metodo-analiti:bulk-set-accreditato', (_, metodoId: string, nomi: string[] | 'all', accreditato: 0 | 1) => {
     const db = getDb()
-    if (nomi === 'all') {
-      db.prepare('UPDATE metodo_analiti SET accreditato = ? WHERE metodo_id = ?').run(accreditato, metodoId)
-    } else if (nomi.length > 0) {
-      const placeholders = nomi.map(() => 'LOWER(?)').join(', ')
-      db.prepare(`UPDATE metodo_analiti SET accreditato = ? WHERE metodo_id = ? AND LOWER(nome) IN (${placeholders})`).run(accreditato, metodoId, ...nomi.map(n => n.toLowerCase()))
-    }
+    db.transaction(() => {
+      if (nomi === 'all') {
+        db.prepare('UPDATE metodo_analiti SET accreditato = ? WHERE metodo_id = ?').run(accreditato, metodoId)
+      } else if (nomi.length > 0) {
+        const placeholders = nomi.map(() => 'LOWER(?)').join(', ')
+        db.prepare(`UPDATE metodo_analiti SET accreditato = ? WHERE metodo_id = ? AND LOWER(nome) IN (${placeholders})`).run(accreditato, metodoId, ...nomi.map(n => n.toLowerCase()))
+      }
+      snapshotMetodoAnaliti(db, metodoId, 'bulk-accreditato')
+    })()
     return { ok: true }
   })
 
@@ -58,6 +66,7 @@ export function registerMetodoAnalitiIpc(): void {
         values.push(metodoId, u.nome)
         db.prepare(`UPDATE metodo_analiti SET ${fields.join(', ')} WHERE metodo_id = ? AND LOWER(nome) = LOWER(?)`).run(...values)
       }
+      snapshotMetodoAnaliti(db, metodoId, 'bulk-alias')
     })()
     return { ok: true }
   })
@@ -81,6 +90,7 @@ export function registerMetodoAnalitiIpc(): void {
         const composto = getComposto.get(trimmed) as { id: number } | undefined
         if (composto) insertLink.run(composto.id, metodoId)
       }
+      snapshotMetodoAnaliti(db, metodoId, 'add')
     })()
     return { ok: true }
   })
@@ -103,7 +113,18 @@ export function registerMetodoAnalitiIpc(): void {
         delAnalita.run(metodoId, nome)
         delLinks.run(metodoId, nome)
       }
+      snapshotMetodoAnaliti(db, metodoId, 'remove')
     })()
     return { ok: true }
+  })
+
+  ipcMain.handle('metodo-analiti:versioni', (_, metodoId: string) => {
+    const db = getDb()
+    return db.prepare(`
+      SELECT id, metodo_id, snapshot, motivo, created_at
+      FROM metodo_analiti_versioni
+      WHERE metodo_id = ?
+      ORDER BY created_at DESC
+    `).all(metodoId)
   })
 }

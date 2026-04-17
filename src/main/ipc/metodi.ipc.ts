@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db'
+import { snapshotMetodoAnaliti } from './metodo-analiti-snapshot'
 
 export function registerMetodiIpc(): void {
   ipcMain.handle('metodi:list', () => {
@@ -68,6 +69,7 @@ export function registerMetodiIpc(): void {
         const c = getNomeComposto.get(cid) as { nome: string } | undefined
         if (c?.nome) insertAnalita.run(data.id, c.nome.toUpperCase())
       }
+      snapshotMetodoAnaliti(db, data.id as string, 'create')
     })()
 
     return db.prepare('SELECT * FROM metodi WHERE id = ?').get(data.id)
@@ -144,6 +146,7 @@ export function registerMetodiIpc(): void {
       for (const nome of analitiManuali) {
         insertAnalitaUpd.run(id, nome.toUpperCase())
       }
+      snapshotMetodoAnaliti(db, id, 'update')
     })()
 
     return db.prepare('SELECT * FROM metodi WHERE id = ?').get(id)
@@ -207,6 +210,7 @@ export function registerMetodiIpc(): void {
 
       // Elimina il metodo sorgente (ON DELETE CASCADE rimuove i suoi metodo_analiti)
       deleteSource.run(sourceId)
+      snapshotMetodoAnaliti(db, destId, 'merge')
     })()
 
     return db.prepare('SELECT * FROM metodi WHERE id = ?').get(destId)

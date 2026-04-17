@@ -4,7 +4,7 @@ import { SlidePanel } from '@/components/shared/SlidePanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Pencil, Trash2, ExternalLink } from 'lucide-react'
+import { Pencil, Trash2, ExternalLink, ChevronDown, ChevronUp, History } from 'lucide-react'
 import { metodiApi, metodoAnalitiApi } from '@/lib/api'
 interface MetodoDrawerProps {
   metodoId: string | null
@@ -18,6 +18,9 @@ interface MetodoDrawerProps {
 export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema, onOpenParametri }: MetodoDrawerProps) {
   const [metodo, setMetodo] = useState<any>(null)
   const [analiti, setAnaliti] = useState<{ id: number; nome: string }[]>([])
+  const [showVersioni, setShowVersioni] = useState(false)
+  const [versioni, setVersioni] = useState<Array<{ id: number; snapshot: string; motivo: string | null; created_at: string }>>([])
+  const [expandedVersione, setExpandedVersione] = useState<number | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -26,6 +29,9 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
       metodoAnalitiApi.list(metodoId).then(rows =>
         setAnaliti(rows.sort((a, b) => a.nome.localeCompare(b.nome)))
       )
+      setShowVersioni(false)
+      setVersioni([])
+      setExpandedVersione(null)
     }
   }, [metodoId])
 
@@ -120,6 +126,59 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
                 </Badge>
               ))}
             </div>
+
+            <button
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+              onClick={async () => {
+                if (!showVersioni && versioni.length === 0 && metodoId) {
+                  const v = await metodoAnalitiApi.versioni(metodoId)
+                  setVersioni(v)
+                }
+                setShowVersioni(!showVersioni)
+              }}
+            >
+              {showVersioni ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              <History className="h-3.5 w-3.5" />
+              Versioni precedenti
+            </button>
+
+            {showVersioni && (
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {versioni.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Nessuna versione registrata</p>
+                )}
+                {versioni.map(v => {
+                  const snap = JSON.parse(v.snapshot) as Array<{ nome: string; accreditato: number }>
+                  const nAccr = snap.filter(a => a.accreditato === 1).length
+                  const isExpanded = expandedVersione === v.id
+                  return (
+                    <div key={v.id} className="border rounded p-2 text-xs">
+                      <button
+                        className="w-full flex items-center justify-between hover:text-foreground transition-colors"
+                        onClick={() => setExpandedVersione(isExpanded ? null : v.id)}
+                      >
+                        <span>
+                          {v.created_at.replace('T', ' ').slice(0, 16)}
+                          {v.motivo && <span className="ml-1.5 text-muted-foreground">({v.motivo})</span>}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {snap.length} analiti, {nAccr} accr.
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 pt-1.5 border-t">
+                          {snap.map((a, i) => (
+                            <Badge key={i} variant={a.accreditato === 1 ? 'default' : 'outline'} className="text-[10px]">
+                              {a.nome}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </>
         )}
       </div>

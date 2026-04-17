@@ -143,12 +143,30 @@ export function registerDashboardIpc(): void {
       }
     }
 
-    const analiti_accreditati = db.prepare(`
-      SELECT id, nome, alias_strumento, ordine
-      FROM metodo_analiti
-      WHERE metodo_id = ? AND accreditato = 1
-      ORDER BY ordine, nome
-    `).all(metodo_id)
+    // Usa lo snapshot storico degli analiti se disponibile alla data audit,
+    // altrimenti fallback sulla tabella live (metodi pre-migrazione 026)
+    const versioneAtData = db.prepare(`
+      SELECT snapshot FROM metodo_analiti_versioni
+      WHERE metodo_id = ? AND created_at <= ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(metodo_id, data + 'T23:59:59') as { snapshot: string } | undefined
+
+    let analiti_accreditati: any[]
+    if (versioneAtData) {
+      const allAnaliti = JSON.parse(versioneAtData.snapshot) as any[]
+      analiti_accreditati = allAnaliti
+        .filter((a: any) => a.accreditato === 1)
+        .sort((a: any, b: any) => (a.ordine ?? 9999) - (b.ordine ?? 9999) || (a.nome || '').localeCompare(b.nome || ''))
+        .map((a: any, i: number) => ({ id: i, nome: a.nome, alias_strumento: a.alias_strumento, ordine: a.ordine }))
+    } else {
+      analiti_accreditati = db.prepare(`
+        SELECT id, nome, alias_strumento, ordine
+        FROM metodo_analiti
+        WHERE metodo_id = ? AND accreditato = 1
+        ORDER BY ordine, nome
+      `).all(metodo_id)
+    }
 
     // Work registrati del metodo (validita_mesi NOT NULL, archiviato=0)
     const works = db.prepare(`
