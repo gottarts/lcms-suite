@@ -2,6 +2,7 @@ import type { CrmItem, WorkInSchema } from '../../metodi/SchemaCalibrazione.type
 import { getCompsFromWork, ricostruisciWorkInSchema } from '../../metodi/SchemaCalibrazione.logic'
 import { calcolaStatoLabAllaData } from './scadenzeModel'
 import type { StatoLab } from '../../../../shared/types'
+import { computeCompostiFromWorkTree, type ExpandedWorkLike } from '../../../lib/workCalc'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Audit CRM — render model
@@ -36,6 +37,14 @@ export type AuditAnalitaCoperto = {
   crm_ingredienti: CrmUsato[]  // CRM sottostanti che contengono questo analita
 }
 
+export type AuditWorkChildRow = {
+  work_id: number
+  work_nome: string
+  work_scadenza: string | null
+  stato_work: StatoLab | null
+  problemi: ExpandedWorkLike['problemi'] | null
+}
+
 export type AuditWorkRow = {
   kind: 'work'
   work_id: number
@@ -48,6 +57,7 @@ export type AuditWorkRow = {
   ha_prep_scadute_solo_non_accreditati: boolean
   archiviate_alla_data: boolean
   analiti_coperti: AuditAnalitaCoperto[]
+  children_works: AuditWorkChildRow[]
 }
 
 export type AuditScopertoRow = {
@@ -166,7 +176,12 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
     )
 
     let comps: Array<{ nome: string; concInWork: number; unita: string; srcPath: string }> = []
-    if (workInSchema) {
+    const hasWorkSources = (wRaw.ingredienti ?? []).some((i: any) => i.source_type === 'work')
+
+    if (wRaw.work_tree && hasWorkSources) {
+      // Usa il tree ricorsivo per espandere anche le Work intermedie
+      comps = computeCompostiFromWorkTree(wRaw.work_tree as ExpandedWorkLike)
+    } else if (workInSchema) {
       comps = getCompsFromWork(workInSchema, [[]], crmItems)
     } else {
       // Fallback: se la ricostruzione fallisce, derivo gli analiti dai nomi
@@ -224,6 +239,30 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
         }
       }
     }
+    // Aggiungi anche le foglie CRM/prep dalle Work intermedie (tracciabilità ricorsiva)
+    if (wRaw.work_tree) {
+      const addLeavesFromTree = (tree: ExpandedWorkLike) => {
+        for (const leaf of tree.leaves) {
+          if (leaf.source_type === 'crm') {
+            const found = crmItems.find(c => c.id === leaf.source_id)
+            if (found && !leaf.mix_id) crmUsatiInWork.set(String(found.id), found)
+            if (found && leaf.mix_id) {
+              for (const c of crmItems) {
+                if (c.mix_id === leaf.mix_id) crmUsatiInWork.set(String(c.id), c)
+              }
+            }
+          } else if (leaf.source_type === 'prep') {
+            const found = crmItems.find(c => c.id === leaf.source_id)
+            if (found) crmUsatiInWork.set(String(found.id), found)
+          }
+        }
+        for (const child of tree.children_works) {
+          addLeavesFromTree(child)
+        }
+      }
+      addLeavesFromTree(wRaw.work_tree as ExpandedWorkLike)
+    }
+
     // Index per nome dei CRM realmente usati dalla work
     const crmUsatiByNome = new Map<string, CrmItem[]>()
     for (const c of crmUsatiInWork.values()) {
@@ -282,6 +321,25 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       work_scadenza = new Date(ms).toISOString().slice(0, 10)
     }
 
+    // Costruisce children_works dalla lista di work figlie nel tree
+    const children_works: AuditWorkChildRow[] = []
+    if (wRaw.work_tree) {
+      for (const child of (wRaw.work_tree as ExpandedWorkLike).children_works) {
+        let child_scadenza: string | null = null
+        if (child.ultima_prep_data && child.validita_mesi) {
+          const ms = new Date(child.ultima_prep_data).getTime() + child.validita_mesi * 30.44 * 24 * 60 * 60 * 1000
+          child_scadenza = new Date(ms).toISOString().slice(0, 10)
+        }
+        children_works.push({
+          work_id: child.work_id,
+          work_nome: child.work_nome,
+          work_scadenza: child_scadenza,
+          stato_work: calcolaStatoLabAllaData(child.ultima_prep_data ?? null, child.validita_mesi ?? null, dataRif),
+          problemi: child.problemi,
+        })
+      }
+    }
+
     righe_work.push({
       kind: 'work',
       work_id: wRaw.id,
@@ -296,6 +354,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       ),
       archiviate_alla_data: !!(wRaw.archiviato_at && wRaw.archiviato_at.slice(0, 10) <= input.data),
       analiti_coperti: coperti,
+      children_works,
     })
   }
 

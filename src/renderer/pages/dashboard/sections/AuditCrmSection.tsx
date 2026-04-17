@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { dashboardApi, metodiApi } from '@/lib/api'
-import { buildAuditModel, type AuditModel, type AuditWorkRow, type AuditScopertoRow } from '../lib/auditModel'
+import { buildAuditModel, type AuditModel, type AuditWorkRow, type AuditScopertoRow, type AuditWorkChildRow } from '../lib/auditModel'
 import { exportAuditPdf } from '../lib/auditReport'
 import type { StatoLab } from '../../../../shared/types'
 
@@ -28,6 +28,39 @@ const statoLabLabel: Record<StatoLab, string> = {
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+function ChildWorkBadges({ child }: { child: AuditWorkChildRow }) {
+  const p = child.problemi
+  const hasProblemi = p && (p.crm_dismessi || p.crm_scaduti || p.prep_scadute || p.prep_dismesse || p.work_scadute || p.work_bloccate)
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className="text-xs font-medium">{child.work_nome}</span>
+      {child.stato_work && (
+        <Badge variant="outline" className={`text-[10px] py-0 px-1 ${statoLabTone[child.stato_work]}`}>
+          {statoLabLabel[child.stato_work]}
+        </Badge>
+      )}
+      {child.work_scadenza && (
+        <span className="text-[10px] text-muted-foreground">scad. {child.work_scadenza}</span>
+      )}
+      {hasProblemi && (
+        <Badge
+          variant="outline"
+          className="text-[10px] py-0 px-1 bg-red-50 text-red-800 border-red-300"
+          title={[
+            p?.crm_dismessi ? 'CRM dismessi' : '',
+            p?.crm_scaduti ? 'CRM scaduti' : '',
+            p?.prep_scadute ? 'Prep scadute' : '',
+            p?.prep_dismesse ? 'Prep dismesse' : '',
+            p?.work_scadute ? 'Work sorgenti scadute' : '',
+          ].filter(Boolean).join(', ')}
+        >
+          ⚠ sorgenti
+        </Badge>
+      )}
+    </div>
+  )
 }
 
 function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id: number, archiviata: boolean) => void }) {
@@ -62,7 +95,29 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
         {row.work_scadenza && (
           <span className="text-[11px] text-muted-foreground shrink-0">scad. {row.work_scadenza}</span>
         )}
+        <button
+          className="text-[10px] text-muted-foreground hover:text-primary underline shrink-0 transition-colors"
+          onClick={() => navigate('/work', { state: { openWorkId: row.work_id, archiviata: row.archiviate_alla_data } })}
+        >
+          WorkPage ↗
+        </button>
       </div>
+      {row.children_works.length > 0 && (
+        <div className="px-3 py-1.5 border-b bg-slate-50/50 space-y-1">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Work intermedie sorgenti</div>
+          {row.children_works.map(child => (
+            <div key={child.work_id} className="flex items-center gap-2">
+              <ChildWorkBadges child={child} />
+              <button
+                className="text-[10px] text-muted-foreground hover:text-primary underline transition-colors ml-auto"
+                onClick={() => navigate('/work', { state: { openWorkId: child.work_id, archiviata: false } })}
+              >
+                Vedi ↗
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {row.analiti_coperti.length === 0 ? (
         <div className="px-3 py-2 text-xs text-muted-foreground">
           Nessun analita accreditato coperto da questo Work.

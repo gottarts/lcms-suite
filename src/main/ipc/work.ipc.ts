@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db'
 import type { StatoLab, WorkPreparazione } from '../../shared/types'
+import { expandWorkTree } from '../services/workTree'
 
 // Calcola lo stato laboratorio in base all'ultima preparazione e alla validità
 function calcolaStatoLab(
@@ -204,40 +205,13 @@ export function registerWorkIpc(): void {
     work.ultima_preparazione = ultimaPrep ?? null
     work.stato_lab = calcolaStatoLab(ultimaPrep, work.validita_mesi)
 
-    const nBloccati = (work.ingredienti as any[]).filter(
-      (i: any) => i.source_type === 'crm' && i.source_dismissione !== null
-    ).length
-    const nScaduti = (db.prepare(`
-      SELECT COUNT(*) AS cnt
-      FROM work_ingredienti wi
-      JOIN composti c ON c.id = wi.source_id
-      WHERE wi.work_id = ?
-        AND wi.source_type = 'crm'
-        AND c.data_dismissione IS NULL
-        AND c.scadenza_prodotto IS NOT NULL
-        AND c.scadenza_prodotto < date('now')
-        AND (
-          (SELECT MAX(nuova_scadenza) FROM composti_storia
-           WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) IS NULL
-          OR
-          (SELECT MAX(nuova_scadenza) FROM composti_storia
-           WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL) < date('now')
-        )
-    `).get(id) as any).cnt as number
-    const nPrepScadute = (db.prepare(`
-      SELECT COUNT(*) AS cnt
-      FROM work_ingredienti wi
-      JOIN preparazioni p ON p.id = COALESCE(wi.prep_id, wi.source_id)
-      WHERE wi.work_id = ?
-        AND wi.source_type = 'prep'
-        AND p.data_dismissione IS NULL
-        AND p.scadenza IS NOT NULL
-        AND p.scadenza < date('now')
-    `).get(id) as any).cnt as number
-    work.bloccata       = nBloccati > 0
-    work.motivo_blocco  = nBloccati > 0 ? 'dismesso' : null
-    work.ha_crm_scaduti = nScaduti > 0
-    work.ha_prep_scadute = nPrepScadute > 0
+    // Usa expandWorkTree per calcolare i flag ricorsivamente (include Work intermedie)
+    const tree = expandWorkTree(db, id)
+    const prob = tree?.problemi
+    work.bloccata        = !!(prob?.crm_dismessi || prob?.prep_dismesse)
+    work.motivo_blocco   = (prob?.crm_dismessi || prob?.prep_dismesse) ? 'dismesso' : null
+    work.ha_crm_scaduti  = !!(prob?.crm_scaduti)
+    work.ha_prep_scadute = !!(prob?.prep_scadute)
 
     return work
   })
@@ -976,5 +950,11 @@ export function registerWorkIpc(): void {
       'DELETE FROM work_metodi WHERE work_id = ? AND metodo_id = ?'
     ).run(workId, metodoId)
     return { ok: true }
+  })
+
+  // ── EXPAND-TREE: albero ricorsivo Work → foglie CRM/prep + flag problemi ──
+  ipcMain.handle('work:expand-tree', (_, workId: number) => {
+    const db = getDb()
+    return expandWorkTree(db, workId) ?? null
   })
 }

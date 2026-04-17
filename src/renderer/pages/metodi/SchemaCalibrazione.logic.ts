@@ -423,18 +423,28 @@ export function getCompsFromWork(
 export async function salvaWorkNelDb(
   w: WorkInSchema,
   metodoId: string,
-  crmItems: CrmItem[]
+  crmItems: CrmItem[],
+  workCols?: WorkInSchema[][]
 ): Promise<number | null> {
   if (!w.validitaMesi) return null   // "al momento" → non salvare nel DB
 
   // Risolvi gli ingredienti: per i mix usa l'id numerico del primo composto del mix
-  const ingredienti = w.vols.flatMap((ing, i) => {
+  type Ing = { source_type: 'crm' | 'work' | 'prep'; source_id: number; volume_prelievo_ml: number; fattore_diluizione: number | null; conc_target_mgL: number | null; modo_calcolo: 'conc' | 'dil' }
+  const ingredienti = w.vols.flatMap((ing, i): Ing[] => {
     const src = w.srcs[i]
     if (!src) return []
     if (src.tipo === 'work') {
+      // Cerca il dbId della work sorgente nei workCols (id locale → dbId numerico)
+      let srcDbId: number = 0
+      if (workCols) {
+        for (const col of workCols) {
+          const found = col.find(x => x.id === src.id)
+          if (found?.dbId) { srcDbId = found.dbId; break }
+        }
+      }
       return [{
         source_type:        'work' as const,
-        source_id:          (src as any).dbId ?? 0,
+        source_id:          srcDbId,
         volume_prelievo_ml: ing.vol,
         fattore_diluizione: ing.dilFactor ?? null,
         conc_target_mgL:    ing.concTarget ?? null,

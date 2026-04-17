@@ -58,6 +58,7 @@ function buildCrmItems(allDbWorks: Map<number, any>): CrmItem[] {
           cv:                   ing.source_cv ?? 0,
           concVariabile:        false, // calcolato sotto
           isIS:                 false,
+          destinazione_uso:     null,
         })
       }
     }
@@ -196,6 +197,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
   const [prepOp,   setPrepOp]     = useState('')
   const [saving, setSaving]       = useState(false)
   const [compSearch, setCompSearch] = useState('')
+  const [workTreeProblemi, setWorkTreeProblemi] = useState<{ work_id: number; work_nome: string; problemi: any } | null>(null)
 
   async function loadChain(id: number, map: Map<number, any>) {
     if (map.has(id)) return
@@ -225,9 +227,23 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
       setPrepNote('')
       setPrepOp('')
       setCompSearch('')
+      setWorkTreeProblemi(null)
+      // Fetcha il tree per mostrare alert su Work intermedie con problemi
+      ;(window.electronAPI.invoke('work:expand-tree', workId) as Promise<any>).then(tree => {
+        if (!tree) return
+        // Cerca child work con problemi
+        for (const child of tree.children_works ?? []) {
+          const p = child.problemi
+          if (p?.crm_dismessi || p?.crm_scaduti || p?.prep_scadute || p?.prep_dismesse || p?.work_scadute || p?.work_bloccate) {
+            setWorkTreeProblemi({ work_id: child.work_id, work_nome: child.work_nome, problemi: p })
+            break // mostra il primo problema trovato
+          }
+        }
+      }).catch(() => {})
     } else {
       setWork(null)
       setWorkChain(new Map())
+      setWorkTreeProblemi(null)
     }
   }, [workId])
 
@@ -512,6 +528,26 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>Una o più prep stock NEAT usate in questa work sono scadute. Verifica le prep nel DB Composti.</span>
+            </div>
+          </div>
+        )}
+
+        {/* Banner Work sorgente intermedia con problemi */}
+        {workTreeProblemi && (
+          <div className="rounded-md border border-purple-300 bg-purple-50 px-3 py-2 text-sm text-purple-900">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                Work intermedia <strong>{workTreeProblemi.work_nome}</strong> ha sorgenti con problemi:{' '}
+                {[
+                  workTreeProblemi.problemi?.crm_dismessi && 'CRM dismessi',
+                  workTreeProblemi.problemi?.crm_scaduti && 'CRM scaduti',
+                  workTreeProblemi.problemi?.prep_scadute && 'prep scadute',
+                  workTreeProblemi.problemi?.prep_dismesse && 'prep dismesse',
+                  workTreeProblemi.problemi?.work_scadute && 'Work sorgenti scadute',
+                ].filter(Boolean).join(', ')}.
+                {' '}Considera di archiviarla e crearne una nuova.
+              </span>
             </div>
           </div>
         )}

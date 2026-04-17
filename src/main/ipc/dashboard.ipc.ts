@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../db'
+import { expandWorkTree } from '../services/workTree'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dashboard IPC
@@ -294,12 +295,15 @@ export function registerDashboardIpc(): void {
     const works_registrati = works.map(w => {
       const { n_bloccati, n_scaduti, n_prep_scadute_at_data, ...rest } = w
       const ingredienti = stmtIngredienti.all({ work_id: w.id, data })
+      const work_tree = expandWorkTree(db, w.id)
+      const prob = work_tree?.problemi
       return {
         ...rest,
-        bloccata: (n_bloccati as number) > 0,
-        ha_crm_scaduti: (n_scaduti as number) > 0,
-        ha_prep_scadute_at_data: (n_prep_scadute_at_data as number) > 0,
+        bloccata: (n_bloccati as number) > 0 || !!(prob?.crm_dismessi || prob?.prep_dismesse),
+        ha_crm_scaduti: (n_scaduti as number) > 0 || !!(prob?.crm_scaduti),
+        ha_prep_scadute_at_data: (n_prep_scadute_at_data as number) > 0 || !!(prob?.prep_scadute),
         ingredienti,
+        work_tree,
       }
     })
 
