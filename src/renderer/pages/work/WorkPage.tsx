@@ -534,7 +534,7 @@ function WorkRow({
         className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onClick}
       >
-        {/* Nome + pulsante Prepara/Rinnova */}
+        {/* Nome + pulsante Prepara/Rinnova + badge tracciabilità */}
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           <div className="font-medium text-sm min-w-0 truncate">{work.nome}</div>
           {onPrepara && isTracciata && (
@@ -557,6 +557,16 @@ function WorkRow({
                 {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}
               </Button>
             </div>
+          )}
+          {!!work.ha_figlie_obsolete && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
+              <AlertCircle className="h-2.5 w-2.5" />Figlie da ripreparare
+            </Badge>
+          )}
+          {!!work.ha_sorgente_rinnovata && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
+              <AlertCircle className="h-2.5 w-2.5" />Sorgente rinnovata
+            </Badge>
           )}
         </div>
 

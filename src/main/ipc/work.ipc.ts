@@ -67,7 +67,22 @@ export function registerWorkIpc(): void {
         (SELECT wp.note       FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_note,
         (SELECT wp.operatore  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_operatore,
         (SELECT wp.created_at FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_created_at,
-        (SELECT GROUP_CONCAT(metodo_id) FROM work_metodi WHERE work_id = w.id) AS _metodi_ids_raw
+        (SELECT GROUP_CONCAT(metodo_id) FROM work_metodi WHERE work_id = w.id) AS _metodi_ids_raw,
+        -- Madre con figlie obsolete: almeno una work figlia ha ultima_prep < ultima_prep di questa madre
+        (SELECT COUNT(*)
+          FROM work_ingredienti wi2
+          JOIN work wf ON wf.id = wi2.work_id AND (wf.archiviato = 0 OR wf.archiviato IS NULL)
+          WHERE wi2.source_type = 'work' AND wi2.source_id = w.id
+            AND (SELECT wp2.data_prep FROM work_preparazioni wp2 WHERE wp2.work_id = wf.id ORDER BY wp2.data_prep DESC LIMIT 1)
+                < (SELECT wp3.data_prep FROM work_preparazioni wp3 WHERE wp3.work_id = w.id ORDER BY wp3.data_prep DESC LIMIT 1)
+        ) AS n_figlie_obsolete,
+        -- Figlia con sorgente rinnovata: almeno una work sorgente ha ultima_prep > ultima_prep di questa figlia
+        (SELECT COUNT(*)
+          FROM work_ingredienti wi3
+          WHERE wi3.work_id = w.id AND wi3.source_type = 'work'
+            AND (SELECT wp4.data_prep FROM work_preparazioni wp4 WHERE wp4.work_id = wi3.source_id ORDER BY wp4.data_prep DESC LIMIT 1)
+                > (SELECT wp5.data_prep FROM work_preparazioni wp5 WHERE wp5.work_id = w.id ORDER BY wp5.data_prep DESC LIMIT 1)
+        ) AS n_sorgenti_rinnovate
       FROM work w
       WHERE w.archiviato = 0 OR w.archiviato IS NULL
       ORDER BY
@@ -98,6 +113,8 @@ export function registerWorkIpc(): void {
         motivo_blocco: nBloccati > 0 ? 'dismesso' : null,
         ha_crm_scaduti: nScaduti > 0,
         ha_prep_scadute: nPrepScadute > 0,
+        ha_figlie_obsolete: (w.n_figlie_obsolete as number) > 0,
+        ha_sorgente_rinnovata: (w.n_sorgenti_rinnovate as number) > 0,
       }
     })
   })
@@ -956,5 +973,24 @@ export function registerWorkIpc(): void {
   ipcMain.handle('work:expand-tree', (_, workId: number) => {
     const db = getDb()
     return expandWorkTree(db, workId) ?? null
+  })
+
+  // ── FIGLIE-OBSOLETE: work figlie con ultima_prep_data < ultima prep di questa madre ──
+  ipcMain.handle('work:figlie-obsolete', (_, workId: number) => {
+    const db = getDb()
+    const madre = db.prepare(
+      'SELECT data_prep FROM work_preparazioni WHERE work_id = ? ORDER BY data_prep DESC LIMIT 1'
+    ).get(workId) as { data_prep: string } | undefined
+    if (!madre) return []
+    return db.prepare(`
+      SELECT w.id, w.nome, MAX(wp.data_prep) AS ultima_prep_data
+      FROM work_ingredienti wi
+      JOIN work w ON w.id = wi.work_id
+      LEFT JOIN work_preparazioni wp ON wp.work_id = w.id
+      WHERE wi.source_type = 'work' AND wi.source_id = ?
+        AND w.archiviato = 0
+      GROUP BY w.id, w.nome
+      HAVING ultima_prep_data IS NOT NULL AND ultima_prep_data < ?
+    `).all(workId, madre.data_prep)
   })
 }

@@ -33,6 +33,8 @@ export type WorkTreeProblemi = {
   prep_dismesse: boolean
   work_scadute: boolean
   work_bloccate: boolean
+  figlia_prep_obsoleta: boolean
+  sorgente_rinnovata: boolean  // una work sorgente diretta è stata preparata dopo questa work
 }
 
 export type ExpandedWork = {
@@ -141,6 +143,8 @@ export function expandWorkTree(
     prep_dismesse: false,
     work_scadute: false,
     work_bloccate: false,
+    figlia_prep_obsoleta: false,
+    sorgente_rinnovata: false,
   }
 
   const dataOggi = oggi()
@@ -169,6 +173,20 @@ export function expandWorkTree(
           if (Date.now() > scadenzaMs) problemi.work_scadute = true
         }
         if (child.problemi.crm_dismessi) problemi.work_bloccate = true
+        // Figlia preparata prima dell'ultima preparazione di questa work (madre)
+        if (child.ultima_prep_data && ultimaPrep?.data_prep) {
+          if (child.ultima_prep_data < ultimaPrep.data_prep) {
+            problemi.figlia_prep_obsoleta = true
+          }
+        }
+        // Sorgente (child) preparata dopo questa work: questa work è obsoleta rispetto alla sua sorgente
+        if (child.ultima_prep_data && ultimaPrep?.data_prep) {
+          if (child.ultima_prep_data > ultimaPrep.data_prep) {
+            problemi.sorgente_rinnovata = true
+          }
+        }
+        // Propaga flag dalle catene più profonde
+        if (child.problemi.figlia_prep_obsoleta) problemi.figlia_prep_obsoleta = true
       }
     } else {
       const scadenza_effettiva = ing.ultima_rivalidazione ?? ing.scadenza_prodotto ?? null

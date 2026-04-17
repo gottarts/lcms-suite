@@ -198,6 +198,8 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
   const [saving, setSaving]       = useState(false)
   const [compSearch, setCompSearch] = useState('')
   const [workTreeProblemi, setWorkTreeProblemi] = useState<{ work_id: number; work_nome: string; problemi: any } | null>(null)
+  const [figlieObsolete, setFiglieObsolete]     = useState<Array<{ id: number; nome: string; ultima_prep_data: string }>>([])
+  const [sorgenteObsoleta, setSorgenteObsoleta] = useState(false)
 
   async function loadChain(id: number, map: Map<number, any>) {
     if (map.has(id)) return
@@ -228,6 +230,8 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
       setPrepOp('')
       setCompSearch('')
       setWorkTreeProblemi(null)
+      setFiglieObsolete([])
+      setSorgenteObsoleta(false)
       // Fetcha il tree per mostrare alert su Work intermedie con problemi
       ;(window.electronAPI.invoke('work:expand-tree', workId) as Promise<any>).then(tree => {
         if (!tree) return
@@ -239,11 +243,19 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
             break // mostra il primo problema trovato
           }
         }
+        // Verifica se questa work (figlia) ha una sorgente ri-preparata dopo di essa
+        if (tree.problemi?.sorgente_rinnovata) {
+          setSorgenteObsoleta(true)
+        }
       }).catch(() => {})
+      // Fetcha le work figlie che hanno preparazione antecedente all'ultima di questa madre
+      workApi.figlieObsolete(workId).then(setFiglieObsolete).catch(() => {})
     } else {
       setWork(null)
       setWorkChain(new Map())
       setWorkTreeProblemi(null)
+      setFiglieObsolete([])
+      setSorgenteObsoleta(false)
     }
   }, [workId])
 
@@ -528,6 +540,38 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>Una o più prep stock NEAT usate in questa work sono scadute. Verifica le prep nel DB Composti.</span>
+            </div>
+          </div>
+        )}
+
+        {/* Banner figlie obsolete (drawer madre): work figlie preparate prima dell'ultima preparazione di questa work */}
+        {figlieObsolete.length > 0 && (
+          <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="flex flex-col gap-1">
+                <span>
+                  {figlieObsolete.length === 1
+                    ? '1 work figlia è stata preparata'
+                    : `${figlieObsolete.length} work figlie sono state preparate`
+                  } prima dell'ultima preparazione di questa work. Ripreparare per ripristinare la tracciabilità.
+                </span>
+                <ul className="text-xs list-disc list-inside">
+                  {figlieObsolete.map(f => (
+                    <li key={f.id}>{f.nome} (ultima prep: {formatDate(f.ultima_prep_data)})</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Banner sorgente obsoleta (drawer figlia): una sorgente è stata ri-preparata dopo questa work */}
+        {sorgenteObsoleta && (
+          <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Una Work sorgente è stata ri-preparata dopo questa work. Ripreparare per ripristinare la tracciabilità.</span>
             </div>
           </div>
         )}

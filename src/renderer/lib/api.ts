@@ -128,6 +128,8 @@ export const workApi = {
     api.invoke('work:add-to-metodo', workId, metodoId) as Promise<{ ok: boolean }>,
   removeFromMetodo: (workId: number, metodoId: string) =>
     api.invoke('work:remove-from-metodo', workId, metodoId) as Promise<{ ok: boolean }>,
+  figlieObsolete: (workId: number) =>
+    api.invoke('work:figlie-obsolete', workId) as Promise<Array<{ id: number; nome: string; ultima_prep_data: string }>>,
 }
 
 export const queryApi = {
