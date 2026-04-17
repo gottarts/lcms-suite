@@ -3,11 +3,6 @@
 
 
 
-in work page davanti alal data di preparazione nella stringa delle preparazione metti "Soluzione Work preparata il" davanti la data di preparazioene oreratore.
- Poi aggiungi una finestra di dialog che si apra centro schermo (come al solito) quando clicchi su "Prepara" o "Rinnova" (elimina il puntamento al drawer che e ).
- In automatico la workpage deve avere tutte le preprazioni visibili (e non collapse)
-
- Quando clicchi sul badge del metodo in db composti non deve aprire il drawer metodi mache e inutile. Deve aprirsi Metodi page con il filtro sul metodo selezionato.
 
 
 

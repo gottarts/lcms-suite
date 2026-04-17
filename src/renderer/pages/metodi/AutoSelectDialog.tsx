@@ -53,7 +53,7 @@ export function AutoSelectDialog({
     const singoleScelti: Array<{ sngId: string; nome: string }> = []
     const nonCopertiNemmeno: string[] = []
     for (const a of analiti) {
-      if (coperteDaMix.has(a.nome)) continue
+      if (coperteDaMix.has(a.nome.toLowerCase())) continue
       if (a.sngIds.length > 0) {
         singoleScelti.push({ sngId: a.sngIds[0], nome: a.nome })
       } else {
