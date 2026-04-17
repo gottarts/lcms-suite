@@ -160,6 +160,8 @@ export const metodoAnalitiApi = {
     api.invoke('metodo-analiti:versioni', metodoId) as Promise<Array<{
       id: number; metodo_id: string; snapshot: string; motivo: string | null; created_at: string
     }>>,
+  consolida: (metodoId: string) =>
+    api.invoke('metodo-analiti:consolida', metodoId) as Promise<{ ok: boolean }>,
 }
 
 export const dashboardApi = {

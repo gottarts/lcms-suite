@@ -127,4 +127,19 @@ export function registerMetodoAnalitiIpc(): void {
       ORDER BY created_at DESC
     `).all(metodoId)
   })
+
+  ipcMain.handle('metodo-analiti:consolida', (_, metodoId: string) => {
+    const db = getDb()
+    db.transaction(() => {
+      // Elimina tutte le versioni intermedie (non consolidate e non seed)
+      db.prepare(`
+        DELETE FROM metodo_analiti_versioni
+        WHERE metodo_id = ?
+          AND motivo NOT IN ('consolida', 'migration-seed')
+      `).run(metodoId)
+      // Crea snapshot consolidato con stato attuale
+      snapshotMetodoAnaliti(db, metodoId, 'consolida')
+    })()
+    return { ok: true }
+  })
 }

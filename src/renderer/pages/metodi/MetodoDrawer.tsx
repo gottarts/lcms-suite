@@ -4,8 +4,9 @@ import { SlidePanel } from '@/components/shared/SlidePanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Pencil, Trash2, ExternalLink, ChevronDown, ChevronUp, History } from 'lucide-react'
+import { Pencil, Trash2, ExternalLink, ChevronDown, ChevronUp, History, PackageCheck } from 'lucide-react'
 import { metodiApi, metodoAnalitiApi } from '@/lib/api'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 interface MetodoDrawerProps {
   metodoId: string | null
   onClose: () => void
@@ -21,6 +22,7 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
   const [showVersioni, setShowVersioni] = useState(false)
   const [versioni, setVersioni] = useState<Array<{ id: number; snapshot: string; motivo: string | null; created_at: string }>>([])
   const [expandedVersione, setExpandedVersione] = useState<number | null>(null)
+  const [showConsolidaConfirm, setShowConsolidaConfirm] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -127,20 +129,31 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
               ))}
             </div>
 
-            <button
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
-              onClick={async () => {
-                if (!showVersioni && versioni.length === 0 && metodoId) {
-                  const v = await metodoAnalitiApi.versioni(metodoId)
-                  setVersioni(v)
-                }
-                setShowVersioni(!showVersioni)
-              }}
-            >
-              {showVersioni ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              <History className="h-3.5 w-3.5" />
-              Versioni precedenti
-            </button>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={async () => {
+                  if (!showVersioni && versioni.length === 0 && metodoId) {
+                    const v = await metodoAnalitiApi.versioni(metodoId)
+                    setVersioni(v)
+                  }
+                  setShowVersioni(!showVersioni)
+                }}
+              >
+                {showVersioni ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                <History className="h-3.5 w-3.5" />
+                Versioni precedenti
+              </button>
+              {versioni.some(v => v.motivo !== 'consolida' && v.motivo !== 'migration-seed') && (
+                <button
+                  className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800 transition-colors"
+                  onClick={() => setShowConsolidaConfirm(true)}
+                >
+                  <PackageCheck className="h-3.5 w-3.5" />
+                  Consolida versione
+                </button>
+              )}
+            </div>
 
             {showVersioni && (
               <div className="space-y-1 max-h-60 overflow-y-auto">
@@ -151,15 +164,19 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
                   const snap = JSON.parse(v.snapshot) as Array<{ nome: string; accreditato: number }>
                   const nAccr = snap.filter(a => a.accreditato === 1).length
                   const isExpanded = expandedVersione === v.id
+                  const isConsolidated = v.motivo === 'consolida' || v.motivo === 'migration-seed'
                   return (
-                    <div key={v.id} className="border rounded p-2 text-xs">
+                    <div key={v.id} className={`border rounded p-2 text-xs ${isConsolidated ? 'border-green-300 bg-green-50/50' : ''}`}>
                       <button
                         className="w-full flex items-center justify-between hover:text-foreground transition-colors"
                         onClick={() => setExpandedVersione(isExpanded ? null : v.id)}
                       >
-                        <span>
+                        <span className="flex items-center gap-1">
                           {v.created_at.replace('T', ' ').slice(0, 16)}
-                          {v.motivo && <span className="ml-1.5 text-muted-foreground">({v.motivo})</span>}
+                          {isConsolidated
+                            ? <Badge variant="outline" className="text-[9px] border-green-500 text-green-700 ml-1">consolidata</Badge>
+                            : v.motivo && <span className="ml-1.5 text-muted-foreground">({v.motivo})</span>
+                          }
                         </span>
                         <span className="text-muted-foreground">
                           {snap.length} analiti, {nAccr} accr.
@@ -183,6 +200,22 @@ export function MetodoDrawer({ metodoId, onClose, onEdit, onDelete, onOpenSchema
         )}
       </div>
     </SlidePanel>
+    <ConfirmDialog
+      open={showConsolidaConfirm}
+      title="Consolida versione"
+      message="Le versioni intermedie dall'ultimo consolidamento verranno eliminate e non saranno più disponibili per l'audit storico. Verrà creato un unico snapshot consolidato con lo stato attuale del metodo."
+      variant="danger"
+      confirmLabel="Consolida"
+      onConfirm={async () => {
+        setShowConsolidaConfirm(false)
+        if (metodoId) {
+          await metodoAnalitiApi.consolida(metodoId)
+          const v = await metodoAnalitiApi.versioni(metodoId)
+          setVersioni(v)
+        }
+      }}
+      onCancel={() => setShowConsolidaConfirm(false)}
+    />
     </>
   )
 }
