@@ -337,7 +337,11 @@ export function calcolaVols(
     const val   = customMode ? (valori.get(s.id) ?? 0) : valoreUnico
     if (!val) return { nome: s.nome, vol: 0, modo: isVar ? 'dil' : 'conc' as 'conc' | 'dil' }
 
-    if (!isVar && !hasVar) {
+    // In customMode: usa isVar per-sorgente (non hasVar globale) perché ogni sorgente
+    // ha il suo campo con semantica distinta (÷N se variabile, mg/L se omogenea).
+    // In modalità unica: usa hasVar globale per decidere la formula uniforme.
+    const useConc = customMode ? (!isVar) : (!isVar && !hasVar)
+    if (useConc) {
       // Modalità concentrazione: C1V1 = C2V2
       const vol = Math.round(((val * volFin) / (info.cv || 1)) * 1000) / 1000
       return { nome: s.nome, vol, modo: 'conc' as const, concTarget: val }
