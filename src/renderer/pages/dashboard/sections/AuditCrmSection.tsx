@@ -63,7 +63,7 @@ function ChildWorkBadges({ child }: { child: AuditWorkChildRow }) {
   )
 }
 
-function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id: number, archiviata: boolean) => void }) {
+function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id: number, archiviata: boolean, nome: string) => void }) {
   const stato = row.stato_work
   const navigate = useNavigate()
   return (
@@ -71,7 +71,7 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b">
         <div
           className="font-medium text-sm flex-1 truncate cursor-pointer hover:text-primary hover:underline transition-colors"
-          onClick={() => onOpenWork(row.work_id, row.archiviate_alla_data)}
+          onClick={() => onOpenWork(row.work_id, row.archiviate_alla_data, row.work_nome)}
         >{row.work_nome}</div>
         {row.bloccata && (
           <Badge variant="outline" className="bg-red-50 text-red-800 border-red-300">⛔ bloccata</Badge>
@@ -97,7 +97,7 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
         )}
         <button
           className="text-[10px] text-muted-foreground hover:text-primary underline shrink-0 transition-colors"
-          onClick={() => navigate('/work', { state: { openWorkId: row.work_id, archiviata: row.archiviate_alla_data } })}
+          onClick={() => navigate('/work', { state: { openWorkId: row.work_id, archiviata: row.archiviate_alla_data, searchWork: row.work_nome } })}
         >
           WorkPage ↗
         </button>
@@ -110,7 +110,7 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
               <ChildWorkBadges child={child} />
               <button
                 className="text-[10px] text-muted-foreground hover:text-primary underline transition-colors ml-auto"
-                onClick={() => navigate('/work', { state: { openWorkId: child.work_id, archiviata: false } })}
+                onClick={() => navigate('/work', { state: { openWorkId: child.work_id, archiviata: false, searchWork: child.work_nome } })}
               >
                 Vedi ↗
               </button>
@@ -350,7 +350,7 @@ export function AuditCrmSection() {
                     <WorkRowBlock
                       key={r.work_id}
                       row={r}
-                      onOpenWork={(id, archiviata) => navigate('/work', { state: { openWorkId: id, archiviata } })}
+                      onOpenWork={(id, archiviata, nome) => navigate('/work', { state: { openWorkId: id, archiviata, searchWork: nome } })}
                     />
                   ))}
                 </div>

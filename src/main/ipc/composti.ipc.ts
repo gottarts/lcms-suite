@@ -428,11 +428,18 @@ FROM composti c`
         const insertLinkMix = db.prepare(
           'INSERT INTO composti_metodi (composto_id, metodo_id) VALUES (?, ?)'
         )
+        // Traccia nomi già inseriti per evitare UNIQUE violations nella stessa transazione
+        const nomiInseriti = new Set<string>()
         for (const altro of altriIds) {
           deleteLinksMix.run(altro.id)
+          const altroNomeUpper = (altro.nome as string).toUpperCase()
           for (const mid of metodiIds) {
             insertLinkMix.run(altro.id, mid)
-            insertAnalitaUpd.run(mid, (altro.nome as string).toUpperCase())
+            const key = `${mid}:${altroNomeUpper}`
+            if (!nomiInseriti.has(key)) {
+              nomiInseriti.add(key)
+              insertAnalitaUpd.run(mid, altroNomeUpper)
+            }
           }
         }
       }
@@ -450,10 +457,19 @@ FROM composti c`
         insertLink.run(id, mid)
         if (nomeChangiato) {
           // Se il parametro con il vecchio nome esiste e nessun altro composto lo usa ancora,
-          // rinominalo invece di crearne uno nuovo (preserva ordine, accreditato, alias)
+          // rinominalo invece di crearne uno nuovo (preserva ordine, accreditato, alias).
+          // Ma solo se nuovoNome non esiste già (altrimenti UPDATE violerebbe UNIQUE).
           const altriConVecchioNome = (checkAltriComposti.get(mid, vecchioNome!) as { n: number }).n
           if (altriConVecchioNome === 0) {
-            renameAnalita.run(nuovoNome, mid, vecchioNome!)
+            const nuovoNomeEsiste = (db.prepare(
+              'SELECT 1 FROM metodo_analiti WHERE metodo_id = ? AND LOWER(nome) = LOWER(?)'
+            ).get(mid, nuovoNome) as any)
+            if (nuovoNomeEsiste) {
+              // nuovoNome già presente: elimina il vecchio record orfano
+              deleteAnalita.run(mid, vecchioNome!)
+            } else {
+              renameAnalita.run(nuovoNome, mid, vecchioNome!)
+            }
           } else {
             insertAnalitaUpd.run(mid, nuovoNome)
           }

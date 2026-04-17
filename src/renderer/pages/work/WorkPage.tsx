@@ -55,8 +55,10 @@ export function WorkPage() {
 
   // Apertura automatica da link esterno (es. Audit) — espande lo storico preparazioni
   useEffect(() => {
-    const state = location.state as { openWorkId?: number; archiviata?: boolean } | null
+    const state = location.state as { openWorkId?: number; archiviata?: boolean; filtroMetodo?: string; searchWork?: string } | null
     if (!state?.openWorkId) return
+    if (state.filtroMetodo) setFiltroMetodo(state.filtroMetodo)
+    if (state.searchWork) setSearch(state.searchWork)
     if (state.archiviata) {
       setPendingExpandId(state.openWorkId)
       setMostraArchivio(true)
