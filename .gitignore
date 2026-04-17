@@ -4,3 +4,4 @@ release/
 *.db
 .env
 .DS_Store
+.claude
