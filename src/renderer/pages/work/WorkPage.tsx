@@ -505,9 +505,9 @@ function WorkRow({
 
   const infoCompatta = [
     work.concentrazione != null && !work.conc_variabile
-      ? `${work.concentrazione} ${work.unita_conc ?? 'mg/L'}`
-      : work.conc_variabile ? 'variabile' : null,
-    work.volume_ml ? `${work.volume_ml} mL` : null,
+      ? `Concentrazione ${work.concentrazione} ${work.unita_conc ?? 'mg/L'}`
+      : work.conc_variabile ? 'Concentrazione variabile' : null,
+    work.volume_ml ? `Volume ${work.volume_ml} mL` : null,
     work.solvente ?? null,
     work.operatore ? `Op: ${work.operatore}` : null,
   ].filter(Boolean).join(' · ')
@@ -528,15 +528,26 @@ function WorkRow({
   }
 
   return (
-    <div className="border rounded-md overflow-hidden">
+    <div className="border rounded-md overflow-hidden" style={{ borderLeft: `3px solid ${isIntermedia ? '#9b86d6' : '#c49540'}` }}>
       {/* Header riga */}
       <div
         className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onClick}
       >
-        {/* Nome + pulsante Prepara/Rinnova + badge tracciabilità */}
+        {/* Nome + badge tipo + pulsante Prepara/Rinnova + badge tracciabilità */}
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           <div className="font-medium text-sm min-w-0 truncate">{work.nome}</div>
+          <Badge
+            variant="outline"
+            className="text-[10px] px-1.5 py-0 shrink-0 font-medium"
+            style={
+              isIntermedia
+                ? { borderColor: '#9b86d6', color: '#5a3fa0', backgroundColor: '#f2effe' }
+                : { borderColor: '#c49540', color: '#6b4f1a', backgroundColor: '#fdf6e8' }
+            }
+          >
+            {isIntermedia ? 'Intermedia' : 'Work'}
+          </Badge>
           {onPrepara && isTracciata && (
             <div onClick={e => e.stopPropagation()}>
               <Button
@@ -572,7 +583,7 @@ function WorkRow({
 
         {/* Info compatta */}
         {infoCompatta && (
-          <span className="text-xs text-muted-foreground hidden lg:block shrink-0 max-w-[260px] truncate">
+          <span className="text-xs text-muted-foreground hidden lg:block shrink-0 max-w-[420px] truncate">
             {infoCompatta}
           </span>
         )}
@@ -593,14 +604,9 @@ function WorkRow({
             <AlertCircle className="h-2.5 w-2.5" />Prep stock scadute
           </Badge>
         )}
-        {isIntermedia && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-purple-300 text-purple-700 bg-purple-50">
-            Intermedia
-          </Badge>
-        )}
         {isTracciata ? (
           <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
-            {work.validita_mesi} mesi
+            Durata {work.validita_mesi} mesi
           </Badge>
         ) : (
           <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 text-muted-foreground">
@@ -609,7 +615,7 @@ function WorkRow({
         )}
         {statoBadge && (
           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${statoBadge.className}`}>
-            {statoBadge.label}{scadenzaLabel && (statoLab === 'attiva' || statoLab === 'in_scadenza') ? ` · ${scadenzaLabel}` : ''}
+            {statoBadge.label}{scadenzaLabel && (statoLab === 'attiva' || statoLab === 'in_scadenza') ? ` · Scade il ${scadenzaLabel}` : ''}
           </Badge>
         )}
 

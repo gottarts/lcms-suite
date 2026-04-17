@@ -708,7 +708,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
 
     let dbId: number | undefined
     try {
-      const result = await salvaWorkNelDb(work, metodoId, crmItems, workCols)
+      const result = await salvaWorkNelDb(work, metodoId, crmItems, workCols, tgtCol)
       if (result) dbId = result
     } catch (e) {
       console.error('Errore salvataggio Work nel DB:', e)

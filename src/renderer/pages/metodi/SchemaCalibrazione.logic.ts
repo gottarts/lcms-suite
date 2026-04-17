@@ -428,7 +428,8 @@ export async function salvaWorkNelDb(
   w: WorkInSchema,
   metodoId: string,
   crmItems: CrmItem[],
-  workCols?: WorkInSchema[][]
+  workCols?: WorkInSchema[][],
+  colIdx?: number
 ): Promise<number | null> {
   if (!w.validitaMesi) return null   // "al momento" → non salvare nel DB
 
@@ -501,7 +502,7 @@ export async function salvaWorkNelDb(
     validita_mesi:  w.validitaMesi,
     operatore:      w.op || null,
     note:           null,
-    livello:        0,
+    livello:        colIdx ?? 0,
     metodi_ids:     [metodoId],
     ingredienti,
   }

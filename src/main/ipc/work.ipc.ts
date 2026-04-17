@@ -360,6 +360,7 @@ export function registerWorkIpc(): void {
     validita_mesi?: number | null
     operatore?: string | null
     note?: string | null
+    livello?: number
     ingredienti?: Array<{
       source_type: 'crm' | 'work' | 'prep'
       source_id: number
@@ -387,7 +388,8 @@ export function registerWorkIpc(): void {
         solvente       = @solvente,
         validita_mesi  = @validita_mesi,
         operatore      = @operatore,
-        note           = @note
+        note           = @note,
+        livello        = @livello
       WHERE id = @id
     `)
     const deleteIngr = db.prepare('DELETE FROM work_ingredienti WHERE work_id = ?')
@@ -424,6 +426,7 @@ export function registerWorkIpc(): void {
         validita_mesi:  data.validita_mesi  !== undefined ? data.validita_mesi  : current.validita_mesi,
         operatore:      data.operatore      !== undefined ? data.operatore      : current.operatore,
         note:           data.note           !== undefined ? data.note           : current.note,
+        livello:        data.livello        !== undefined ? data.livello        : current.livello ?? 0,
       })
       if (ingredienti !== undefined) {
         deleteIngr.run(id)

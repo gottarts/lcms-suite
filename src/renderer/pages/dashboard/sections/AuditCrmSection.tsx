@@ -257,7 +257,7 @@ export function AuditCrmSection() {
               <SelectContent>
                 {metodi.map(m => (
                   <SelectItem key={m.id} value={m.id}>
-                    {m.id}{m.nome ? ` — ${m.nome}` : ''}
+                    {m.nome}{m.nome_esteso ? ` — ${m.nome_esteso}` : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
