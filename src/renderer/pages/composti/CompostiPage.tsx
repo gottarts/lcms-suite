@@ -55,7 +55,6 @@ const COL_DEFS: { key: string; label: string }[] = [
   { key: 'ubicazione',       label: 'Ubicazione' },
   { key: 'stoccaggio',       label: 'Stoccaggio' },
   { key: 'accreditamento_crm', label: 'Accreditamento' },
-  { key: 'work_standard',    label: 'Work' },
   { key: 'stato',            label: 'Stato' },
   { key: 'destinazione_uso', label: 'Destinazione' },
   { key: 'forma_commerciale',label: 'Forma comm.' },
@@ -80,7 +79,6 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
   ubicazione:        true,
   stoccaggio:        false,
   accreditamento_crm: false,
-  work_standard:     true,
   stato:             true,
   destinazione_uso:  false,
   forma_commerciale: false,
@@ -356,7 +354,6 @@ export function CompostiPage() {
   }
 
   const [filtroStati, setFiltroStati] = useState<string[]>((location.state as any)?.filtroStati ?? [])
-  const [filtroWorks, setFiltroWorks] = useState<string[]>([])
   const [filtroDestinazioni, setFiltroDestinazioni] = useState<string[]>([])
   const [filtroMetodi, setFiltroMetodi] = useState<string[]>([])
   const [filtroAttenzione, setFiltroAttenzione] = useState(false)
@@ -482,7 +479,7 @@ export function CompostiPage() {
 
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [debouncedSearch, filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi,
+  }, [debouncedSearch, filtroStati, filtroDestinazioni, filtroMetodi,
       filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire,
       nascondiScaduti, soloIncompleti, colFilters])
 
@@ -497,10 +494,6 @@ export function CompostiPage() {
     for (const m of metodi) map[m.id] = m.nome ?? ''
     return map
   }, [metodi])
-
-  const opzioniWork = useMemo(() =>
-    Array.from(new Set(composti.map(c => c.work_standard).filter((v): v is string => !!v && v.trim() !== ''))).sort()
-  , [composti])
 
   const filtered = useMemo(() => {
     let result = composti
@@ -522,7 +515,6 @@ export function CompostiPage() {
         c.operatore_apertura?.toLowerCase().includes(q) ||
         c.stoccaggio?.toLowerCase().includes(q) ||
         c.accreditamento_crm?.toLowerCase().includes(q) ||
-        c.work_standard?.toLowerCase().includes(q) ||
         c.mix_id?.toLowerCase().includes(q) ||
         c.metodi_ids?.some((id: string) => metodiNomeMap[id]?.includes(q))
       )
@@ -535,7 +527,6 @@ export function CompostiPage() {
       )
     }
     if (filtroStati.length > 0) result = result.filter(c => filtroStati.some(s => computeStato(c) === STATO_MAP[s]))
-    if (filtroWorks.length > 0) result = result.filter(c => filtroWorks.includes(c.work_standard))
     if (filtroDestinazioni.length > 0) result = result.filter(c => filtroDestinazioni.includes(c.destinazione_uso))
     if (filtroMetodi.length > 0) result = result.filter(c => c.metodi_ids?.some((id: string) => filtroMetodi.includes(id)))
     if (filtroInScadenza) result = result.filter(c => { const s = computeStato(c); return s === 'in_scadenza' || s === 'rivalidato_in_scadenza' })
@@ -546,7 +537,7 @@ export function CompostiPage() {
     if (soloIncompleti) result = result.filter(c => isIncompleto(c))
     return result
   }, [composti, metodiNomeMap, debouncedSearch, colFilters,
-      filtroStati, filtroWorks, filtroDestinazioni, filtroMetodi,
+      filtroStati, filtroDestinazioni, filtroMetodi,
       filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire,
       nascondiScaduti, soloIncompleti])
 
@@ -817,7 +808,6 @@ export function CompostiPage() {
           solvente: composto.solvente || '',
           classe: composto.classe || '',
           destinazione_uso: composto.destinazione_uso || '',
-          work_standard: composto.work_standard || '',
           ubicazione: composto.ubicazione || '',
           stoccaggio: composto.stoccaggio || '',
           accreditamento_crm: composto.accreditamento_crm || 'ISO 17034',
@@ -848,7 +838,7 @@ export function CompostiPage() {
     setDeleteMixInfo(info); setDeleteId(id)
   }, [])
 
-  const hasFiltriAttivi = filtroStati.length > 0 || filtroWorks.length > 0 ||
+  const hasFiltriAttivi = filtroStati.length > 0 ||
     filtroDestinazioni.length > 0 || filtroMetodi.length > 0 ||
     nascondiScaduti || soloIncompleti || Object.keys(colFilters).length > 0
 
@@ -973,7 +963,6 @@ export function CompostiPage() {
           <div className="flex items-center gap-2 border-l pl-3 flex-wrap">
             <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <MultiSelectDropdown label="Stato" options={Object.keys(STATO_MAP)} selected={filtroStati} onChange={setFiltroStati} />
-            <MultiSelectDropdown label="Work" options={opzioniWork} selected={filtroWorks} onChange={setFiltroWorks} />
             <MultiSelectDropdown label="Destinazione" options={DESTINAZIONI_USO} selected={filtroDestinazioni} onChange={setFiltroDestinazioni} />
             <MultiSelectDropdown label="Metodo" options={metodi.map(m => m.id)} selected={filtroMetodi} onChange={setFiltroMetodi} renderLabel={id => metodi.find(m => m.id === id)?.nome ?? id} />
           </div>
@@ -985,12 +974,6 @@ export function CompostiPage() {
               <Badge key={s} variant="secondary" className="flex items-center gap-1">
                 Stato: {s}
                 <button onClick={() => setFiltroStati(prev => prev.filter(x => x !== s))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
-              </Badge>
-            ))}
-            {filtroWorks.map(w => (
-              <Badge key={w} variant="secondary" className="flex items-center gap-1">
-                Work: {w}
-                <button onClick={() => setFiltroWorks(prev => prev.filter(x => x !== w))} className="ml-1 hover:bg-muted rounded px-0.5">×</button>
               </Badge>
             ))}
             {filtroDestinazioni.map(d => (
@@ -1026,7 +1009,7 @@ export function CompostiPage() {
             <button
               className="text-xs text-muted-foreground hover:text-foreground"
               onClick={() => {
-                setFiltroStati([]); setFiltroWorks([]); setFiltroDestinazioni([])
+                setFiltroStati([]); setFiltroDestinazioni([])
                 setFiltroMetodi([]); setNascondiScaduti(false); setSoloIncompleti(false); setColFilters({})
               }}
             >

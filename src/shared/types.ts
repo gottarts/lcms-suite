@@ -56,7 +56,6 @@ export interface Composto {
   scadenza_prodotto: string | null
   data_dismissione: string | null
   destinazione_uso: string | null
-  work_standard: string | null
   /** @deprecated — non visualizzare in UI; mantenuto per retrocompatibilità DB */
   matrice: string | null
   peso_molecolare: number | null

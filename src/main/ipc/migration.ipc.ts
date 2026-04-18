@@ -21,7 +21,6 @@ interface LegacyComposto {
   ScadenzaProdotto?: string
   DataDismissione?: string
   DestinazioneUso?: string
-  WorkStandard?: string
   Matrice?: string
   MW?: string | number
   Ubicazione?: string
@@ -195,13 +194,13 @@ export function registerMigrationIpc(): void {
             forma_commerciale, purezza, concentrazione, solvente, fiala,
             produttore, lotto, operatore_apertura, data_apertura,
             scadenza_prodotto, data_dismissione, destinazione_uso,
-            work_standard, matrice, peso_molecolare, ubicazione,
+            matrice, peso_molecolare, ubicazione,
             arpa, mix, mix_id)
            VALUES (@nome, @codice_interno, @formula, @classe, @forma,
             @forma_commerciale, @purezza, @concentrazione, @solvente, @fiala,
             @produttore, @lotto, @operatore_apertura, @data_apertura,
             @scadenza_prodotto, @data_dismissione, @destinazione_uso,
-            @work_standard, @matrice, @peso_molecolare, @ubicazione,
+            @matrice, @peso_molecolare, @ubicazione,
             @arpa, @mix, @mix_id)`
         )
 
@@ -233,7 +232,6 @@ export function registerMigrationIpc(): void {
             scadenza_prodotto: c.ScadenzaProdotto || null,
             data_dismissione: c.DataDismissione || null,
             destinazione_uso: c.DestinazioneUso || null,
-            work_standard: c.WorkStandard || null,
             matrice: c.Matrice || null,
             peso_molecolare: toNumberOrNull(c.MW),
             ubicazione: c.Ubicazione || null,

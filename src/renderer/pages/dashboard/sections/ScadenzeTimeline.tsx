@@ -232,19 +232,10 @@ export function ScadenzeTimeline() {
   const prep = useMemo(() => items.filter((i): i is ScadenzaItem & { kind: 'preparazione' } => i.kind === 'preparazione'), [items])
   const work = useMemo(() => items.filter((i): i is ScadenzaItem & { kind: 'work' } => i.kind === 'work'), [items])
 
-  // Apertura sezioni: di default aperte se hanno elementi entro 30 giorni
-  const [openCrm, setOpenCrm] = useState(true)
-  const [openPrep, setOpenPrep] = useState(true)
-  const [openWork, setOpenWork] = useState(true)
-
-  // Aggiorna apertura default dopo il caricamento
-  useEffect(() => {
-    if (!loading) {
-      setOpenCrm(crm.some(i => i.giorni <= 30))
-      setOpenPrep(prep.some(i => i.giorni <= 30))
-      setOpenWork(work.some(i => i.giorni <= 30))
-    }
-  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Apertura sezioni: chiuse di default all'apertura pagina
+  const [openCrm, setOpenCrm] = useState(false)
+  const [openPrep, setOpenPrep] = useState(false)
+  const [openWork, setOpenWork] = useState(false)
 
   const allOpen = openCrm && openPrep && openWork
   const allClosed = !openCrm && !openPrep && !openWork

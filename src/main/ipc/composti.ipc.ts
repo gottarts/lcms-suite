@@ -200,7 +200,6 @@ FROM composti c`
       scadenza_prodotto: data.scadenza_prodotto ?? null,
       data_dismissione: data.data_dismissione ?? null,
       destinazione_uso: data.destinazione_uso ?? null,
-      work_standard: data.work_standard ?? null,
       matrice: data.matrice ?? null,
       peso_molecolare: data.peso_molecolare ?? null,
       ubicazione: data.ubicazione ?? null,
@@ -230,7 +229,7 @@ FROM composti c`
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
       'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
-      'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
+      'destinazione_uso', 'matrice', 'peso_molecolare', 'ubicazione',
       'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm', 'volume_ml']
     const placeholders = cols.map(c => `@${c}`).join(', ')
     const insertComposto = db.prepare(
@@ -292,7 +291,6 @@ FROM composti c`
       scadenza_prodotto: data.scadenza_prodotto ?? null,
       data_dismissione: data.data_dismissione ?? null,
       destinazione_uso: data.destinazione_uso ?? null,
-      work_standard: data.work_standard ?? null,
       matrice: data.matrice ?? null,
       peso_molecolare: data.peso_molecolare ?? null,
       ubicazione: data.ubicazione ?? null,
@@ -311,7 +309,7 @@ FROM composti c`
        fiala=@fiala, produttore=@produttore, lotto=@lotto,
        operatore_apertura=@operatore_apertura, data_apertura=@data_apertura,
        scadenza_prodotto=@scadenza_prodotto, data_dismissione=@data_dismissione,
-       destinazione_uso=@destinazione_uso, work_standard=@work_standard,
+       destinazione_uso=@destinazione_uso,
        matrice=@matrice, peso_molecolare=@peso_molecolare, ubicazione=@ubicazione,
        arpa=@arpa, mix=@mix, mix_id=@mix_id,
        stoccaggio=@stoccaggio, accreditamento_crm=@accreditamento_crm,
@@ -356,7 +354,7 @@ FROM composti c`
            fiala=@fiala, produttore=@produttore, lotto=@lotto,
            operatore_apertura=@operatore_apertura, data_apertura=@data_apertura,
            scadenza_prodotto=@scadenza_prodotto, data_dismissione=@data_dismissione,
-           destinazione_uso=@destinazione_uso, work_standard=@work_standard,
+           destinazione_uso=@destinazione_uso,
            matrice=@matrice, peso_molecolare=@peso_molecolare, ubicazione=@ubicazione,
            arpa=@arpa, mix=@mix, mix_id=@mix_id,
            stoccaggio=@stoccaggio, accreditamento_crm=@accreditamento_crm,
@@ -394,7 +392,6 @@ FROM composti c`
             scadenza_prodotto   = ?,
             classe              = ?,
             destinazione_uso    = ?,
-            work_standard       = ?,
             ubicazione          = ?,
             stoccaggio          = ?,
             accreditamento_crm  = ?,
@@ -410,7 +407,7 @@ FROM composti c`
           row.produttore, row.operatore_apertura,
           row.data_apertura, row.scadenza_prodotto,
           row.classe, row.destinazione_uso,
-          row.work_standard, row.ubicazione, row.stoccaggio, row.accreditamento_crm,
+          row.ubicazione, row.stoccaggio, row.accreditamento_crm,
           row.volume_ml, row.arpa, row.mix_id, id
         )
 
@@ -542,7 +539,6 @@ FROM composti c`
     classe: string | null
     destinazione_uso: string | null
     ubicazione?: string | null
-    work_standard?: string | null
     volume_ml?: number | null
     fiala?: string | null
     codice_interno?: string | null
@@ -574,7 +570,7 @@ FROM composti c`
     const cols = ['nome', 'codice_interno', 'formula', 'classe', 'forma', 'forma_commerciale',
       'purezza', 'concentrazione', 'unita_conc', 'solvente', 'fiala', 'produttore', 'lotto',
       'operatore_apertura', 'data_apertura', 'scadenza_prodotto', 'data_dismissione',
-      'destinazione_uso', 'work_standard', 'matrice', 'peso_molecolare', 'ubicazione',
+      'destinazione_uso', 'matrice', 'peso_molecolare', 'ubicazione',
       'arpa', 'mix', 'mix_id', 'stoccaggio', 'accreditamento_crm', 'volume_ml']
     const placeholders = cols.map(c => `@${c}`).join(', ')
     const insert = db.prepare(
@@ -605,7 +601,6 @@ FROM composti c`
       scadenza_prodotto: data.scadenza_prodotto || null,
       data_dismissione: null,
       destinazione_uso: data.destinazione_uso || null,
-      work_standard: data.work_standard || null,
       matrice: null,
       peso_molecolare: null,
       ubicazione: data.ubicazione || null,

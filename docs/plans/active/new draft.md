@@ -8,11 +8,17 @@
 
 
  
-Esiste la possibilita che una work sorgente di una work figlia finisca prima della scadenza. In quel caso se ne prepara una nuova ma la work figlia non e tracciata nei confronti della preparazione della madre. Si potrebbe metter un controllo sulle date di preparazione. La work figlia viene sempre preparata quando si prepara un nuova work madre. Quindi deve avere una data successiva. si puo mettre un controllo data in cui si avvisa nel caso che la preparazione figlia ha una data inferiore a quella della nuova madre. Che ne dici? oestamente. (magari dammi un suggeriemto)
-
-sarebbe bello avere in wokpage i colori delle righe delle work uguali al codice colore delle chips in schemi calibrazione (arancione e viola) ma gari solo della riga e le preparazioni come adesso.
-Mettere in selezione metodo audit il nome - Nome esteso del metodo (e non quel progressivo tuo)
-
+##
+Scadenze prossimi 60 giorni (USA COLLAPSE DI DEFOUL ALL APERTURA PAGINA
+## 
+QUANDO SI è IN DASHBORD E SI APRE UN COLLEGAMENTE SI PERDE L'AUDI. SERVIREBBE UN MODO PER TORNARE ALL' AUDIT SE SI ARRIVA AD ALTRI MODULI TRAMITE LINK (QUESTO Eè IL COMPORTAMENTO MA VEDI TU LA SOLUZIONE MIGLIORE))
+##
+Analiti accreditati scoperti
+1
+Nessun CRM attivo con nome corrispondente
+NON DA INFO AGGIUNTIVE... (CHE ANALITA?)    FAI QUALCOSA... 
+##
+IL CAMPO WORK DESTINAZIONE PER COME E STRUTTURATA LA APP NON HA PIU SENSO IN DB COMPOSTI SI PUO ELIMINARE LA COLONNA E IL CAMPO... (RICORDATI DI ELIMINARLO DA TUTTI I DIALOG IMPORTAZIONI E TUTTE LE DIPENDENZE DI DB COMPSOTI)
 
 
  ## importante
@@ -23,7 +29,8 @@ Mettere in selezione metodo audit il nome - Nome esteso del metodo (e non quel p
 
 
 
-
+## FUTURO
+SERVIREBBE UN CAMPO SINONIMI (PIU NOMI NON UNO) PER GESTIRE EVENTUALI NOMI E CASISTICHE PER I COMPOSTI E MAGARI UN CAMPO CAS NUMBER. FAI MOLTA ATTENZIONE IN QUANTO IL DB COMPOSTI è DELICATO. QUESTI NUOVI CAMPI FANNO PARTE DI IDENTIFICAZIONE E DEVONO ESSERE AGGIUNTI IN TUTTI I VARI PUNTI DI COMPILAZIONE DEL DB (IMPORTAZIONI, NUOVO COMPSOTO IN TUTTE LE DIALOG ECCETERA. ). FORSE PER EVITARE PROBLEMI E MEGLIO METTERE QUESTA COSA IN UN NUOVO MODULO CHE POTREBBE ESSERE DATABASE MOLECOLE (CON DENTRO ANCHE SMILE ECCETERA.)
 
 
 

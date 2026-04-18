@@ -86,7 +86,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
         forma_commerciale: '', purezza: '', concentrazione: '', unita_conc: UNITA_DEFAULT, solvente: '',
         fiala: '', produttore: '', lotto: '', operatore_apertura: '',
         data_apertura: '', scadenza_prodotto: '', destinazione_uso: '',
-        work_standard: '', peso_molecolare: '', ubicazione: '',
+        peso_molecolare: '', ubicazione: '',
         stoccaggio: '', accreditamento_crm: 'ISO 17034',
         metodi_ids: [],
         volume_ml: '',
@@ -569,10 +569,6 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Work Standard</Label>
-                <Input value={form.work_standard || ''} onChange={e => set('work_standard', e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">Ubicazione</Label>

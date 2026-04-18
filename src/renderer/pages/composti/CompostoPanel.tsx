@@ -248,7 +248,6 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
             <Field label="Data Dismissione" value={formatDate(composto.data_dismissione)} />
             <Separator />
             <Field label="Destinazione Uso" value={composto.destinazione_uso} />
-            <Field label="Work Standard" value={composto.work_standard} />
             <Field label="Ubicazione" value={composto.ubicazione} />
             <Field label="Stoccaggio" value={composto.stoccaggio} />
             <Field label="Accreditamento CRM" value={composto.accreditamento_crm} />

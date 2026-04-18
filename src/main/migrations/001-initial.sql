@@ -48,7 +48,6 @@ CREATE TABLE IF NOT EXISTS composti (
   scadenza_prodotto   TEXT,
   data_dismissione    TEXT,
   destinazione_uso    TEXT,
-  work_standard       TEXT,
   matrice             TEXT,
   peso_molecolare     REAL,
   ubicazione          TEXT,

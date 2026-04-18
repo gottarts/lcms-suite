@@ -40,7 +40,6 @@ interface MixPesticidiFormProps {
     solvente: string
     classe: string
     destinazione_uso: string
-    work_standard: string
     ubicazione: string
     stoccaggio: string
     accreditamento_crm: string
@@ -64,7 +63,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
     solvente: '', produttore: '', lotto: '', data_apertura: '',
     scadenza_prodotto: '', classe: '', destinazione_uso: '',
     stoccaggio: '', accreditamento_crm: 'ISO 17034', codice_interno: '',
-    fiale: '1', ubicazione: '', work_standard: '', volume_ml: '',
+    fiale: '1', ubicazione: '', volume_ml: '',
     operatore_apertura: '',
   })
   const [nomi, setNomi] = useState<string[]>([])
@@ -147,7 +146,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
         codice_interno:    mixTemplate.codice_interno,
         fiale:             mixTemplate.fiala || '1',
         ubicazione:        mixTemplate.ubicazione,
-        work_standard:     mixTemplate.work_standard,
         volume_ml:         mixTemplate.volume_ml,
         operatore_apertura: '',
       })
@@ -177,7 +175,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
       solvente: '', produttore: '', lotto: '', data_apertura: '',
       scadenza_prodotto: '', classe: '', destinazione_uso: '',
       stoccaggio: '', accreditamento_crm: 'ISO 17034', codice_interno: '',
-      fiale: '1', ubicazione: '', work_standard: '', volume_ml: '',
+      fiale: '1', ubicazione: '', volume_ml: '',
       operatore_apertura: '',
     })
     setNomi([])
@@ -339,7 +337,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
         unita_conc: form.unita_conc || UNITA_DEFAULT,
         fiala: form.fiale ? String(parseInt(form.fiale)) : null,
         ubicazione: form.ubicazione || null,
-        work_standard: form.work_standard || null,
         operatore_apertura: form.operatore_apertura || null,
         volume_ml: form.volume_ml ? parseFloat(form.volume_ml) : null,
         metodi_ids: metodiIds,
@@ -615,10 +612,6 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
                 suggestions={ubicazioniDisponibili}
                 placeholder="es. Frigo A, Lab 2..."
               />
-            </div>
-            <div>
-              <Label className="text-xs">Work Standard</Label>
-              <Input value={form.work_standard} onChange={e => set('work_standard', e.target.value)} placeholder="es. Work_Pesticidi_A" />
             </div>
           </div>
 
