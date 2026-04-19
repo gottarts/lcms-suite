@@ -8,6 +8,7 @@ import { Pencil, Trash2, Archive, FlaskConical, ChevronDown, ChevronUp, AlertCir
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { workApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
+import { AutocompleteInput } from '@/components/shared/AutocompleteInput'
 import { getCompsFromWork } from '../metodi/SchemaCalibrazione.logic'
 import type { WorkInSchema, SorgenteSel, Ingrediente, CrmItem } from '../metodi/SchemaCalibrazione.types'
 import { C } from '../metodi/SchemaCalibrazione.types'
@@ -197,6 +198,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
   const [prepOp,   setPrepOp]     = useState('')
   const [saving, setSaving]       = useState(false)
   const [compSearch, setCompSearch] = useState('')
+  const [suggestOperatore, setSuggestOperatore] = useState<string[]>([])
   const [workTreeProblemi, setWorkTreeProblemi] = useState<{ work_id: number; work_nome: string; problemi: any } | null>(null)
   const [figlieObsolete, setFiglieObsolete]     = useState<Array<{ id: number; nome: string; ultima_prep_data: string }>>([])
   const [sorgenteObsoleta, setSorgenteObsoleta] = useState(false)
@@ -258,6 +260,13 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
       setSorgenteObsoleta(false)
     }
   }, [workId])
+
+  useEffect(() => {
+    ;(window.electronAPI.invoke('anagrafiche:list') as Promise<any[]>).then(anagrafiche => {
+      const voci = anagrafiche.find((a: any) => a.nome.toLowerCase() === 'operatori')?.voci?.map((v: any) => v.valore) ?? []
+      setSuggestOperatore(voci)
+    }).catch(() => {})
+  }, [])
 
   const loadStorico = async () => {
     if (!workId) return
@@ -423,18 +432,44 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
       <div className="space-y-4">
 
         {/* Azioni */}
-        <div className="flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" onClick={() => onEdit(work)}>
-            <Pencil className="h-3.5 w-3.5 mr-1" /> Modifica
-          </Button>
-          <Button size="sm" variant="outline" className="text-destructive" onClick={() => onDelete(work.id)}>
-            <Trash2 className="h-3.5 w-3.5 mr-1" /> Elimina
-          </Button>
-          {onArchivia && (
-            <Button size="sm" variant="outline" className="text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => onArchivia(work.id)}>
-              <Archive className="h-3.5 w-3.5 mr-1" /> Archivia
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => onEdit(work)}>
+              <Pencil className="h-3.5 w-3.5 mr-1" /> Modifica
             </Button>
-          )}
+            {onVaiASchema && work.metodi_ids && work.metodi_ids.length > 0 && (
+              work.metodi_ids.length === 1 ? (
+                <Button size="sm" variant="outline" onClick={() => onVaiASchema(work.metodi_ids[0])}>
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" /> Schemi
+                </Button>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <ExternalLink className="h-3.5 w-3.5 mr-1" /> Schemi
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {(work.metodi_ids as string[]).map((mid: string) => (
+                      <DropdownMenuItem key={mid} onClick={() => onVaiASchema(mid)}>
+                        {metodiNomi?.[mid] ?? mid}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" className="text-destructive" onClick={() => onDelete(work.id)}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> Elimina
+            </Button>
+            {onArchivia && (
+              <Button size="sm" variant="outline" className="text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => onArchivia(work.id)}>
+                <Archive className="h-3.5 w-3.5 mr-1" /> Archivia
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Metodi associati */}
@@ -670,12 +705,12 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                 </div>
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-muted-foreground w-12 shrink-0">Operatore *</label>
-                  <input
-                    type="text"
+                  <AutocompleteInput
                     value={prepOp}
-                    onChange={e => setPrepOp(e.target.value)}
+                    onChange={setPrepOp}
+                    suggestions={suggestOperatore}
                     placeholder="es. V.G."
-                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="h-8 text-sm"
                   />
                 </div>
                 <div className="flex items-start gap-2">

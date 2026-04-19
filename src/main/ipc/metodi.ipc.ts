@@ -18,10 +18,14 @@ export function registerMetodiIpc(): void {
        FROM metodi m
        LEFT JOIN strumenti s ON s.id = m.strumento_id
        JOIN metodo_analiti ma ON ma.metodo_id = m.id
-       JOIN work_ingredienti wi
-         ON wi.work_id = ?
-         AND wi.source_type = 'crm'
-         AND LOWER((SELECT nome FROM composti WHERE id = wi.source_id)) = LOWER(ma.nome)
+       JOIN work_ingredienti wi ON wi.work_id = ?
+       WHERE (
+         (wi.source_type = 'crm'
+          AND LOWER((SELECT nome FROM composti WHERE id = wi.source_id)) = LOWER(ma.nome))
+         OR
+         (wi.source_type = 'prep'
+          AND LOWER((SELECT c.nome FROM preparazioni p JOIN composti c ON c.id = p.composto_id WHERE p.id = COALESCE(wi.prep_id, wi.source_id))) = LOWER(ma.nome))
+       )
        ORDER BY m.nome`
     ).all(workId)
   })
