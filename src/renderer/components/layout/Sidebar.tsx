@@ -3,13 +3,13 @@ import { useState, useEffect } from 'react'
 
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { to: '/composti', label: 'Reference Standards', icon: '🧪' },
-  { to: '/metodi', label: 'Metodi', icon: '📋' },
-  { to: '/work', label: 'Work Solutions', icon: '⚗️' },
-  { to: '/strumenti', label: 'Strumenti', icon: '🔬' },
-  { to: '/consumabili', label: 'Consumabili', icon: '📦' },
-  { to: '/anagrafiche', label: 'Anagrafiche', icon: '📖' },
+  { to: '/dashboard',   label: 'Dashboard',          icon: '📊' },
+  { to: '/composti',    label: 'Reference Standards', icon: '🧪' },
+  { to: '/metodi',      label: 'Metodi',              icon: '📋' },
+  { to: '/work',        label: 'Work Solutions',      icon: '⚗️' },
+  { to: '/strumenti',   label: 'Strumenti',           icon: '🔬', beta: true },
+  { to: '/consumabili', label: 'Consumabili',         icon: '📦', beta: true },
+  { to: '/anagrafiche', label: 'Anagrafiche',         icon: '📖' },
 ]
 
 export function Sidebar() {
@@ -80,6 +80,9 @@ export function Sidebar() {
           >
             <span>{item.icon}</span>
             <span>{item.label}</span>
+            {(item as any).beta && (
+              <span className="ml-auto text-[9px] text-muted-foreground bg-muted rounded px-1">BETA</span>
+            )}
           </NavLink>
         ))}
       </nav>

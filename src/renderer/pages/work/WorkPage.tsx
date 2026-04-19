@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { workApi, metodiApi } from '@/lib/api'
+import { WorkEtichetteFormatoDialog } from '../composti/Etichettedialog'
 import { useDbChange } from '@/lib/useDbChange'
 import { WorkDrawer } from './WorkDrawer'
 import { WorkForm } from './WorkForm'
@@ -15,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Search, FlaskConical, AlertCircle, Archive, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import { AutocompleteInput } from '@/components/shared/AutocompleteInput'
 
 export function WorkPage() {
   const navigate = useNavigate()
@@ -37,6 +39,8 @@ export function WorkPage() {
   const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null)
   const [filtroStatoLab, setFiltroStatoLab] = useState<'da_preparare' | null>(null)
   const [expandId, setExpandId] = useState<number | null>(null)
+  const [etichettaTarget, setEtichettaTarget] = useState<{ work: any; prep: any; scadenza: string | null } | null>(null)
+  const [suggestOperatore, setSuggestOperatore] = useState<string[]>([])
   const [pendingExpandId, setPendingExpandId] = useState<number | null>(null)
   const [prepCount, setPrepCount] = useState<Record<number, number>>({})
 
@@ -53,6 +57,13 @@ export function WorkPage() {
 
   useEffect(() => { load(mostraArchivio) }, [mostraArchivio])
   useDbChange(() => load(mostraArchivio))
+
+  useEffect(() => {
+    ;(window.electronAPI.invoke('anagrafiche:list') as Promise<any[]>).then(anagrafiche => {
+      const voci = anagrafiche.find((a: any) => a.nome.toLowerCase() === 'operatori')?.voci?.map((v: any) => v.valore) ?? []
+      setSuggestOperatore(voci)
+    }).catch(() => {})
+  }, [])
 
   // Apertura automatica da link esterno (es. Audit, Dashboard) — filtri e/o espansione
   useEffect(() => {
@@ -217,7 +228,7 @@ export function WorkPage() {
       ) : mostraArchivio ? (
         <div className="space-y-2">
           {filtered.map(w => (
-            <WorkRowArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} initialExpanded={expandId === w.id} />
+            <WorkRowArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} initialExpanded={expandId === w.id} onEtichetta={(prep, scad) => setEtichettaTarget({ work: w, prep, scadenza: scad })} />
           ))}
         </div>
       ) : (
@@ -238,6 +249,7 @@ export function WorkPage() {
               onAddToSchema={() => setAddToSchemaWork({ id: w.id, nome: w.nome })}
               onEdit={() => handleEdit(w)}
               onArchivia={() => { setDrawerId(null); setArchiviaId(w.id) }}
+              onEtichetta={(prep, scad) => setEtichettaTarget({ work: w, prep, scadenza: scad })}
               initialExpanded={expandId === w.id}
             />
           ))}
@@ -288,6 +300,17 @@ export function WorkPage() {
         onClose={() => setAddToSchemaWork(null)}
       />
 
+      {etichettaTarget && (
+        <WorkEtichetteFormatoDialog
+          open={!!etichettaTarget}
+          onClose={() => setEtichettaTarget(null)}
+          work={etichettaTarget.work}
+          prep={etichettaTarget.prep}
+          scadenza={etichettaTarget.scadenza}
+          metodiNomi={metodiNomi}
+        />
+      )}
+
       <Dialog open={preparaWorkId !== null} onOpenChange={v => { if (!v) setPreparaWorkId(null) }}>
         <DialogContent className="max-w-sm" onPointerDownOutside={e => e.preventDefault()}>
           <DialogHeader>
@@ -305,11 +328,12 @@ export function WorkPage() {
             </div>
             <div className="flex items-center gap-2">
               <Label className="w-20 text-xs shrink-0">Operatore *</Label>
-              <Input
-                className="flex-1 text-sm"
-                placeholder="es. V.G."
+              <AutocompleteInput
                 value={preparaOp}
-                onChange={e => setPreparaOp(e.target.value)}
+                onChange={setPreparaOp}
+                suggestions={suggestOperatore}
+                placeholder="es. V.G."
+                className="flex-1 h-8 text-sm"
               />
             </div>
             <div className="flex items-start gap-2">
@@ -343,7 +367,7 @@ export function WorkPage() {
 
 // ─── Riga Work Archiviata ─────────────────────────────────────────────────────
 
-function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded }: { work: any; metodiNomi: Record<string, string>; onClick: () => void; initialExpanded?: boolean }) {
+function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded, onEtichetta }: { work: any; metodiNomi: Record<string, string>; onClick: () => void; initialExpanded?: boolean; onEtichetta: (prep: any, scadenza: string | null) => void }) {
   const [expanded, setExpanded] = useState(true)
   const [storico, setStorico] = useState<any[] | null>(null)
   const [loadingStorico, setLoadingStorico] = useState(false)
@@ -436,6 +460,11 @@ function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded }: { work:
               <div key={p.id} className="px-3 py-2 text-xs flex items-center gap-3 bg-background">
                 <span className="font-medium">Soluzione Work preparata il {formatDate(p.data_prep)}</span>
                 {p.operatore && <span className="text-muted-foreground">· {p.operatore}</span>}
+                <button
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Stampa etichetta"
+                  onClick={e => { e.stopPropagation(); onEtichetta?.(p, scad ?? null) }}
+                >🏷️</button>
                 {p.note && <span className="italic text-muted-foreground truncate max-w-[200px]">{p.note}</span>}
                 {scad && <span className="text-muted-foreground ml-auto shrink-0">scad. {formatDate(scad)}</span>}
                 {sb && (
@@ -472,6 +501,7 @@ function WorkRow({
   onAddToSchema,
   onEdit,
   onArchivia,
+  onEtichetta,
   initialExpanded,
 }: {
   work: any
@@ -482,6 +512,7 @@ function WorkRow({
   onAddToSchema?: () => void
   onEdit?: () => void
   onArchivia?: () => void
+  onEtichetta?: (prep: any, scadenza: string | null) => void
   initialExpanded?: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
@@ -556,6 +587,11 @@ function WorkRow({
           >
             {isIntermedia ? 'Intermedia' : 'Work'}
           </Badge>
+          {work.codice && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 font-mono border-slate-300 text-slate-600 bg-slate-50">
+              {work.codice}
+            </Badge>
+          )}
           {onPrepara && isTracciata && (
             <div onClick={e => e.stopPropagation()}>
               <Button
@@ -576,6 +612,16 @@ function WorkRow({
                 {work.ultima_preparazione ? 'Rinnova' : 'Prepara'}
               </Button>
             </div>
+          )}
+          {!isBloccata && !!work.ha_crm_scaduti && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-red-300 text-red-700 bg-red-50 flex items-center gap-1">
+              <AlertCircle className="h-2.5 w-2.5" />CRM scaduti
+            </Badge>
+          )}
+          {!isBloccata && !!work.ha_prep_scadute && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-red-300 text-red-700 bg-red-50 flex items-center gap-1">
+              <AlertCircle className="h-2.5 w-2.5" />Prep stock scadute
+            </Badge>
           )}
           {!!work.ha_figlie_obsolete && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
@@ -600,16 +646,6 @@ function WorkRow({
         {isBloccata && (
           <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-red-300 text-red-700 bg-red-50 flex items-center gap-1">
             <AlertCircle className="h-2.5 w-2.5" />CRM dismessi
-          </Badge>
-        )}
-        {!isBloccata && haScaduti && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
-            <AlertCircle className="h-2.5 w-2.5" />CRM scaduti
-          </Badge>
-        )}
-        {!isBloccata && !!work.ha_prep_scadute && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-yellow-400 text-yellow-700 bg-yellow-50 flex items-center gap-1">
-            <AlertCircle className="h-2.5 w-2.5" />Prep stock scadute
           </Badge>
         )}
         {isTracciata ? (
@@ -738,6 +774,11 @@ function WorkRow({
               <div key={p.id} className="px-3 py-2 text-xs flex items-center gap-3 bg-background">
                 <span className="font-medium">Soluzione Work preparata il {formatDate(p.data_prep)}</span>
                 {p.operatore && <span className="text-muted-foreground">· {p.operatore}</span>}
+                <button
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Stampa etichetta"
+                  onClick={e => { e.stopPropagation(); onEtichetta?.(p, scad ?? null) }}
+                >🏷️</button>
                 {p.note && <span className="italic text-muted-foreground truncate max-w-[200px]">{p.note}</span>}
                 {scad && (
                   <span className="text-muted-foreground ml-auto shrink-0">scad. {formatDate(scad)}</span>

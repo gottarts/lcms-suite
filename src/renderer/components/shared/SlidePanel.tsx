@@ -5,11 +5,12 @@ interface SlidePanelProps {
   onClose: () => void
   title: string
   subtitle?: string
+  headerExtra?: React.ReactNode
   width?: string
   children: React.ReactNode
 }
 
-export function SlidePanel({ open, onClose, title, subtitle, width, children }: SlidePanelProps) {
+export function SlidePanel({ open, onClose, title, subtitle, headerExtra, width, children }: SlidePanelProps) {
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
       <SheetContent
@@ -20,6 +21,7 @@ export function SlidePanel({ open, onClose, title, subtitle, width, children }: 
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
           <SheetTitle className="font-heading">{title}</SheetTitle>
           {subtitle && <SheetDescription>{subtitle}</SheetDescription>}
+          {headerExtra && <div className="flex gap-2 flex-wrap pt-1">{headerExtra}</div>}
         </SheetHeader>
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {children}

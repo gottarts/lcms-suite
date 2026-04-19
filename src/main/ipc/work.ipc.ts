@@ -508,6 +508,16 @@ export function registerWorkIpc(): void {
       INSERT INTO work_preparazioni (work_id, data_prep, note, operatore)
       VALUES (?, ?, ?, ?)
     `).run(data.work_id, data.data_prep, data.note ?? null, data.operatore ?? null)
+
+    // Assegna codice WS alla prima preparazione di questa work
+    const esistente = db.prepare('SELECT codice FROM work WHERE id = ?').get(data.work_id) as any
+    if (!esistente?.codice) {
+      const maxRow = db.prepare('SELECT COUNT(*) AS n FROM work WHERE codice IS NOT NULL').get() as any
+      const progressivo = String((maxRow?.n ?? 0) + 1).padStart(3, '0')
+      const dataPart = data.data_prep.replace(/-/g, '')
+      db.prepare('UPDATE work SET codice = ? WHERE id = ?').run(`WS-${dataPart}-${progressivo}`, data.work_id)
+    }
+
     return db.prepare('SELECT * FROM work_preparazioni WHERE id = ?').get(result.lastInsertRowid)
   })
 

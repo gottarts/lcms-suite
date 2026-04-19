@@ -165,6 +165,101 @@ function disegnaEtichettaPreparazione(
   }
 }
 
+// ── Helper: disegna una singola etichetta work ───────────────────────────────
+
+function disegnaEtichettaWork(
+  doc: jsPDF,
+  work: any,
+  metodiNomi: Record<string, string> | undefined,
+  x: number,
+  y: number,
+  dim: DimensioniVial
+): void {
+  const w = dim.larghezza
+  const h = dim.altezza
+  const pad = 1.5
+
+  doc.setDrawColor(160, 160, 160)
+  doc.setLineWidth(0.2)
+  doc.rect(x, y, w, h)
+
+  // Header verde scuro
+  doc.setFillColor(20, 80, 50)
+  doc.rect(x, y, w, 5.5, 'F')
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(5.5)
+  doc.setTextColor(255, 255, 255)
+  const nomeClip = doc.splitTextToSize(work.nome ?? '—', w - pad * 2 - 10)
+  doc.text(nomeClip[0], x + pad, y + 3.8)
+
+  // Codice WS (o badge WORK) in alto a destra
+  const badgeLabel = work.codice ?? 'WORK'
+  doc.setFontSize(4)
+  doc.setTextColor(150, 220, 170)
+  doc.text(badgeLabel, x + w - pad - doc.getTextWidth(badgeLabel), y + 3.8)
+
+  // Corpo
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(4.2)
+  doc.setTextColor(30, 30, 30)
+
+  const metodi = (work.metodi_ids ?? [])
+    .map((id: string) => metodiNomi?.[id] ?? id)
+    .join(', ') || '—'
+
+  const conc = work.conc_variabile
+    ? 'variabile'
+    : work.concentrazione != null
+      ? `${work.concentrazione} ${work.unita_conc ?? ''}`.trim()
+      : '—'
+
+  const scadenza = work._scadenza_calcolata ?? '—'
+
+  const righe: [string, string][] = [
+    ['Metodi',  metodi],
+    ['Conc.',   conc],
+    ['Solv.',   work.solvente ?? '—'],
+    ['Valid.',  work.validita_mesi ? `${work.validita_mesi} mesi` : '—'],
+    ['Prep.',   work.ultima_preparazione?.data_prep ?? '—'],
+    ['Scad.',   scadenza],
+    ['Op.',     work.ultima_preparazione?.operatore ?? '—'],
+  ]
+
+  const areaH = h - 5.5 - pad
+  const lineH = areaH / righe.length
+  let yCur = y + 5.5 + lineH * 0.75
+
+  for (const [label, valore] of righe) {
+    doc.setTextColor(120, 120, 120)
+    doc.setFont('helvetica', 'normal')
+    doc.text(label + ':', x + pad, yCur)
+
+    doc.setTextColor(20, 20, 20)
+    doc.setFont('helvetica', 'bold')
+    const labelW = doc.getTextWidth(label + ': ')
+    const valoreClip = doc.splitTextToSize(valore, w - pad * 2 - labelW)
+    doc.text(valoreClip[0], x + pad + labelW, yCur)
+
+    yCur += lineH
+  }
+}
+
+// ── Generazione PDF etichetta singola work (dal drawer) ──────────────────────
+
+export function generaEtichettaWork(
+  work: any,
+  prep: any,
+  scadenza: string | null,
+  metodiNomi?: Record<string, string>,
+  dim: DimensioniVial = DIMENSIONI_DEFAULT['hplc2ml']
+): void {
+  const workConPrep = { ...work, ultima_preparazione: prep, _scadenza_calcolata: scadenza }
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  disegnaEtichettaWork(doc, workConPrep, metodiNomi, 5, 5, dim)
+  doc.save(`etichetta-work-${work.id ?? 'new'}-${prep?.data_prep ?? new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
 // ── Generazione PDF etichette composti (dalla toolbar) ───────────────────────
 
 function generaEtichetteComposti(data: any[], dim: DimensioniVial): void {
@@ -222,6 +317,102 @@ export function generaEtichettaPreparazione(
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   disegnaEtichettaPreparazione(doc, composto, prep, 5, 5, dim)
   doc.save(`etichetta-prep-${prep.id ?? 'new'}-${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+// ── Dialog scelta formato per etichetta singola work ─────────────────────────
+
+interface WorkEtichetteFormatoDialogProps {
+  open: boolean
+  onClose: () => void
+  work: any
+  prep: any
+  scadenza: string | null
+  metodiNomi?: Record<string, string>
+}
+
+export function WorkEtichetteFormatoDialog({ open, onClose, work, prep, scadenza, metodiNomi }: WorkEtichetteFormatoDialogProps) {
+  const [formato, setFormato] = useState<FormatoVial>('hplc2ml')
+  const [dim, setDim] = useState<DimensioniVial>({ ...DIMENSIONI_DEFAULT['hplc2ml'] })
+
+  const handleFormatoChange = (f: FormatoVial) => {
+    setFormato(f)
+    setDim({ ...DIMENSIONI_DEFAULT[f] })
+  }
+
+  const handleStampa = () => {
+    generaEtichettaWork(work, prep, scadenza, metodiNomi, dim)
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Stampa Etichetta Work</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Formato vial</Label>
+            <div className="space-y-2">
+              {([
+                { id: 'hplc2ml',    label: 'Vial HPLC 2 mL',   default: '35 × 22 mm' },
+                { id: 'supelco4ml', label: 'Vial Supelco 4 mL', default: '45 × 28 mm' },
+              ] as { id: FormatoVial; label: string; default: string }[]).map(f => (
+                <label
+                  key={f.id}
+                  className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
+                  style={{
+                    borderColor: formato === f.id ? 'hsl(var(--primary))' : undefined,
+                    backgroundColor: formato === f.id ? 'hsl(var(--primary) / 0.05)' : undefined,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="formato-vial-work"
+                    value={f.id}
+                    checked={formato === f.id}
+                    onChange={() => handleFormatoChange(f.id)}
+                  />
+                  <div>
+                    <div className="text-sm font-medium">{f.label}</div>
+                    <div className="text-xs text-muted-foreground">Default: {f.default}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Dimensioni etichetta (mm)</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Larghezza</Label>
+                <Input
+                  type="number" min={15} max={120}
+                  value={dim.larghezza}
+                  onChange={e => setDim(d => ({ ...d, larghezza: Number(e.target.value) || d.larghezza }))}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Altezza</Label>
+                <Input
+                  type="number" min={10} max={80}
+                  value={dim.altezza}
+                  onChange={e => setDim(d => ({ ...d, altezza: Number(e.target.value) || d.altezza }))}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Annulla</Button>
+          <Button onClick={handleStampa}>🏷️ Stampa PDF</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 // ── Componente Dialog ─────────────────────────────────────────────────────────

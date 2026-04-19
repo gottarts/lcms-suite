@@ -12,6 +12,7 @@ import { AutocompleteInput } from '@/components/shared/AutocompleteInput'
 import { getCompsFromWork } from '../metodi/SchemaCalibrazione.logic'
 import type { WorkInSchema, SorgenteSel, Ingrediente, CrmItem } from '../metodi/SchemaCalibrazione.types'
 import { C } from '../metodi/SchemaCalibrazione.types'
+import { WorkEtichetteFormatoDialog } from '../composti/Etichettedialog'
 
 interface WorkDrawerProps {
   workId: number | null
@@ -201,6 +202,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
   const [suggestOperatore, setSuggestOperatore] = useState<string[]>([])
   const [workTreeProblemi, setWorkTreeProblemi] = useState<{ work_id: number; work_nome: string; problemi: any } | null>(null)
   const [figlieObsolete, setFiglieObsolete]     = useState<Array<{ id: number; nome: string; ultima_prep_data: string }>>([])
+  const [etichettaTarget, setEtichettaTarget]   = useState<{ prep: any; scadenza: string | null } | null>(null)
   const [sorgenteObsoleta, setSorgenteObsoleta] = useState(false)
 
   async function loadChain(id: number, map: Map<number, any>) {
@@ -422,12 +424,49 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
   }
 
   return (
+    <>
+    {etichettaTarget && (
+      <WorkEtichetteFormatoDialog
+        open={!!etichettaTarget}
+        onClose={() => setEtichettaTarget(null)}
+        work={work}
+        prep={etichettaTarget.prep}
+        scadenza={etichettaTarget.scadenza}
+        metodiNomi={metodiNomi}
+      />
+    )}
     <SlidePanel
       open={!!workId}
       onClose={onClose}
       title={work.nome}
       subtitle={isIntermedia ? 'Work Intermedia' : 'Work Solution'}
       width="460px"
+      headerExtra={<>
+        {work.codice && (
+          <Badge variant="outline" className="font-mono border-slate-300 text-slate-600 bg-slate-50">
+            {work.codice}
+          </Badge>
+        )}
+        {isIntermedia && (
+          <Badge variant="outline" className="border-purple-300 text-purple-700 bg-purple-50">
+            Intermedia liv. {work.livello}
+          </Badge>
+        )}
+        {isTracciata ? (
+          <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
+            Tracciata · valida {work.validita_mesi} mesi
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            Al momento — non tracciata
+          </Badge>
+        )}
+        {statoBadge && (
+          <Badge variant="outline" className={statoBadge.className}>
+            {statoBadge.label}
+          </Badge>
+        )}
+      </>}
     >
       <div className="space-y-4">
 
@@ -469,6 +508,37 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                 <Archive className="h-3.5 w-3.5 mr-1" /> Archivia
               </Button>
             )}
+            <DropdownMenu onOpenChange={open => { if (open) loadStorico() }}>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={!isTracciata}>
+                  🏷️ Etichetta
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[240px]">
+                {storico.length === 0 && !work.ultima_preparazione && (
+                  <DropdownMenuItem disabled>Nessuna preparazione</DropdownMenuItem>
+                )}
+                {[...(work.ultima_preparazione ? [work.ultima_preparazione] : []), ...storico.filter((p: any) => p.id !== work.ultima_preparazione?.id)]
+                  .slice(0, 15)
+                  .map((p: any) => {
+                    const scad = work.validita_mesi
+                      ? (() => { const d = new Date(p.data_prep); d.setDate(d.getDate() + Math.round(work.validita_mesi * 30.44)); return d.toISOString().slice(0, 10) })()
+                      : null
+                    return (
+                      <DropdownMenuItem
+                        key={p.id}
+                        className="flex items-center gap-2"
+                        onClick={() => setEtichettaTarget({ prep: p, scadenza: scad })}
+                      >
+                        <span className="font-medium">{formatDate(p.data_prep)}</span>
+                        {p.operatore && <span className="text-muted-foreground text-xs">{p.operatore}</span>}
+                        {scad && <span className="ml-auto text-xs text-muted-foreground pl-2">→ {formatDate(scad)}</span>}
+                      </DropdownMenuItem>
+                    )
+                  })
+                }
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -630,29 +700,6 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
             </div>
           </div>
         )}
-
-        {/* Badge stato */}
-        <div className="flex gap-2 flex-wrap">
-          {isIntermedia && (
-            <Badge variant="outline" className="border-purple-300 text-purple-700 bg-purple-50">
-              Intermedia liv. {work.livello}
-            </Badge>
-          )}
-          {isTracciata ? (
-            <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
-              Tracciata · valida {work.validita_mesi} mesi
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground">
-              Al momento — non tracciata
-            </Badge>
-          )}
-          {statoBadge && (
-            <Badge variant="outline" className={statoBadge.className}>
-              {statoBadge.label}
-            </Badge>
-          )}
-        </div>
 
         {/* Sezione Preparazione (solo work tracciate) */}
         {isTracciata && (
@@ -951,5 +998,6 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
 
       </div>
     </SlidePanel>
+    </>
   )
 }
