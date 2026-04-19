@@ -236,8 +236,8 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                       title="Dettaglio"
                     >⊙</button>
 
-                    {/* Pulsante Ricarica (lotti dismessi o scaduti) */}
-                    {(isBloccata || haScaduti || haStockScadute || haWorkProblemi) && w.dbId && (
+                    {/* Pulsante Ricarica — solo work di livello 0 */}
+                    {!isInter && (isBloccata || haScaduti || haStockScadute || haWorkProblemi) && w.dbId && (
                       <button
                         onClick={e => { e.stopPropagation(); onRicaricaWork(w.dbId!) }}
                         style={{
@@ -278,19 +278,12 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                     )}
                     <div style={{ fontSize:10, color:C.page.t2, marginTop:2,
                                   fontFamily:'IBM Plex Mono, monospace' }}>
-                      {w.concVariabile ? 'variabile' : (w.conc ? `${w.conc} mg/L` : '—')}
-                      {' · '}{w.volFin || '—'} mL{' · '}{w.solv || '—'}
+                      {`Concentrazione ${w.concVariabile ? 'variabile' : (w.conc ? `${w.conc} mg/L` : '—')} · Volume ${w.volFin || '—'} mL${w.solv ? ` - Solvente ${w.solv}` : ''}`}
                     </div>
-
-                    {/* Badge validità */}
-                    <span style={{
-                      display:'inline-block', fontSize:9, padding:'1px 8px',
-                      borderRadius:10, fontWeight:700, marginTop:4,
-                      background: w.validitaMesi ? C.sng.chip : '#d3d1c7',
-                      color: w.validitaMesi ? C.sng.text : C.page.t2,
-                    }}>
-                      {w.validitaMesi ? `valida ${w.validitaMesi} mesi` : 'al momento'}
-                    </span>
+                    <div style={{ fontSize:10, color:C.page.t2, marginTop:1,
+                                  fontFamily:'IBM Plex Mono, monospace' }}>
+                      {w.validitaMesi ? `Work valida per ${w.validitaMesi} mesi dalla preparazione` : 'al momento'}
+                    </div>
 
 
                     {/* Chips sorgenti */}
@@ -324,14 +317,14 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                           color:C.page.t2, padding:'1px 0',
                         }}>
                           <span style={{ fontWeight:500, color:col.text }}>{v.nome}</span>
-                          <span>{v.vol.toFixed(3)} mL</span>
+                          <span>{(v.vol * 1000).toFixed(1)} µL</span>
                         </div>
                       ))}
                       {neg ? (
                         <div style={{ fontSize:9, color:'#a32d2d', fontWeight:700,
                                       borderTop:`1px dashed ${C.page.brd}`,
                                       marginTop:3, paddingTop:3 }}>
-                          ⚠ prelievi ({usedVol.toFixed(3)}) &gt; vol. finale
+                          ⚠ prelievi ({(usedVol * 1000).toFixed(1)} µL) &gt; vol. finale
                         </div>
                       ) : (
                         <div style={{
@@ -341,7 +334,7 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
                           marginTop:3, paddingTop:3, opacity:0.5,
                         }}>
                           <span>{w.solv || 'Solvente'}</span>
-                          <span>{solvVol.toFixed(3)} mL</span>
+                          <span>{(solvVol * 1000).toFixed(1)} µL</span>
                         </div>
                       )}
                     </div>

@@ -266,7 +266,9 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ fontWeight: 500 }}>{label}</span>
-                        <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#16a34a' }}>{lotto}</span>
+                        <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#16a34a' }}>
+                          {rep.source_type === 'prep' ? `Prep: ${lotto}` : `Lotto ${lotto}`}
+                        </span>
                       </div>
                       {renderMemberList(g)}
                     </div>
@@ -296,10 +298,12 @@ export function RicaricaDialog({ workId, onClose, onSuccess }: RicaricaDialogPro
                       <div style={{ fontWeight: 500 }}>{label}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 10 }}>
                         <span style={{ color: '#dc2626', textDecoration: 'line-through' }}>
-                          {rep.lotto_usato ?? '—'}
+                          {rep.source_type === 'prep' ? `Prep: ${rep.lotto_corrente ?? '—'}` : `Lotto ${rep.lotto_usato ?? '—'}`}
                         </span>
                         <span style={{ color: 'hsl(var(--muted-foreground))' }}>→</span>
-                        <span style={{ color: '#16a34a', fontWeight: 600 }}>{lottoNuovo}</span>
+                        <span style={{ color: '#16a34a', fontWeight: 600 }}>
+                          {rep.source_type === 'prep' ? `Prep: ${lottoNuovo}` : `Lotto ${lottoNuovo}`}
+                        </span>
                       </div>
                       {renderMemberList(g)}
                     </div>

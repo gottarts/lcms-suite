@@ -157,6 +157,10 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
     }
   }
 
+  // Calcola il progressivo (numero flacone) di una prep in base alla posizione per id
+  const prepsSortedById = [...preparazioni].sort((a, b) => a.id - b.id)
+  const getProgressivo = (p: any) => prepsSortedById.findIndex(x => x.id === p.id) + 1
+
   const preparazioniFiltrate = preparazioni.filter(p => {
     if (filtroStato === 'tutte') return true
     const isDismessa = p.stato === 'Dismessa'
@@ -207,6 +211,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
             {/* Card header */}
             <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b">
               <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-semibold text-muted-foreground">#{getProgressivo(p)}</span>
                 <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', statusBadgeClass(computeStatoPrep(p)))}>
                   {computeStatoPrep(p)}
                 </Badge>

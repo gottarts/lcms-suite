@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Plus, Search, FlaskConical, AlertCircle, Archive, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
+import { Search, FlaskConical, AlertCircle, Archive, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 export function WorkPage() {
@@ -153,11 +153,6 @@ export function WorkPage() {
             <Archive className="h-4 w-4 mr-1" />
             {mostraArchivio ? 'Archiviate' : 'Archivio'}
           </Button>
-          {!mostraArchivio && (
-            <Button size="sm" onClick={() => { setEditWork(null); setFormOpen(true) }}>
-              <Plus className="h-4 w-4 mr-1" /> Nuova Work
-            </Button>
-          )}
         </div>
       </div>
 

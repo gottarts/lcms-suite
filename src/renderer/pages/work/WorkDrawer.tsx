@@ -772,12 +772,16 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
                 <tr>
-                  {['Sorgente', 'Diluizione', 'Preleva (mL)'].map(h => (
+                  {['Sorgente', 'Diluizione'].map(h => (
                     <th key={h} style={{ textAlign:'left', fontSize:10, fontWeight:700,
                                         color:C.page.th, textTransform:'uppercase',
                                         letterSpacing:'0.06em', padding:'3px 6px',
                                         borderBottom:`1px solid ${C.page.brd}` }}>{h}</th>
                   ))}
+                  <th style={{ textAlign:'left', fontSize:10, fontWeight:700,
+                               color:C.page.th, textTransform:'none',
+                               letterSpacing:'0.06em', padding:'3px 6px',
+                               borderBottom:`1px solid ${C.page.brd}` }}>PRELEVA ({'\u00b5L'})</th>
                 </tr>
               </thead>
               <tbody>
@@ -794,17 +798,17 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                     <td style={{ padding:'4px 6px', fontFamily:'IBM Plex Mono, monospace',
                                   fontSize:11, fontWeight:700,
                                   borderBottom:`1px solid rgba(0,0,0,.04)` }}>
-                      {v.vol.toFixed(3)}
+                      {(v.vol * 1000).toFixed(1)}
                     </td>
                   </tr>
                 ))}
                 {/* Riga solvente / warning */}
-                <tr style={{ color:neg ? '#a32d2d' : C.page.th, fontStyle:'italic' }}>
+                <tr style={{ color:neg ? '#a32d2d' : C.page.t2 }}>
                   {neg ? (
                     <td colSpan={2} style={{ padding:'4px 6px', fontSize:11,
                                              fontWeight:700, fontStyle:'normal',
                                              fontFamily:'IBM Plex Mono, monospace' }}>
-                      ⚠ Prelievi ({usedVol.toFixed(3)} mL) superano il volume finale
+                      ⚠ Prelievi ({(usedVol * 1000).toFixed(1)} µL) superano il volume finale
                     </td>
                   ) : (
                     <>
@@ -818,8 +822,8 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                   )}
                   <td style={{ padding:'4px 6px', fontSize:11,
                                fontFamily:'IBM Plex Mono, monospace',
-                               color: neg ? '#a32d2d' : C.page.th }}>
-                    {neg ? '—' : solvVol.toFixed(3)}
+                               color: neg ? '#a32d2d' : C.page.t2 }}>
+                    {neg ? '—' : (solvVol * 1000).toFixed(1)}
                   </td>
                 </tr>
                 {/* Riga totale */}
@@ -830,7 +834,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                   <td />
                   <td style={{ padding:'4px 6px', fontSize:11,
                                fontFamily:'IBM Plex Mono, monospace' }}>
-                    {usedVol.toFixed(3)}
+                    {(usedVol * 1000).toFixed(1)}
                   </td>
                 </tr>
                 {!neg && (
@@ -840,7 +844,7 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
                     <td />
                     <td style={{ padding:'4px 6px', fontSize:11,
                                  fontFamily:'IBM Plex Mono, monospace' }}>
-                      {workSchema.volFin.toFixed(3)}
+                      {(workSchema.volFin * 1000).toFixed(1)}
                     </td>
                   </tr>
                 )}

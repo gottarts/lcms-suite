@@ -334,7 +334,7 @@ export function GrigliaAnalitiCrm({
                         title="Apri nel DB Composti"
                         style={{
                           flexShrink:0, background:'none', border:'none', cursor:'pointer',
-                          padding:'0 1px', fontSize:10, opacity:0.55, color:'inherit', lineHeight:1,
+                          padding:'0 1px', fontSize:10, opacity:0.9, color:'inherit', lineHeight:1,
                         }}
                       >↗</button>
                     </div>

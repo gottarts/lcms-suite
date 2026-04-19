@@ -549,7 +549,10 @@ export function registerWorkIpc(): void {
         END AS nome,
         CASE
           WHEN wi.source_type = 'crm'  THEN c.lotto
-          WHEN wi.source_type = 'prep' THEN p.flacone
+          WHEN wi.source_type = 'prep' THEN (
+            SELECT COUNT(*) FROM preparazioni p2
+            WHERE p2.composto_id = p.composto_id AND p2.id <= p.id
+          )
         END AS lotto_corrente,
         CASE
           WHEN wi.source_type = 'crm'  THEN c.data_dismissione
@@ -592,7 +595,9 @@ export function registerWorkIpc(): void {
     `)
 
     const stmtSostitutiPrep = db.prepare(`
-      SELECT p2.id AS id, p2.flacone AS lotto, p2.concentrazione_reale AS concentrazione,
+      SELECT p2.id AS id,
+        (SELECT COUNT(*) FROM preparazioni p3 WHERE p3.composto_id = p2.composto_id AND p3.id <= p2.id) AS lotto,
+        p2.concentrazione_reale AS concentrazione,
         p2.unita_conc AS unita_conc, NULL AS mix_id
       FROM preparazioni p2
       WHERE p2.composto_id = ?
@@ -605,7 +610,9 @@ export function registerWorkIpc(): void {
     // Preparazioni valide di altri composti con lo stesso nome (caso: composto padre
     // dismesso/scaduto → nuovo lotto ha nuovo composto_id → servono le sue preparazioni).
     const stmtSostitutiPrepAltriComposti = db.prepare(`
-      SELECT p2.id AS id, p2.flacone AS lotto, p2.concentrazione_reale AS concentrazione,
+      SELECT p2.id AS id,
+        (SELECT COUNT(*) FROM preparazioni p3 WHERE p3.composto_id = p2.composto_id AND p3.id <= p2.id) AS lotto,
+        p2.concentrazione_reale AS concentrazione,
         p2.unita_conc AS unita_conc, NULL AS mix_id
       FROM preparazioni p2
       JOIN composti c2 ON c2.id = p2.composto_id
