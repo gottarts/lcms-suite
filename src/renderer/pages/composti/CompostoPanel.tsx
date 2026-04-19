@@ -229,7 +229,7 @@ export function CompostoPanel({ compostoId, onClose, onEdit, onDelete, onNewLott
           <TabsContent value="dettaglio" className="space-y-2 mt-3">
             <Field label="Classe" value={composto.classe} />
             <Field label="Forma" value={composto.forma} />
-            <Field label="Forma Commerciale" value={composto.forma_commerciale} />
+            <Field label="Nome CRM" value={composto.forma_commerciale} />
             <Field label="Formula" value={composto.formula} />
             <Field label="MW" value={composto.peso_molecolare} />
             <Separator />

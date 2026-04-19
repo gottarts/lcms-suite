@@ -450,7 +450,7 @@ export function CompostoForm({ open, onClose, composto, template, onSave }: Comp
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Forma Commerciale</Label>
+                <Label className="text-xs">Nome CRM</Label>
                 <Input value={form.forma_commerciale || ''} onChange={e => set('forma_commerciale', e.target.value)} />
               </div>
               <div>

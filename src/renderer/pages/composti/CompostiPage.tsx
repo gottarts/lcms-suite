@@ -57,7 +57,7 @@ const COL_DEFS: { key: string; label: string }[] = [
   { key: 'accreditamento_crm', label: 'Accreditamento' },
   { key: 'stato',            label: 'Stato' },
   { key: 'destinazione_uso', label: 'Destinazione' },
-  { key: 'forma_commerciale',label: 'Forma comm.' },
+  { key: 'forma_commerciale',label: 'Nome CRM' },
   { key: 'matrice',          label: 'Matrice' },
   { key: 'mw',               label: 'MW' },
   { key: 'formula',          label: 'Formula' },

@@ -130,7 +130,7 @@ export const CompostiTable = memo(function CompostiTable({
       { key: 'stoccaggio', label: 'Stoccaggio', filterValue: colFilters?.['stoccaggio'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('stoccaggio', v) : undefined, render: (v) => v || '—' },
       { key: 'accreditamento_crm', label: 'Accreditamento', filterValue: colFilters?.['accreditamento_crm'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('accreditamento_crm', v) : undefined, render: (v) => v || '—' },
       { key: 'destinazione_uso', label: 'Destinazione', filterValue: colFilters?.['destinazione_uso'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('destinazione_uso', v) : undefined, render: (v) => v || '—' },
-      { key: 'forma_commerciale', label: 'Forma comm.', filterValue: colFilters?.['forma_commerciale'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('forma_commerciale', v) : undefined, render: (v) => v || '—' },
+      { key: 'forma_commerciale', label: 'Nome CRM', filterValue: colFilters?.['forma_commerciale'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('forma_commerciale', v) : undefined, render: (v) => v || '—' },
       { key: 'matrice', label: 'Matrice', filterValue: colFilters?.['matrice'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('matrice', v) : undefined, render: (v) => v || '—' },
       { key: 'mw', label: 'MW', render: (v) => v || '—' },
       { key: 'formula', label: 'Formula', filterValue: colFilters?.['formula'] ?? '', onFilterChange: onColFilter ? (v) => onColFilter('formula', v) : undefined, render: (v) => v || '—' },

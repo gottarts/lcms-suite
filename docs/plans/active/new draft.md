@@ -26,17 +26,15 @@ AGGIUNGEREI ANCHE UNA COSA SIMILE CON GLI ANALITI ACCREDITATI NON COPERTI DA CRM
 
  ## altri
 BAZZI - SUGGERIMENTI
-- metodi -- schema-   La grafica della "scadenza" nelle ricette sembra indicare la scadenza di una preparazione fisica specifica. Dovrebbe indicare invece la scadenza assegnata attribuita. Suggerimeto:togliere il codice colore (verde) e lasciarla solo come in dicazione testuale
-- WORK STANDARDS Tasto in  alto a sx "+Nuova Work" e' ridondante (c'e gia' l'opzione "prepara" su ogni singola ricetta)
--"Forma commerciale" indica il nome dello standard (non e' nota di modifica, solo nota promemoria)
--   In "Nuova preparazione stock", cambio "Forma" con "Forma neat"
-- Cambiare unita di misura quando mostra riepilogo ricetta nuova work (ora in ml, cambiare in µl per maggiore immediatezza visiva essendo un riepilogo ricetta con volumi di diluizione)
-- su SCHEMI, difetto grafico nella colonna CRM a sx (non vedo l'icona di collegamento a Reference standard che dovrebbe essere accanto al nome. C e', e' cliccabile, ma non si vede)
-- su SCHEMI tolgo il comando "ricarica" dalle soluzioni work intermedie
-- in PREPARAZIONE, pescare il nome operatore da Anagrafiche
-- implementare in DASHBOARD l'elenco delle stock solution in scadenza o scadute
-- bug per stock solution in scadenza il giorno medesimo (le da come preparazioni scadute, ma non c'e' l'alert)
 
+- "Forma commerciale" indica il nome dello standard in db comspoti si puo cambiare in nome CRM
+-   In "Nuova preparazione stock", cambio "Forma" con "Forma neat"
+- in PREPARAZIONE, pescare il nome operatore da Anagrafiche su windowns non lo fa ma su mac si...)
+
+- bug per stock solution in scadenza il giorno medesimo (le da come preparazioni scadute, ma non c'e' l'alert vicino al nome in db comspoti)
+
+- implementare in DASHBOARD l'elenco delle prparazioni neat in scadenza o scadute 
+- sarebbe bello avere un badge in db compsoti con i work in cui è coinvolta la crm (non penso abbia senso aggiungere colonne ma sarebbe bello un badge ma in caso si aggiunge una colonna solo lettura)
 
 
 

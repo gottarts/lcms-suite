@@ -54,7 +54,7 @@ function metodiToString(c: any): string {
 
 function exportCSV(data: any[]) {
   const headers = [
-    'Nome', 'Codice interno', 'Classe', 'Forma', 'Forma commerciale',
+    'Nome', 'Codice interno', 'Classe', 'Forma', 'Nome CRM',
     'Produttore', 'Lotto', 'Concentrazione', 'Unità', 'Solvente',
     'Purezza', 'N fiale', 'Data apertura', 'Scadenza prodotto',
     'Data dismissione', 'Destinazione uso',
@@ -211,7 +211,7 @@ function exportPDF(data: any[]) {
     const metodiStr = metodiToString(c) || '—'
     const anagrafica = [
       ['Codice interno', c.codice_interno ?? '—', 'Classe', c.classe ?? '—'],
-      ['Forma', c.forma ?? '—', 'Forma commerciale', c.forma_commerciale ?? '—'],
+      ['Forma', c.forma ?? '—', 'Nome CRM', c.forma_commerciale ?? '—'],
       ['Concentrazione', c.concentrazione ? `${c.concentrazione} ${c.unita_conc ?? ''}` : '—', 'Solvente', c.solvente ?? '—'],
       ['Purezza', c.purezza ?? '—', 'N fiale', c.fiala ?? '—'],
       ['Data apertura', c.data_apertura ?? '—', 'Data dismissione', c.data_dismissione ?? '—'],

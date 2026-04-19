@@ -62,7 +62,7 @@ SELECT c.*,
   (SELECT COUNT(*) FROM preparazioni
    WHERE composto_id = c.id AND stato = 'Attiva')                                        AS prep_attive_count,
   (SELECT COUNT(*) FROM preparazioni
-   WHERE composto_id = c.id AND stato = 'Attiva' AND scadenza < date('now'))             AS prep_scadute_count,
+   WHERE composto_id = c.id AND stato = 'Attiva' AND scadenza <= date('now'))            AS prep_scadute_count,
   (SELECT COUNT(*) FROM preparazioni
    WHERE composto_id = c.id)                                                             AS prep_totale_count,
   (SELECT COUNT(*) FROM composti_storia
@@ -123,7 +123,7 @@ FROM composti c`
         (SELECT COUNT(*) FROM preparazioni
          WHERE composto_id = c.id AND stato = 'Attiva')                            AS prep_attive_count,
         (SELECT COUNT(*) FROM preparazioni
-         WHERE composto_id = c.id AND stato = 'Attiva' AND scadenza < date('now')) AS prep_scadute_count,
+         WHERE composto_id = c.id AND stato = 'Attiva' AND scadenza <= date('now')) AS prep_scadute_count,
         (SELECT MAX(nuova_scadenza) FROM composti_storia
          WHERE composto_id = c.id AND tipo = 'Rivalidazione'
            AND nuova_scadenza IS NOT NULL)                                          AS ultima_rivalidazione,

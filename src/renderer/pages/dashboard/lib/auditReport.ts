@@ -284,7 +284,7 @@ function drawCrmFullSheet(doc: jsPDF, c: any): void {
   const metodiStr = metodiToString(c) || '—'
   const anagrafica = [
     ['Codice interno', c.codice_interno ?? '—', 'Classe', c.classe ?? '—'],
-    ['Forma', c.forma ?? '—', 'Forma commerciale', c.forma_commerciale ?? '—'],
+    ['Forma', c.forma ?? '—', 'Nome CRM', c.forma_commerciale ?? '—'],
     ['Concentrazione', c.concentrazione ? `${c.concentrazione} ${c.unita_conc ?? ''}` : '—', 'Solvente', c.solvente ?? '—'],
     ['Purezza', c.purezza ?? '—', 'N fiale', c.fiala ?? '—'],
     ['Data apertura', c.data_apertura ?? '—', 'Data dismissione', c.data_dismissione ?? '—'],

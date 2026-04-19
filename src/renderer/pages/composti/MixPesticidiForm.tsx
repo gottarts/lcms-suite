@@ -218,7 +218,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
 
   const importFields: ImportField[] = [
     { key: 'nomi',              label: 'Nomi composti',            multi: true },
-    { key: 'forma_commerciale', label: 'Forma Commerciale (per riga)', multi: true },
+    { key: 'forma_commerciale', label: 'Nome CRM (per riga)', multi: true },
     { key: 'lotto',             label: 'Lotto (per riga)',         multi: true },
     { key: 'scadenza_prodotto', label: 'Data Scadenza (per riga)', multi: true },
     { key: 'data_apertura',     label: 'Data Apertura (per riga)', multi: true },
@@ -502,7 +502,7 @@ export function MixPesticidiForm({ open, onClose, onSave, mixTemplate }: MixPest
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <Label className="text-xs">
-                Nome mix (Forma Commerciale)
+                Nome mix (Nome CRM)
                 {!importedFields.has('forma_commerciale') && <span className="text-red-500 ml-1">*</span>}
                 {importedFields.has('forma_commerciale') && <span className="ml-1 text-blue-600 font-normal normal-case">(da file, per riga)</span>}
               </Label>

@@ -60,7 +60,7 @@ export function registerWorkIpc(): void {
             AND wi.source_type = 'prep'
             AND p.data_dismissione IS NULL
             AND p.scadenza IS NOT NULL
-            AND p.scadenza < date('now')
+            AND p.scadenza <= date('now')
         ) AS n_prep_scadute,
         (SELECT wp.id         FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_id,
         (SELECT wp.data_prep  FROM work_preparazioni wp WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS _up_data_prep,

@@ -53,7 +53,7 @@ function isExpiringSoon(scadenza: string | null): boolean {
 function computeStatoPrep(p: any): string {
   if (p.stato === 'Dismessa') return 'Dismessa'
   if (p.stato === 'Esaurita') return 'Esaurita'
-  if (p.scadenza && new Date(p.scadenza) < new Date()) return 'Scaduta'
+  if (p.scadenza && p.scadenza <= new Date().toISOString().split('T')[0]) return 'Scaduta'
   return p.stato ?? 'Attiva'
 }
 
@@ -293,7 +293,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Forma</Label>
+                <Label className="text-xs">Forma neat</Label>
                 <Select value={form.forma || '_none'} onValueChange={v => setForm(f => ({ ...f, forma: v === '_none' ? '' : v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
