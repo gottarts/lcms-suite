@@ -11,7 +11,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ReactFlow, Background, Controls, MiniMap,
+  ReactFlow, Background, Controls,
+  useNodesState,
   Handle, Position as HandlePosition, MarkerType,
   type Node, type Edge, type NodeProps, type NodeChange,
 } from '@xyflow/react'
@@ -48,7 +49,7 @@ const LAYOUT = {
   COL_WORK_GAP: 560,
   MODULE_W: { mix: 340, sng: 260, work: 360 } as const,
   MODULE_H_MIN: { mix: 180, sng: 130, work: 210 } as const,
-  ROW_GAP: 60,
+  ROW_GAP: 80,
   Y_START: 40,
 }
 const SIDEBAR_W = 240
@@ -221,7 +222,7 @@ function computeEdges(moduli: ModuloMeta[]): Edge[] {
         id: `${fromMod.id}→${m.id}:${s.tipo}:${s.id}:${s.prepId ?? ''}:${i}`,
         source: fromMod.id,
         target: m.id,
-        type: 'smoothstep',
+        type: 'default',
         data: { tipo: s.tipo as SorgenteTipo },
         style: {
           stroke: color,
@@ -249,7 +250,7 @@ function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[]): Positions {
   // 1) Costruisco un grafo dagre solo per capire l'ordinamento verticale
   //    suggerito da una layout Left→Right standard.
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', nodesep: LAYOUT.ROW_GAP, ranksep: 180, marginx: 20, marginy: 20 })
+  g.setGraph({ rankdir: 'LR', nodesep: LAYOUT.ROW_GAP, ranksep: 280, marginx: 20, marginy: 20 })
   g.setDefaultEdgeLabel(() => ({}))
 
   for (const m of moduli) {
@@ -523,7 +524,6 @@ function CardBase({
       boxShadow: highlighted
         ? `0 0 0 3px rgba(155,134,214,0.35), 0 2px 6px rgba(0,0,0,0.05)`
         : '0 1px 3px rgba(0,0,0,0.06)',
-      overflow: 'hidden',
     }}>
       <Handle
         type="target"
@@ -538,6 +538,189 @@ function CardBase({
       />
     </div>
   )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Node: Analiti (lista analiti sulla lavagna con filtri e chip)
+// ─────────────────────────────────────────────────────────────────────────────
+const ANALITI_NODE_ID = 'ANALITI'
+const ANALITI_NODE_W = 240
+
+type AnalitiNodeData = {
+  analiti: AnalitoItem[]
+  filtro: FiltroSidebar
+  onCambiaFiltro: (f: FiltroSidebar) => void
+  onHoverAnalita: (nome: string | null) => void
+}
+
+function AnalitiNode({ data }: NodeProps<Node<AnalitiNodeData>>) {
+  const { analiti, filtro, onCambiaFiltro, onHoverAnalita } = data
+
+  const filtered = useMemo(() => {
+    return analiti.filter(a => {
+      const coperto = !!a.mixId || a.sngIds.length > 0
+      if (filtro === 'coperti') return coperto
+      if (filtro === 'scoperti') return !coperto
+      return true
+    })
+  }, [analiti, filtro])
+
+  const counts = useMemo(() => {
+    let coperti = 0, scoperti = 0
+    for (const a of analiti) {
+      if (a.mixId || a.sngIds.length > 0) coperti++
+      else scoperti++
+    }
+    return { tot: analiti.length, coperti, scoperti }
+  }, [analiti])
+
+  return (
+    <div style={{
+      width: ANALITI_NODE_W,
+      background: C.page.sur,
+      border: `1.5px solid ${C.page.brd2}`,
+      borderLeft: `4px solid ${C.page.t2}`,
+      borderRadius: 6,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      display: 'flex',
+      flexDirection: 'column',
+      maxHeight: 480,
+    }}>
+      <Handle
+        type="source"
+        position={HandlePosition.Right}
+        style={{ background: C.page.t2, width: 8, height: 8, border: 'none' }}
+      />
+      <div style={{ padding: '10px 14px 8px', borderBottom: `1px solid ${C.page.brd}` }}>
+        <div style={{
+          fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
+          color: C.page.th, display: 'flex', justifyContent: 'space-between',
+          marginBottom: 8, fontWeight: 600,
+        }}>
+          <span>Analiti</span>
+          <span style={{ color: C.page.t2 }}>{counts.tot}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['tutti', 'coperti', 'scoperti'] as FiltroSidebar[]).map(f => {
+            const active = filtro === f
+            const labels: Record<FiltroSidebar, string> = { tutti: 'Tutti', coperti: `Cop. ${counts.coperti}`, scoperti: `Sco. ${counts.scoperti}` }
+            return (
+              <button key={f} onClick={() => onCambiaFiltro(f)} style={{
+                flex: 1, padding: '4px 6px', borderRadius: 4, fontSize: 10.5,
+                border: `1px solid ${C.page.brd2}`, cursor: 'pointer',
+                background: active ? C.page.t1 : C.page.sur,
+                color: active ? '#fff' : C.page.t2,
+                fontWeight: active ? 600 : 400,
+              }}>{labels[f]}</button>
+            )
+          })}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+        {filtered.map(a => {
+          const hasMix = !!a.mixId
+          const hasSng = a.sngIds.length > 0
+          const scoperto = !hasMix && !hasSng
+          return (
+            <div
+              key={a.nome}
+              onMouseEnter={() => onHoverAnalita(a.nome)}
+              onMouseLeave={() => onHoverAnalita(null)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '5px 14px', fontSize: 11.5,
+                color: scoperto ? C.page.th : C.page.t1,
+                borderLeft: a.isIS ? `3px solid ${C.inter.border}` : '3px solid transparent',
+                cursor: 'default',
+              }}
+              onMouseOver={(e) => { (e.currentTarget as HTMLDivElement).style.background = C.page.bg }}
+              onMouseOut={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+            >
+              <span style={{
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                maxWidth: 140, fontWeight: a.isIS ? 600 : 400,
+              }} title={a.nome}>{a.nome}</span>
+              <span style={{ display: 'flex', gap: 3 }}>
+                {a.isIS && (
+                  <span style={{
+                    fontSize: 8.5, padding: '1px 4px', borderRadius: 2,
+                    background: C.inter.chip, color: C.inter.text, fontWeight: 600,
+                  }}>IS</span>
+                )}
+                {hasMix && (
+                  <span style={{
+                    fontSize: 8.5, padding: '1px 4px', borderRadius: 2,
+                    background: C.mix.chip, color: C.mix.text, fontWeight: 600,
+                  }}>M</span>
+                )}
+                {hasSng && (
+                  <span style={{
+                    fontSize: 8.5, padding: '1px 4px', borderRadius: 2,
+                    background: C.sng.chip, color: C.sng.text, fontWeight: 600,
+                  }}>S</span>
+                )}
+                {scoperto && (
+                  <span style={{
+                    fontSize: 8.5, padding: '1px 4px', borderRadius: 2,
+                    background: C.con.bg, color: C.con.text, fontWeight: 600,
+                    border: `1px solid ${C.con.border}`,
+                  }}>—</span>
+                )}
+              </span>
+            </div>
+          )
+        })}
+        {filtered.length === 0 && (
+          <div style={{ padding: '20px 14px', fontSize: 11, color: C.page.th, textAlign: 'center' }}>
+            Nessun analita in questo filtro.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Calcola edges dal nodo Analiti verso i moduli Mix/Sng che coprono ogni analita
+function computeAnalitiEdges(analiti: AnalitoItem[], moduli: ModuloMeta[]): Edge[] {
+  const edges: Edge[] = []
+  const mixModById = new Map<string, string>() // mixId → nodo id
+  const sngModById = new Map<string, string>()  // sng id → nodo id
+  for (const m of moduli) {
+    if (m.kind === 'mix') for (const mid of m.mixIds) mixModById.set(mid, m.id)
+    else if (m.kind === 'sng') sngModById.set(m.id, m.id)
+  }
+  const seen = new Set<string>()
+  for (const a of analiti) {
+    if (a.mixId) {
+      const targetId = mixModById.get(a.mixId)
+      if (targetId && !seen.has(targetId)) {
+        seen.add(targetId)
+        edges.push({
+          id: `ANALITI→${targetId}`,
+          source: ANALITI_NODE_ID,
+          target: targetId,
+          type: 'default',
+          style: { stroke: C.mix.border, strokeWidth: 1.2, opacity: 0.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: C.mix.border, width: 12, height: 12 },
+        })
+      }
+    }
+    for (const sid of a.sngIds) {
+      const targetId = sngModById.get(sid)
+      if (targetId && !seen.has(targetId)) {
+        seen.add(targetId)
+        edges.push({
+          id: `ANALITI→${targetId}`,
+          source: ANALITI_NODE_ID,
+          target: targetId,
+          type: 'default',
+          style: { stroke: C.sng.border, strokeWidth: 1.2, opacity: 0.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: C.sng.border, width: 12, height: 12 },
+        })
+      }
+    }
+  }
+  return edges
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -811,6 +994,7 @@ const nodeTypes = {
   mix: ModuloMixNode,
   sng: ModuloSngNode,
   work: ModuloWorkNode,
+  analiti: AnalitiNode,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -824,119 +1008,204 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     [analiti, crmItems, removedMix, mixLottoSel, workCols],
   )
 
-  const edges = useMemo(() => computeEdges(moduli), [moduli])
+  const moduliEdges = useMemo(() => computeEdges(moduli), [moduli])
+  const analitiEdgesBase = useMemo(() => computeAnalitiEdges(analiti, moduli), [analiti, moduli])
 
-  const { positions, setPosition, resetLayout } = useLavagnaPositions(metodoId, moduli, edges)
+  const { positions, setPosition, resetLayout } = useLavagnaPositions(metodoId, moduli, moduliEdges)
 
-  // Sidebar state
   const [filtroSidebar, setFiltroSidebar] = useState<FiltroSidebar>('tutti')
   const [hoveredAnalita, setHoveredAnalita] = useState<string | null>(null)
+  // Selezione: nodeId o null (click su card) — deseleziona cliccando su sfondo
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // Highlighted module ids (hover su analita in sidebar)
-  const highlightedIds = useMemo(() => {
-    if (!hoveredAnalita) return new Set<string>()
-    const a = analiti.find(x => x.nome === hoveredAnalita)
-    if (!a) return new Set<string>()
+  const analitiPos = useMemo(() => {
+    if (positions[ANALITI_NODE_ID]) return positions[ANALITI_NODE_ID]
+    return { x: LAYOUT.COL_X.mix - ANALITI_NODE_W - 80, y: LAYOUT.Y_START }
+  }, [positions])
+
+  // Nodi connessi al selectedId (via edge source/target)
+  const connectedToSelected = useMemo(() => {
+    if (!selectedId) return new Set<string>()
     const out = new Set<string>()
-    for (const mid of a.mixIds) if (!removedMix.has(mid)) out.add(`MIX-${mid}`)
-    for (const sid of a.sngIds) out.add(sid)
+    for (const e of [...moduliEdges, ...analitiEdgesBase]) {
+      if (e.source === selectedId) out.add(e.target)
+      if (e.target === selectedId) out.add(e.source)
+    }
     return out
-  }, [hoveredAnalita, analiti, removedMix])
+  }, [selectedId, moduliEdges, analitiEdgesBase])
 
-  // Nodes per React Flow: una entry per ogni modulo con posizione corrente
-  const nodes: Node[] = useMemo(() => {
-    return moduli.map(m => {
-      const p = positions[m.id] || { x: 0, y: 0 }
-      const base = {
-        id: m.id,
-        position: p,
-        draggable: true,
-        selectable: false,
+  // highlightedIds: hover analita OR selezione nodo
+  const highlightedIds = useMemo(() => {
+    if (hoveredAnalita) {
+      const a = analiti.find(x => x.nome === hoveredAnalita)
+      if (!a) return new Set<string>()
+      const out = new Set<string>()
+      for (const mid of a.mixIds) if (!removedMix.has(mid)) out.add(`MIX-${mid}`)
+      for (const sid of a.sngIds) out.add(sid)
+      return out
+    }
+    if (selectedId) {
+      return new Set<string>([selectedId, ...connectedToSelected])
+    }
+    return new Set<string>()
+  }, [hoveredAnalita, selectedId, connectedToSelected, analiti, removedMix])
+
+  // Edges con evidenziazione quando c'è selezione
+  const edges = useMemo(() => {
+    const allEdges = [...moduliEdges, ...analitiEdgesBase]
+    if (!selectedId) return allEdges
+    return allEdges.map(e => {
+      const active = e.source === selectedId || e.target === selectedId
+      return {
+        ...e,
+        style: {
+          ...e.style,
+          opacity: active ? 1 : 0.15,
+          strokeWidth: active ? 2.5 : (e.style?.strokeWidth ?? 1.6),
+        },
+        animated: active,
       }
+    })
+  }, [moduliEdges, analitiEdgesBase, selectedId])
+
+  const analitiNodeData = useMemo<AnalitiNodeData>(() => ({
+    analiti,
+    filtro: filtroSidebar,
+    onCambiaFiltro: setFiltroSidebar,
+    onHoverAnalita: setHoveredAnalita,
+  }), [analiti, filtroSidebar])
+
+  // Nodi strutturali: posizioni + meta. NON include highlighted per evitare
+  // che l'hover ricostruisca tutti i nodi e triggeri setRfNodes in loop.
+  const structuralNodes: Node[] = useMemo(() => {
+    const analitiNode: Node = {
+      id: ANALITI_NODE_ID,
+      type: 'analiti',
+      position: analitiPos,
+      draggable: true,
+      selectable: true,
+      data: analitiNodeData,
+    }
+    const moduliNodes = moduli.map(m => {
+      const p = positions[m.id] || { x: 0, y: 0 }
+      const base = { id: m.id, position: p, draggable: true, selectable: true }
       if (m.kind === 'mix') {
-        return { ...base, type: 'mix', data: { meta: m, highlighted: highlightedIds.has(m.id) } as MixNodeData }
+        return { ...base, type: 'mix', data: { meta: m, highlighted: false } as MixNodeData }
       }
       if (m.kind === 'sng') {
-        return { ...base, type: 'sng', data: { meta: m, highlighted: highlightedIds.has(m.id) } as SngNodeData }
+        return { ...base, type: 'sng', data: { meta: m, highlighted: false } as SngNodeData }
       }
-      return { ...base, type: 'work', data: { meta: m, highlighted: highlightedIds.has(m.id) } as WorkNodeData }
+      return { ...base, type: 'work', data: { meta: m, highlighted: false } as WorkNodeData }
     })
-  }, [moduli, positions, highlightedIds])
+    return [analitiNode, ...moduliNodes]
+  }, [moduli, positions, analitiPos, analitiNodeData])
 
-  // Persisti su drag finito
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
+  const [rfNodes, setRfNodes, onNodesChange] = useNodesState(structuralNodes)
+
+  // Sincronizza struttura (posizioni, lista moduli) senza toccare highlighted
+  const isDraggingRef = useRef(false)
+  useEffect(() => {
+    if (isDraggingRef.current) return
+    setRfNodes(prev => {
+      // Aggiorna solo id/position/data strutturale — preserva highlighted dal prev
+      const prevMap = new Map(prev.map(n => [n.id, n]))
+      return structuralNodes.map(n => {
+        const old = prevMap.get(n.id)
+        if (!old) return n
+        // Preserva highlighted dal prev per non cancellare l'evidenziazione corrente
+        const oldHighlighted = (old.data as { highlighted?: boolean }).highlighted ?? false
+        return {
+          ...n,
+          position: old.position, // usa posizione RF (potrebbe essere diversa da structuralNodes dopo drag)
+          data: { ...n.data, highlighted: oldHighlighted },
+        }
+      })
+    })
+  }, [structuralNodes, setRfNodes])
+
+  // Aggiorna solo il flag highlighted — chirurgico, non tocca posizioni
+  useEffect(() => {
+    if (isDraggingRef.current) return
+    setRfNodes(prev => prev.map(n => {
+      const shouldHighlight = highlightedIds.has(n.id)
+      const currentHighlight = (n.data as { highlighted?: boolean }).highlighted ?? false
+      if (shouldHighlight === currentHighlight) return n
+      return { ...n, data: { ...n.data, highlighted: shouldHighlight } }
+    }))
+  }, [highlightedIds, setRfNodes])
+
+  // Persisti posizione a fine drag
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    onNodesChange(changes)
+    let dragging = false
     for (const ch of changes) {
-      if (ch.type === 'position' && !ch.dragging && ch.position) {
-        setPosition(ch.id, ch.position.x, ch.position.y)
+      if (ch.type === 'position') {
+        if (ch.dragging) { dragging = true }
+        else if (ch.position) { setPosition(ch.id, ch.position.x, ch.position.y) }
       }
     }
-  }, [setPosition])
+    isDraggingRef.current = dragging
+  }, [onNodesChange, setPosition])
+
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedId(prev => prev === node.id ? null : node.id)
+    setHoveredAnalita(null)
+  }, [])
+
+  const handlePaneClick = useCallback(() => {
+    setSelectedId(null)
+  }, [])
+
+  const handleEdgeClick = useCallback((_evt: React.MouseEvent, edge: Edge) => {
+    // Click su freccia seleziona il nodo sorgente
+    setSelectedId(prev => prev === edge.source ? null : edge.source)
+    setHoveredAnalita(null)
+  }, [])
 
   return (
-    <div style={{
-      flex: 1, display: 'flex', flexDirection: 'row',
-      minHeight: 0, background: C.page.bg,
-    }}>
-      <SidebarAnaliti
-        analiti={analiti}
-        filtro={filtroSidebar}
-        onCambiaFiltro={setFiltroSidebar}
-        onHoverAnalita={setHoveredAnalita}
-      />
-      <div style={{
-        flex: 1, position: 'relative', minWidth: 0,
-        background: '#fafaf7',
-      }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
-          minZoom={0.25}
-          maxZoom={2}
-          fitView
-          fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
-          nodesDraggable
-          nodesConnectable={false}
-          elementsSelectable={false}
-          panOnDrag
-          panOnScroll={false}
-          zoomOnScroll
-          zoomOnPinch
-          zoomOnDoubleClick={false}
-          proOptions={{ hideAttribution: true }}
-          defaultEdgeOptions={{ type: 'smoothstep' }}
-        >
-          <Background gap={22} size={1} color="rgba(20,17,15,0.08)" />
-          <Controls showInteractive={false} />
-          <MiniMap
-            pannable
-            zoomable
-            nodeColor={(n: Node) => {
-              if (n.type === 'mix') return C.mix.bg
-              if (n.type === 'sng') return C.sng.bg
-              const wd = n.data as WorkNodeData | undefined
-              return wd?.meta?.colIdx && wd.meta.colIdx > 0 ? C.inter.bg : C.work.bg
+    <div style={{ flex: 1, minHeight: 0, background: C.page.bg }}>
+      <ReactFlow
+        nodes={rfNodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={handleNodesChange}
+        onNodeClick={handleNodeClick}
+        onEdgeClick={handleEdgeClick}
+        onPaneClick={handlePaneClick}
+        minZoom={0.25}
+        maxZoom={2}
+        fitView
+        fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+        nodesDraggable
+        nodesConnectable={false}
+        elementsSelectable={true}
+        selectNodesOnDrag={false}
+        panOnDrag
+        panOnScroll={false}
+        zoomOnScroll
+        zoomOnPinch
+        zoomOnDoubleClick={false}
+        proOptions={{ hideAttribution: true }}
+        defaultEdgeOptions={{ type: 'default' }}
+      >
+        <Background gap={22} size={1} color="rgba(20,17,15,0.08)" />
+        <Controls showInteractive={false} />
+        <div style={{
+          position: 'absolute', right: 16, top: 16, zIndex: 5,
+          display: 'flex', gap: 4,
+        }}>
+          <button
+            onClick={resetLayout}
+            title="Riallinea moduli (L→R)"
+            style={{
+              height: 26, padding: '0 10px',
+              border: `1px solid ${C.page.brd2}`, borderRadius: 4,
+              background: C.page.sur, color: C.page.t1,
+              fontSize: 11, cursor: 'pointer',
             }}
-            style={{ width: 160, height: 110 }}
-          />
-          <div style={{
-            position: 'absolute', right: 16, top: 16, zIndex: 5,
-            display: 'flex', gap: 4,
-          }}>
-            <button
-              onClick={resetLayout}
-              title="Riallinea moduli (L→R)"
-              style={{
-                height: 26, padding: '0 10px',
-                border: `1px solid ${C.page.brd2}`, borderRadius: 4,
-                background: C.page.sur, color: C.page.t1,
-                fontSize: 11, cursor: 'pointer',
-              }}
-            >Riallinea</button>
-          </div>
-        </ReactFlow>
-      </div>
+          >Riallinea</button>
+        </div>
+      </ReactFlow>
     </div>
   )
 }

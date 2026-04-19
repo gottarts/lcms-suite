@@ -38,16 +38,18 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 // SVG Overlay per frecce di connessione
 // ─────────────────────────────────────────────────────────────────────────────
 function ConnectionsOverlay({
-  workCols, cardRefs, containerRef, gridScrollRef, workScrollRef,
+  workCols, cardRefs, containerRef, gridScrollRef, workScrollRef, updateRef,
 }: {
   workCols: WorkInSchema[][]
   cardRefs: React.MutableRefObject<Map<string, HTMLDivElement>>
   containerRef: React.RefObject<HTMLDivElement | null>
   gridScrollRef?: React.RefObject<HTMLDivElement | null>
   workScrollRef?: React.RefObject<HTMLDivElement | null>
+  updateRef?: React.MutableRefObject<(() => void) | null>
 }) {
   const [lines, setLines] = useState<ConnectionLine[]>([])
   const [size, setSize] = useState({ w: 0, h: 0 })
+  const updateFnRef = useRef<() => void>(() => {})
 
   useLayoutEffect(() => {
     const el = containerRef.current
@@ -58,7 +60,9 @@ function ConnectionsOverlay({
       setLines(computeConnections(workCols, cardRefs.current, el))
     }
 
-    update()
+    updateFnRef.current = update
+    if (updateRef) updateRef.current = update
+
     const ro = new ResizeObserver(update)
     ro.observe(el)
     el.addEventListener('scroll', update, { passive: true })
@@ -71,10 +75,11 @@ function ConnectionsOverlay({
       el.removeEventListener('scroll', update)
       if (grid) grid.removeEventListener('scroll', update)
       if (workWrap) workWrap.removeEventListener('scroll', update, { capture: true })
+      if (updateRef) updateRef.current = null
     }
-  }, [workCols, cardRefs, containerRef, gridScrollRef, workScrollRef])
+  }, [workCols, cardRefs, containerRef, gridScrollRef, workScrollRef, updateRef])
 
-  if (lines.length === 0) return null
+  if (lines.length === 0 && size.w === 0) return null
 
   return (
     <svg
@@ -383,9 +388,15 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
   const workspaceRef = useRef<HTMLDivElement>(null)
   const gridBodyRef = useRef<HTMLDivElement>(null)
   const workColsRef = useRef<HTMLDivElement>(null)
+  const overlayUpdateRef = useRef<(() => void) | null>(null)
   const registerCardRef: RegisterCardRef = useCallback((id, el) => {
-    if (el) cardRefs.current.set(id, el)
-    else cardRefs.current.delete(id)
+    if (el) {
+      cardRefs.current.set(id, el)
+      // Notifica l'overlay che una nuova card è disponibile
+      overlayUpdateRef.current?.()
+    } else {
+      cardRefs.current.delete(id)
+    }
   }, [])
 
   // ── Stato principale ──────────────────────────────────────────────────────
@@ -809,20 +820,22 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                       color:C.con.text, fontSize:13 }}>
           Errore: {error}
         </div>
-      ) : vista === 'lavagna' ? (
-        <SchemaLavagna
-          metodoId={metodoId}
-          metodoNome={metodoNome}
-          analiti={analiti}
-          crmItems={crmItemsFiltrati}
-          selSrcs={selSrcs}
-          removedMix={removedMixEffettivo}
-          mixLottoSel={mixLottoSel}
-          workCols={workCols}
-          filtroDestUso={filtroDestUso}
-        />
       ) : (
-        <div ref={workspaceRef} style={{ flex:1, display:'flex', flexDirection:'row',
+        <>
+        {vista === 'lavagna' && (
+          <SchemaLavagna
+            metodoId={metodoId}
+            metodoNome={metodoNome}
+            analiti={analiti}
+            crmItems={crmItemsFiltrati}
+            selSrcs={selSrcs}
+            removedMix={removedMixEffettivo}
+            mixLottoSel={mixLottoSel}
+            workCols={workCols}
+            filtroDestUso={filtroDestUso}
+          />
+        )}
+        <div ref={workspaceRef} style={{ flex:1, display: vista === 'griglia' ? 'flex' : 'none', flexDirection:'row',
                       overflowX:'auto', overflowY:'hidden', minHeight:0, position:'relative',
                       gap:16, padding:'16px 12px 8px' }}>
           <ConnectionsOverlay
@@ -831,6 +844,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             containerRef={workspaceRef}
             gridScrollRef={gridBodyRef}
             workScrollRef={workColsRef}
+            updateRef={overlayUpdateRef}
           />
           <GrigliaAnalitiCrm
             analiti={analiti}
@@ -862,6 +876,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onRicaricaWork={(id) => setDialogs(d => ({ ...d, ricaricaWorkId: id }))}
           />
         </div>
+        </>
       )}
 
       {/* ── Bottom bar ── */}

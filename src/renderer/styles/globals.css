@@ -46,3 +46,12 @@
     color: var(--color-foreground);
   }
 }
+
+/* Sopprime l'outline di selezione nativo di React Flow — usiamo il nostro highlighting */
+.react-flow__node.selected > * {
+  outline: none !important;
+  box-shadow: none !important;
+}
+.react-flow__node.selected {
+  outline: none !important;
+}
