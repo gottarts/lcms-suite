@@ -133,9 +133,9 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
   ]
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col bg-background" style={{ margin: -16, marginTop: -60, height: '100%', overflow: 'hidden' }}>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 flex-shrink-0" style={{ padding: '12px 24px', boxShadow: '0 1px 0 rgba(0,0,0,0.06)' }}>
         <Button size="sm" variant="ghost" onClick={onClose} className="gap-1">
           ← Torna a Metodi
         </Button>
@@ -145,7 +145,7 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap flex-shrink-0" style={{ padding: '12px 24px 0' }}>
         <div className="relative flex-1 max-w-sm">
           <Input
             placeholder="Nome parametro (dal catalogo o libero)"
@@ -221,6 +221,7 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
       </div>
 
       {/* Tabella */}
+      <div className="flex-1 min-h-0 flex flex-col" style={{ padding: '12px 24px 12px' }}>
       <div className="border rounded-md overflow-auto flex-1">
         <table className="w-full text-xs">
           <thead className="bg-muted/50 sticky top-0">
@@ -298,9 +299,10 @@ export function ParametriMetodoPage({ metodoId, metodoNome, onClose }: Parametri
         </table>
       </div>
 
-      <p className="text-xs text-muted-foreground mt-2">
+      <p className="text-xs text-muted-foreground mt-2 flex-shrink-0">
         Le modifiche sono immediate. Un parametro aggiunto manualmente apparirà grigio nello schema finché non viene associato un CRM.
       </p>
+      </div>
 
       {showImport && (
         <AliasImportDialog

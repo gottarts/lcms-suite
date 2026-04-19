@@ -49,6 +49,7 @@ export type AuditWorkRow = {
   kind: 'work'
   work_id: number
   work_nome: string
+  work_codice: string | null
   work_scadenza: string | null
   stato_work: StatoLab | null
   bloccata: boolean
@@ -344,6 +345,7 @@ export function buildAuditModel(input: AuditCrmInput): AuditModel {
       kind: 'work',
       work_id: wRaw.id,
       work_nome: wRaw.nome,
+      work_codice: wRaw.codice ?? null,
       work_scadenza,
       stato_work,
       bloccata: !!wRaw.bloccata,

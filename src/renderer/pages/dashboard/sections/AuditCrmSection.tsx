@@ -72,7 +72,12 @@ function WorkRowBlock({ row, onOpenWork }: { row: AuditWorkRow; onOpenWork: (id:
         <div
           className="font-medium text-sm flex-1 truncate cursor-pointer hover:text-primary hover:underline transition-colors"
           onClick={() => onOpenWork(row.work_id, row.archiviate_alla_data, row.work_nome)}
-        >{row.work_nome}</div>
+        >
+          {row.work_nome}
+          {row.work_codice && (
+            <span className="ml-2 text-[11px] font-normal text-muted-foreground">{row.work_codice}</span>
+          )}
+        </div>
         {row.bloccata && (
           <Badge variant="outline" className="bg-red-50 text-red-800 border-red-300">⛔ bloccata</Badge>
         )}

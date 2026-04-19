@@ -232,7 +232,7 @@ export function TracciabilitaCard() {
                               ? 'bg-red-50 text-red-800 border-red-300 cursor-pointer'
                               : 'bg-amber-50 text-amber-800 border-amber-300 cursor-pointer'
                           }
-                          onClick={() => nav('/work')}
+                          onClick={() => nav('/work', { state: { openWorkId: w.id, archiviata: false, searchWork: w.nome } })}
                         >
                           {w.bloccata ? '⛔' : '⚠'} {w.nome}
                         </Badge>

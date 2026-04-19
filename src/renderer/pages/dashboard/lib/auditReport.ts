@@ -439,7 +439,7 @@ function drawWorkSheet(doc: jsPDF, w: AuditWorkRow): void {
   doc.setFontSize(8.5)
   doc.setFont('helvetica', 'normal')
   doc.text(
-    `Scadenza work: ${w.work_scadenza ?? '—'}   |   Analiti coperti: ${w.analiti_coperti.length}`,
+    `${w.work_codice ? `${w.work_codice}   |   ` : ''}Scadenza: ${w.work_scadenza ?? '—'}   |   Analiti coperti: ${w.analiti_coperti.length}`,
     PAGE_A4.w - DEFAULT_MARGINS.right,
     19,
     { align: 'right' },

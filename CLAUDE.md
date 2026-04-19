@@ -21,6 +21,17 @@ Questi file hanno funzionalità complesse che devono rimanere intatte. Prima di 
 - Non rimuovere props da interfacce senza prima cercare tutti i punti di uso con `grep`.
 - TypeScript **non segnala props extra** passate a un componente — una prop rimossa dall'interfaccia smette di funzionare silenziosamente senza errori di compilazione.
 
+## Componenti fullscreen in MetodiPage
+
+Quando un componente (es. `ParametriMetodoPage`, `SchemaCalibrazione`) deve occupare tutto lo spazio della finestra sostituendo la vista metodi:
+
+1. Il div root del componente deve avere: `className="flex flex-col bg-background"` e `style={{ margin: -16, marginTop: -60, height: '100%', overflow: 'hidden' }}`
+2. I margini negativi annullano il `p-4` del layout (`-16`) e coprono il BackButton del layout (`-60`)
+3. `bg-background` è obbligatorio per coprire fisicamente il BackButton sottostante
+4. Header interno con `style={{ padding: '12px 24px', boxShadow: '0 1px 0 rgba(0,0,0,0.06)' }}` e `className="flex-shrink-0"`
+
+Riferimento: `SchemaCalibrazione.tsx` riga ~768, `ParametriMetodoPage.tsx`.
+
 ## Struttura documentazione
 
 - Piani attivi: `docs/plans/active/`
