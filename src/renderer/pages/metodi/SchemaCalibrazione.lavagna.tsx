@@ -1065,6 +1065,16 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     return new Set<string>()
   }, [hoveredAnalita, selectedId, connectedToSelected, analiti, removedMix])
 
+  // Merge: evidenzia anche i CRM selezionati in selSrcs
+  const highlightedIdsWithSel = useMemo(() => {
+    const out = new Set(highlightedIds)
+    for (const m of moduli) {
+      if (m.kind === 'mix' && selSrcs.has(m.mixId)) out.add(m.id)
+      if (m.kind === 'sng' && selSrcs.has(m.id)) out.add(m.id)
+    }
+    return out
+  }, [highlightedIds, moduli, selSrcs])
+
   // Edges con evidenziazione quando c'è selezione
   const edges = useMemo(() => {
     const allEdges = [...moduliEdges, ...analitiEdgesBase]
@@ -1142,12 +1152,12 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
   useEffect(() => {
     if (isDraggingRef.current) return
     setRfNodes(prev => prev.map(n => {
-      const shouldHighlight = highlightedIds.has(n.id)
+      const shouldHighlight = highlightedIdsWithSel.has(n.id)
       const currentHighlight = (n.data as { highlighted?: boolean }).highlighted ?? false
       if (shouldHighlight === currentHighlight) return n
       return { ...n, data: { ...n.data, highlighted: shouldHighlight } }
     }))
-  }, [highlightedIds, setRfNodes])
+  }, [highlightedIdsWithSel, setRfNodes])
 
   // Persisti posizione a fine drag
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
@@ -1163,9 +1173,22 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
   }, [onNodesChange, setPosition])
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedId(prev => prev === node.id ? null : node.id)
+    const id = node.id
+    // Selezione visiva (highlight connessioni)
+    setSelectedId(prev => prev === id ? null : id)
     setHoveredAnalita(null)
-  }, [])
+
+    // Toggle selSrcs per CRM mix e sng (aggiorna lo stato condiviso nel parent)
+    const m = moduli.find(x => x.id === id)
+    if (!m) return
+
+    if (m.kind === 'mix' && onToggleMix) {
+      onToggleMix(m.mixId)
+    } else if (m.kind === 'sng' && onToggleSng) {
+      onToggleSng(m.id)
+    }
+    // I nodi Work non aggiornano selSrcs al click semplice
+  }, [moduli, onToggleMix, onToggleSng])
 
   const handlePaneClick = useCallback(() => {
     setSelectedId(null)
