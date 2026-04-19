@@ -472,6 +472,21 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     return { analiti, crmItemsFiltrati: filtered }
   }, [scenarioScelto, removedMix, crmItemsPerDestUso, analitiAllFiltrati, analitiRows, firmaToMixIds, filtroDestUso, crmItems])
 
+  // Analiti per la lavagna: stessa logica del filtro ma i CRM IS sono sempre inclusi
+  // (i CRM IS non vengono mai esclusi dal calcolo copertura analiti nella lavagna)
+  const analitiPerLavagna = useMemo(() => {
+    const isISItem = (dest: string | null): boolean => {
+      if (!dest) return false
+      const d = dest.toLowerCase()
+      return d.includes('intern') || d.includes(' is')
+    }
+    const haISInFiltrati = crmItemsFiltrati.some(c => isISItem(c.destinazione_uso))
+    if (haISInFiltrati) return analiti
+    const crmConIS = [...crmItemsFiltrati, ...crmItems.filter(c => isISItem(c.destinazione_uso))]
+    const { analiti: a } = buildAnalitiData(crmConIS, analitiRows, filtroDestUso, crmItems)
+    return a
+  }, [crmItemsFiltrati, crmItems, analitiRows, filtroDestUso, analiti])
+
   // ── removedMix effettivo per la griglia ──────────────────────────────────
   // Se un mix_id è in removedMix ma è l'unico lotto disponibile nel filtro
   // corrente (filtroDestUso), non deve essere mostrato come sbarrato.
@@ -826,7 +841,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           <SchemaLavagna
             metodoId={metodoId}
             metodoNome={metodoNome}
-            analiti={analiti}
+            analiti={analitiPerLavagna}
             crmItems={crmItemsFiltrati}
             selSrcs={selSrcs}
             removedMix={removedMixEffettivo}
