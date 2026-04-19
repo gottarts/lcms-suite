@@ -2,13 +2,21 @@
 // SchemaCalibrazione.lavagna.tsx
 //
 // Vista "Lavagna" dello Schema di Calibrazione (read-only, flusso L→R).
-// Alternativa a GrigliaAnalitiCrm (modalità edit), montata via toggle dentro
-// SchemaCalibrazione.tsx. Pan/zoom nativi, moduli draggabili, archi dinamici
-// solo tra sorgenti effettivamente usate e Work che le consumano.
+// Canvas pan/zoom/drag gestito da React Flow (@xyflow/react). Archi calcolati
+// da computeEdges() e aggiornati automaticamente dalla libreria durante il drag.
+// Layout iniziale a colonne Mix → Sng → Work(colIdx) con dagre per ordinare Y
+// e minimizzare gli incroci delle frecce.
 //
-// Persistenza posizioni in localStorage (chiave per metodoId).
+// Persistenza posizioni in localStorage (chiave v2 per metodoId).
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ReactFlow, Background, Controls, MiniMap,
+  Handle, Position as HandlePosition, MarkerType,
+  type Node, type Edge, type NodeProps, type NodeChange,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
+import dagre from 'dagre'
 import type {
   AnalitoItem, CrmItem, SorgenteSel, SorgenteTipo,
   WorkInSchema, DestUso, PrepStockItem,
@@ -32,25 +40,33 @@ export interface SchemaLavagnaProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Costanti layout
+// Costanti layout (più espanse rispetto alla v1 per ridurre sovrapposizioni)
 // ─────────────────────────────────────────────────────────────────────────────
 const LAYOUT = {
-  COL_X: [40, 440, 900] as const,        // Mix | Sng/Neat | Work (prima colonna)
-  COL_WORK_GAP: 440,
-  MODULE_W: { mix: 340, sng: 260, work: 360 } as Record<'mix' | 'sng' | 'work', number>,
-  MODULE_H: { mix: 180, sng: 130, work: 210 } as Record<'mix' | 'sng' | 'work', number>,
-  ROW_GAP: 20,
+  COL_X: { mix: 60, sng: 560 } as const,
+  COL_WORK_BASE: 1160,
+  COL_WORK_GAP: 560,
+  MODULE_W: { mix: 340, sng: 260, work: 360 } as const,
+  MODULE_H_MIN: { mix: 180, sng: 130, work: 210 } as const,
+  ROW_GAP: 60,
   Y_START: 40,
 }
 const SIDEBAR_W = 240
-const ZOOM_MIN = 0.25
-const ZOOM_MAX = 2
-const LS_VERSION = 1
-const LS_KEY_PREFIX = 'lcms:lavagna:positions:'
+const LS_KEY_PREFIX = 'lcms:lavagna:positions:v2:'
+const LS_VERSION = 2
 
 type Position = { x: number; y: number }
 type Positions = Record<string, Position>
 type FiltroSidebar = 'tutti' | 'coperti' | 'scoperti'
+
+type ModuloKind = 'mix' | 'sng' | 'work'
+
+// ModuloMeta: estesa per portare tutti i mix_id associati (attivo + alternativi)
+// in modo che le sorgenti di una Work riferite a un lotto alternativo risolvano.
+type ModuloMeta =
+  | { kind: 'mix'; id: string; mixId: string; mixIds: string[]; crm: CrmItem; comps: string[]; lottiAlt: number }
+  | { kind: 'sng'; id: string; crm: CrmItem; preps: PrepStockItem[] }
+  | { kind: 'work'; id: string; work: WorkInSchema; colIdx: number; rowIdx: number }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: badge scadenza uniforme
@@ -71,11 +87,6 @@ function scadenzaBadge(scad: string | null): { color: string; label: string } | 
 // ─────────────────────────────────────────────────────────────────────────────
 // Derivazione moduli dai dati (mix attivi, singoli/prep, work)
 // ─────────────────────────────────────────────────────────────────────────────
-type ModuloMeta =
-  | { kind: 'mix'; id: string; mixId: string; crm: CrmItem; comps: string[]; lottiAlt: number }
-  | { kind: 'sng'; id: string; crm: CrmItem; preps: PrepStockItem[] }
-  | { kind: 'work'; id: string; work: WorkInSchema; colIdx: number; rowIdx: number }
-
 function deriveModuli(
   analiti: AnalitoItem[],
   crmItems: CrmItem[],
@@ -83,7 +94,6 @@ function deriveModuli(
   mixLottoSel: Map<string, string>,
   workCols: WorkInSchema[][],
 ): ModuloMeta[] {
-  // Index CRM per id e mix_id
   const byId = new Map<number, CrmItem>()
   const byMix = new Map<string, CrmItem[]>()
   for (const c of crmItems) {
@@ -99,12 +109,10 @@ function deriveModuli(
   const seenMix = new Set<string>()
   const seenSng = new Set<string>()
 
-  // MIX (uno per "firma-mix-attivo")
   for (const a of analiti) {
     if (!a.mixIds || a.mixIds.length === 0) continue
     const firma = a.mixIds.join('|')
     const attivoCandidate = mixLottoSel.get(firma)
-    // Pick the first mix_id non rimosso, preferendo quello selezionato dall'utente
     const availableMixIds = a.mixIds.filter(m => !removedMix.has(m))
     if (availableMixIds.length === 0) continue
     const attivo = attivoCandidate && availableMixIds.includes(attivoCandidate)
@@ -116,18 +124,18 @@ function deriveModuli(
     if (comps.length === 0) continue
     const head = comps[0]
     const nomiComp = comps.map(c => c.nome)
-    const lottiAlt = (byMix.get(attivo)?.length ?? 0) > 0 ? a.mixIds.length - 1 : 0
+    const lottiAlt = a.mixIds.length > 1 ? a.mixIds.length - 1 : 0
     result.push({
       kind: 'mix',
       id: `MIX-${attivo}`,
       mixId: attivo,
+      mixIds: a.mixIds.slice(),    // tutti i lotti (per lookup archi)
       crm: head,
       comps: nomiComp,
-      lottiAlt: Math.max(0, lottiAlt),
+      lottiAlt,
     })
   }
 
-  // SINGOLI + NEAT (un modulo per CRM id)
   for (const a of analiti) {
     for (const sid of a.sngIds) {
       if (seenSng.has(sid)) continue
@@ -139,7 +147,6 @@ function deriveModuli(
     }
   }
 
-  // WORK
   workCols.forEach((col, ci) => {
     col.forEach((w, wi) => {
       result.push({ kind: 'work', id: w.id, work: w, colIdx: ci, rowIdx: wi })
@@ -150,57 +157,167 @@ function deriveModuli(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Auto-layout L→R per moduli senza posizione salvata
+// Altezza stimata del modulo (l'altezza reale può essere leggermente diversa
+// ma questa stima serve solo a dagre per ordinare le righe)
 // ─────────────────────────────────────────────────────────────────────────────
-function computeAutoLayout(moduli: ModuloMeta[]): Positions {
-  const out: Positions = {}
-  let mixRow = 0
-  let sngRow = 0
-  const workRowsByCol: Record<number, number> = {}
+function estimatedHeight(m: ModuloMeta): number {
+  if (m.kind === 'mix') return LAYOUT.MODULE_H_MIN.mix
+  if (m.kind === 'sng') {
+    const isNeat = (m.crm.forma || '').toLowerCase().includes('neat')
+    const preps = m.preps.slice(0, 2)
+    return LAYOUT.MODULE_H_MIN.sng + (isNeat && preps.length ? 56 + preps.length * 18 : 0)
+  }
+  const vols = m.work.vols.slice(0, 4)
+  return LAYOUT.MODULE_H_MIN.work + vols.length * 14
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edges di React Flow (stessa logica di matching di computeArchi v1 ma con
+// mixMod indicizzato su TUTTI i mix_id — attivo + alternativi).
+// ─────────────────────────────────────────────────────────────────────────────
+function computeEdges(moduli: ModuloMeta[]): Edge[] {
+  const edges: Edge[] = []
+  const workMod = new Map<string, ModuloMeta>()
+  const mixMod = new Map<string, ModuloMeta>()
+  const sngMod = new Map<string, ModuloMeta>()
+  const prepInSng = new Map<string, string>()
 
   for (const m of moduli) {
-    if (m.kind === 'mix') {
-      out[m.id] = {
-        x: LAYOUT.COL_X[0],
-        y: LAYOUT.Y_START + mixRow * (LAYOUT.MODULE_H.mix + LAYOUT.ROW_GAP),
-      }
-      mixRow++
+    if (m.kind === 'work') workMod.set(m.id, m)
+    else if (m.kind === 'mix') {
+      for (const mid of m.mixIds) mixMod.set(mid, m)
     } else if (m.kind === 'sng') {
-      out[m.id] = {
-        x: LAYOUT.COL_X[1],
-        y: LAYOUT.Y_START + sngRow * (LAYOUT.MODULE_H.sng + LAYOUT.ROW_GAP),
-      }
-      sngRow++
-    } else {
-      const ci = m.colIdx
-      const cur = workRowsByCol[ci] ?? 0
-      out[m.id] = {
-        x: LAYOUT.COL_X[2] + ci * LAYOUT.COL_WORK_GAP,
-        y: LAYOUT.Y_START + cur * (LAYOUT.MODULE_H.work + LAYOUT.ROW_GAP),
-      }
-      workRowsByCol[ci] = cur + 1
+      sngMod.set(m.id, m)
+      for (const p of m.preps) prepInSng.set(String(p.id), m.id)
     }
   }
-  return out
-}
 
-function computeWorldSize(moduli: ModuloMeta[], positions: Positions): { w: number; h: number } {
-  let maxX = 600, maxY = 400
   for (const m of moduli) {
-    const p = positions[m.id]
-    if (!p) continue
-    const w = LAYOUT.MODULE_W[m.kind]
-    const h = LAYOUT.MODULE_H[m.kind]
-    if (p.x + w > maxX) maxX = p.x + w
-    if (p.y + h > maxY) maxY = p.y + h
+    if (m.kind !== 'work') continue
+    const w = m.work
+    for (let i = 0; i < w.srcs.length; i++) {
+      const s = w.srcs[i]
+      let fromMod: ModuloMeta | undefined
+      let color: string = C.page.t2
+      let dashed = false
+      if (s.tipo === 'mix') {
+        fromMod = mixMod.get(s.id)
+        color = C.mix.border
+      } else if (s.tipo === 'sng') {
+        fromMod = sngMod.get(s.id)
+        color = C.sng.border
+      } else if (s.tipo === 'prep') {
+        const sngId = s.prepId != null ? prepInSng.get(String(s.prepId)) : undefined
+        fromMod = sngId ? sngMod.get(sngId) : undefined
+        color = C.sng.border
+        dashed = true
+      } else if (s.tipo === 'work') {
+        fromMod = workMod.get(s.id)
+        color = C.work.border
+      }
+      if (!fromMod) continue
+
+      edges.push({
+        id: `${fromMod.id}→${m.id}:${s.tipo}:${s.id}:${s.prepId ?? ''}:${i}`,
+        source: fromMod.id,
+        target: m.id,
+        type: 'smoothstep',
+        data: { tipo: s.tipo as SorgenteTipo },
+        style: {
+          stroke: color,
+          strokeWidth: 1.6,
+          strokeDasharray: dashed ? '5 3' : undefined,
+          opacity: 0.9,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color,
+          width: 14,
+          height: 14,
+        },
+      })
+    }
   }
-  return { w: maxX + 120, h: maxY + 120 }
+
+  return edges
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Hook: posizioni in localStorage (per metodoId)
+// Layout iniziale: colonne L→R fisse + dagre per ordinare Y riducendo incroci
 // ─────────────────────────────────────────────────────────────────────────────
-function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[]) {
+function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[]): Positions {
+  // 1) Costruisco un grafo dagre solo per capire l'ordinamento verticale
+  //    suggerito da una layout Left→Right standard.
+  const g = new dagre.graphlib.Graph()
+  g.setGraph({ rankdir: 'LR', nodesep: LAYOUT.ROW_GAP, ranksep: 180, marginx: 20, marginy: 20 })
+  g.setDefaultEdgeLabel(() => ({}))
+
+  for (const m of moduli) {
+    g.setNode(m.id, {
+      width: LAYOUT.MODULE_W[m.kind],
+      height: estimatedHeight(m),
+    })
+  }
+  for (const e of edges) g.setEdge(e.source, e.target)
+
+  try { dagre.layout(g) } catch { /* no-op: se dagre fallisce, usa fallback a colonne */ }
+
+  // 2) Ricavo l'ordine verticale suggerito da dagre per ogni "rank"
+  //    (= kind/colonna). Poi stacco le X sulle colonne L→R fisse.
+  type WithY = { id: string; dagreY: number; kind: ModuloKind; colIdx?: number }
+  const nodes: WithY[] = moduli.map(m => {
+    const dg = g.node(m.id)
+    return {
+      id: m.id,
+      dagreY: dg ? dg.y : 0,
+      kind: m.kind,
+      colIdx: m.kind === 'work' ? m.colIdx : undefined,
+    }
+  })
+
+  // Raggruppa per colonna: mix | sng | work-col-0 | work-col-1 ...
+  const colKey = (n: WithY) =>
+    n.kind === 'mix' ? 'mix' : n.kind === 'sng' ? 'sng' : `work-${n.colIdx ?? 0}`
+
+  const grouped = new Map<string, WithY[]>()
+  for (const n of nodes) {
+    const k = colKey(n)
+    const arr = grouped.get(k) || []
+    arr.push(n)
+    grouped.set(k, arr)
+  }
+
+  // Ordina ogni colonna per dagreY crescente
+  for (const [, arr] of grouped) arr.sort((a, b) => a.dagreY - b.dagreY)
+
+  // X fissa per colonna
+  const xOf = (k: string): number => {
+    if (k === 'mix') return LAYOUT.COL_X.mix
+    if (k === 'sng') return LAYOUT.COL_X.sng
+    const m = k.match(/^work-(\d+)$/)
+    const ci = m ? parseInt(m[1], 10) : 0
+    return LAYOUT.COL_WORK_BASE + ci * LAYOUT.COL_WORK_GAP
+  }
+
+  // Calcola Y stacked per colonna con ROW_GAP
+  const positions: Positions = {}
+  const modById = new Map<string, ModuloMeta>(moduli.map(m => [m.id, m]))
+  for (const [k, arr] of grouped) {
+    let cursorY = LAYOUT.Y_START
+    for (const n of arr) {
+      const m = modById.get(n.id)
+      if (!m) continue
+      positions[n.id] = { x: xOf(k), y: cursorY }
+      cursorY += estimatedHeight(m) + LAYOUT.ROW_GAP
+    }
+  }
+  return positions
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook: posizioni in localStorage (per metodoId) — chiave v2
+// ─────────────────────────────────────────────────────────────────────────────
+function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[], edges: Edge[]) {
   const key = LS_KEY_PREFIX + metodoId
   const [positions, setPositions] = useState<Positions>(() => {
     try {
@@ -215,16 +332,15 @@ function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[]) {
   })
   const dirtyRef = useRef(false)
 
-  // Auto-layout incrementale per moduli nuovi senza posizione salvata
+  // Auto-layout per moduli senza posizione salvata (nuovi o primo mount)
   const modIdsKey = useMemo(() => moduli.map(m => m.id).join('|'), [moduli])
   useEffect(() => {
     setPositions(prev => {
       const missing = moduli.filter(m => !(m.id in prev))
       if (missing.length === 0) return prev
-      // Calcola layout automatico SOLO sui mancanti per evitare di spostare quelli esistenti
-      const auto = computeAutoLayout(moduli)
+      const auto = computeInitialLayout(moduli, edges)
       const merged = { ...prev }
-      for (const m of missing) merged[m.id] = auto[m.id]
+      for (const m of missing) merged[m.id] = auto[m.id] ?? { x: 0, y: 0 }
       return merged
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,81 +369,16 @@ function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[]) {
 
   const resetLayout = useCallback(() => {
     try { localStorage.removeItem(key) } catch { /* noop */ }
-    const auto = computeAutoLayout(moduli)
+    const auto = computeInitialLayout(moduli, edges)
+    dirtyRef.current = true
     setPositions(auto)
-  }, [key, moduli])
+  }, [key, moduli, edges])
 
   return { positions, setPosition, resetLayout }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Calcolo archi (strategia A: solo stream attivi)
-// ─────────────────────────────────────────────────────────────────────────────
-type Arco = {
-  x1: number; y1: number; x2: number; y2: number
-  color: string; tipo: SorgenteTipo; dashed: boolean; key: string
-}
-
-function computeArchi(moduli: ModuloMeta[], positions: Positions): Arco[] {
-  const archi: Arco[] = []
-  const workMod = new Map<string, ModuloMeta>()
-  const mixMod = new Map<string, ModuloMeta>()
-  const sngMod = new Map<string, ModuloMeta>()
-  const prepInSng = new Map<string, string>() // prepId → sngModuleId
-  for (const m of moduli) {
-    if (m.kind === 'work') workMod.set(m.id, m)
-    else if (m.kind === 'mix') mixMod.set(m.mixId, m)
-    else if (m.kind === 'sng') {
-      sngMod.set(m.id, m)
-      for (const p of m.preps) prepInSng.set(String(p.id), m.id)
-    }
-  }
-
-  for (const m of moduli) {
-    if (m.kind !== 'work') continue
-    const w = m.work
-    const pWork = positions[m.id]
-    if (!pWork) continue
-    const to = { x: pWork.x, y: pWork.y + LAYOUT.MODULE_H.work / 2 }
-
-    for (const s of w.srcs) {
-      let fromMod: ModuloMeta | undefined
-      let color: string = C.page.t2
-      let dashed = false
-      if (s.tipo === 'mix') {
-        fromMod = mixMod.get(s.id)
-        color = C.mix.border
-      } else if (s.tipo === 'sng') {
-        fromMod = sngMod.get(s.id)
-        color = C.sng.border
-      } else if (s.tipo === 'prep') {
-        const sngId = s.prepId != null ? prepInSng.get(String(s.prepId)) : undefined
-        fromMod = sngId ? sngMod.get(sngId) : undefined
-        color = C.sng.border
-        dashed = true
-      } else if (s.tipo === 'work') {
-        fromMod = workMod.get(s.id)
-        color = C.work.border
-      }
-      if (!fromMod) continue
-      const pFrom = positions[fromMod.id]
-      if (!pFrom) continue
-      const fromW = LAYOUT.MODULE_W[fromMod.kind]
-      const fromH = LAYOUT.MODULE_H[fromMod.kind]
-      const from = { x: pFrom.x + fromW, y: pFrom.y + fromH / 2 }
-      archi.push({
-        x1: from.x, y1: from.y,
-        x2: to.x, y2: to.y,
-        color, tipo: s.tipo, dashed,
-        key: `${fromMod.id}→${m.id}:${s.id}:${s.prepId ?? ''}`,
-      })
-    }
-  }
-  return archi
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sotto-componente: SidebarAnaliti
+// Sotto-componente: SidebarAnaliti (invariato dalla v1)
 // ─────────────────────────────────────────────────────────────────────────────
 function SidebarAnaliti({
   analiti, filtro, onCambiaFiltro, onHoverAnalita,
@@ -452,88 +503,49 @@ function SidebarAnaliti({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sotto-componenti: Moduli (Mix, Sng, Work)
+// Card wrapper: base stilistica + Handle L/R per React Flow
 // ─────────────────────────────────────────────────────────────────────────────
-function ModuloBaseWrapper({
-  id, x, y, width, height, onDragEnd, scale, registerRef, highlighted, children, bg, border, borderLeftColor,
+function CardBase({
+  width, bg, border, borderLeftColor, highlighted, children,
 }: {
-  id: string; x: number; y: number; width: number; height: number
-  onDragEnd: (id: string, x: number, y: number) => void
-  scale: number
-  registerRef: (id: string, el: HTMLDivElement | null) => void
+  width: number
+  bg: string; border: string; borderLeftColor: string
   highlighted: boolean
   children: React.ReactNode
-  bg: string; border: string; borderLeftColor: string
 }) {
-  const [localPos, setLocalPos] = useState<Position | null>(null)
-  const draggingRef = useRef(false)
-  const startRef = useRef<{ mx: number; my: number; x0: number; y0: number }>({ mx: 0, my: 0, x0: 0, y0: 0 })
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return
-    e.stopPropagation()
-    draggingRef.current = true
-    startRef.current = { mx: e.clientX, my: e.clientY, x0: x, y0: y }
-    setLocalPos({ x, y })
-    const onMove = (ev: MouseEvent) => {
-      if (!draggingRef.current) return
-      const dx = (ev.clientX - startRef.current.mx) / scale
-      const dy = (ev.clientY - startRef.current.my) / scale
-      setLocalPos({ x: startRef.current.x0 + dx, y: startRef.current.y0 + dy })
-    }
-    const onUp = (ev: MouseEvent) => {
-      if (!draggingRef.current) return
-      draggingRef.current = false
-      const dx = (ev.clientX - startRef.current.mx) / scale
-      const dy = (ev.clientY - startRef.current.my) / scale
-      const fx = startRef.current.x0 + dx
-      const fy = startRef.current.y0 + dy
-      setLocalPos(null)
-      onDragEnd(id, fx, fy)
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [id, x, y, scale, onDragEnd])
-
-  const px = localPos?.x ?? x
-  const py = localPos?.y ?? y
-
   return (
-    <div
-      ref={el => registerRef(id, el)}
-      onMouseDown={handleMouseDown}
-      style={{
-        position: 'absolute',
-        left: px, top: py, width, height,
-        background: bg,
-        border: `1.5px solid ${border}`,
-        borderLeft: `4px solid ${borderLeftColor}`,
-        borderRadius: 6,
-        boxShadow: highlighted
-          ? `0 0 0 3px rgba(155,134,214,0.35), 0 2px 6px rgba(0,0,0,0.05)`
-          : '0 1px 3px rgba(0,0,0,0.06)',
-        userSelect: 'none',
-        cursor: draggingRef.current ? 'grabbing' : 'grab',
-        overflow: 'hidden',
-      }}
-    >
+    <div style={{
+      width,
+      background: bg,
+      border: `1.5px solid ${border}`,
+      borderLeft: `4px solid ${borderLeftColor}`,
+      borderRadius: 6,
+      boxShadow: highlighted
+        ? `0 0 0 3px rgba(155,134,214,0.35), 0 2px 6px rgba(0,0,0,0.05)`
+        : '0 1px 3px rgba(0,0,0,0.06)',
+      overflow: 'hidden',
+    }}>
+      <Handle
+        type="target"
+        position={HandlePosition.Left}
+        style={{ background: border, width: 8, height: 8, border: 'none' }}
+      />
       {children}
+      <Handle
+        type="source"
+        position={HandlePosition.Right}
+        style={{ background: border, width: 8, height: 8, border: 'none' }}
+      />
     </div>
   )
 }
 
-function ModuloMix({
-  meta, pos, scale, onDragEnd, registerRef, highlighted,
-}: {
-  meta: Extract<ModuloMeta, { kind: 'mix' }>
-  pos: Position
-  scale: number
-  onDragEnd: (id: string, x: number, y: number) => void
-  registerRef: (id: string, el: HTMLDivElement | null) => void
-  highlighted: boolean
-}) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Node: Mix
+// ─────────────────────────────────────────────────────────────────────────────
+type MixNodeData = { meta: Extract<ModuloMeta, { kind: 'mix' }>; highlighted: boolean }
+function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
+  const meta = data.meta
   const crm = meta.crm
   const sBadge = scadenzaBadge(crm.scadenza_prodotto)
   const rival = crm.ultima_rivalidazione
@@ -543,12 +555,10 @@ function ModuloMix({
   const rimanenti = nComp - compVisible.length
 
   return (
-    <ModuloBaseWrapper
-      id={meta.id} x={pos.x} y={pos.y}
-      width={LAYOUT.MODULE_W.mix} height={LAYOUT.MODULE_H.mix}
-      onDragEnd={onDragEnd} scale={scale} registerRef={registerRef}
-      highlighted={highlighted}
+    <CardBase
+      width={LAYOUT.MODULE_W.mix}
       bg={C.mix.bg} border={C.mix.border} borderLeftColor={C.mix.border}
+      highlighted={data.highlighted}
     >
       <div style={{
         padding: '8px 12px 6px', borderBottom: `1px solid ${C.mix.chip}`,
@@ -610,20 +620,16 @@ function ModuloMix({
           }}>+{rimanenti}</span>
         )}
       </div>
-    </ModuloBaseWrapper>
+    </CardBase>
   )
 }
 
-function ModuloSng({
-  meta, pos, scale, onDragEnd, registerRef, highlighted,
-}: {
-  meta: Extract<ModuloMeta, { kind: 'sng' }>
-  pos: Position
-  scale: number
-  onDragEnd: (id: string, x: number, y: number) => void
-  registerRef: (id: string, el: HTMLDivElement | null) => void
-  highlighted: boolean
-}) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Node: Sng
+// ─────────────────────────────────────────────────────────────────────────────
+type SngNodeData = { meta: Extract<ModuloMeta, { kind: 'sng' }>; highlighted: boolean }
+function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
+  const meta = data.meta
   const crm = meta.crm
   const isNeat = (crm.forma || '').toLowerCase().includes('neat')
   const sBadge = scadenzaBadge(crm.scadenza_prodotto)
@@ -632,13 +638,10 @@ function ModuloSng({
   const prepExtra = meta.preps.length - preps.length
 
   return (
-    <ModuloBaseWrapper
-      id={meta.id} x={pos.x} y={pos.y}
+    <CardBase
       width={LAYOUT.MODULE_W.sng}
-      height={LAYOUT.MODULE_H.sng + (isNeat && preps.length ? 56 + preps.length * 18 : 0)}
-      onDragEnd={onDragEnd} scale={scale} registerRef={registerRef}
-      highlighted={highlighted}
       bg={C.sng.bg} border={C.sng.border} borderLeftColor={C.sng.border}
+      highlighted={data.highlighted}
     >
       <div style={{
         padding: '8px 12px 6px', borderBottom: `1px solid ${C.sng.chip}`,
@@ -699,20 +702,16 @@ function ModuloSng({
           )}
         </div>
       )}
-    </ModuloBaseWrapper>
+    </CardBase>
   )
 }
 
-function ModuloWork({
-  meta, pos, scale, onDragEnd, registerRef, highlighted,
-}: {
-  meta: Extract<ModuloMeta, { kind: 'work' }>
-  pos: Position
-  scale: number
-  onDragEnd: (id: string, x: number, y: number) => void
-  registerRef: (id: string, el: HTMLDivElement | null) => void
-  highlighted: boolean
-}) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Node: Work
+// ─────────────────────────────────────────────────────────────────────────────
+type WorkNodeData = { meta: Extract<ModuloMeta, { kind: 'work' }>; highlighted: boolean }
+function ModuloWorkNode({ data }: NodeProps<Node<WorkNodeData>>) {
+  const meta = data.meta
   const w = meta.work
   const isInter = meta.colIdx > 0
   const col = isInter ? C.inter : C.work
@@ -723,13 +722,10 @@ function ModuloWork({
   const volsRest = w.vols.length - vols.length
 
   return (
-    <ModuloBaseWrapper
-      id={meta.id} x={pos.x} y={pos.y}
+    <CardBase
       width={LAYOUT.MODULE_W.work}
-      height={LAYOUT.MODULE_H.work + vols.length * 14}
-      onDragEnd={onDragEnd} scale={scale} registerRef={registerRef}
-      highlighted={highlighted}
       bg={col.bg} border={col.border} borderLeftColor={col.border}
+      highlighted={data.highlighted}
     >
       <div style={{
         padding: '8px 12px 6px', borderBottom: `1px solid ${col.chip}`,
@@ -806,49 +802,15 @@ function ModuloWork({
           )}
         </div>
       )}
-    </ModuloBaseWrapper>
+    </CardBase>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Archi SVG overlay (dentro il world)
-// ─────────────────────────────────────────────────────────────────────────────
-function ArchiSVG({ archi, worldW, worldH }: { archi: Arco[]; worldW: number; worldH: number }) {
-  return (
-    <svg
-      width={worldW} height={worldH}
-      style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', overflow: 'visible' }}
-    >
-      <defs>
-        {['mix', 'sng', 'work', 'prep'].map(tipo => {
-          const color = tipo === 'mix' ? C.mix.border : tipo === 'sng' ? C.sng.border : tipo === 'work' ? C.work.border : C.sng.border
-          return (
-            <marker key={tipo} id={`arr-${tipo}`} viewBox="0 0 10 10" refX="9" refY="5"
-                    markerWidth="7" markerHeight="7" orient="auto">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={color} />
-            </marker>
-          )
-        })}
-      </defs>
-      {archi.map(a => {
-        const dx = a.x2 - a.x1
-        const cp = Math.max(60, Math.abs(dx) / 2)
-        const d = `M ${a.x1} ${a.y1} C ${a.x1 + cp} ${a.y1}, ${a.x2 - cp} ${a.y2}, ${a.x2} ${a.y2}`
-        return (
-          <path
-            key={a.key}
-            d={d}
-            stroke={a.color}
-            strokeWidth={1.4}
-            fill="none"
-            strokeDasharray={a.dashed ? '5 3' : undefined}
-            markerEnd={`url(#arr-${a.tipo})`}
-            opacity={0.85}
-          />
-        )
-      })}
-    </svg>
-  )
+// nodeTypes definito fuori dal componente per evitare ri-render spuri di RF
+const nodeTypes = {
+  mix: ModuloMixNode,
+  sng: ModuloSngNode,
+  work: ModuloWorkNode,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -857,32 +819,20 @@ function ArchiSVG({ archi, worldW, worldH }: { archi: Arco[]; worldW: number; wo
 export function SchemaLavagna(props: SchemaLavagnaProps) {
   const { metodoId, analiti, crmItems, removedMix, mixLottoSel, workCols } = props
 
-  // Deriva moduli
   const moduli = useMemo(
     () => deriveModuli(analiti, crmItems, removedMix, mixLottoSel, workCols),
     [analiti, crmItems, removedMix, mixLottoSel, workCols],
   )
 
-  // Posizioni
-  const { positions, setPosition, resetLayout } = useLavagnaPositions(metodoId, moduli)
+  const edges = useMemo(() => computeEdges(moduli), [moduli])
 
-  // Viewport state
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const [view, setView] = useState({ tx: 20, ty: 20, scale: 1 })
-  const panningRef = useRef<{ sx: number; sy: number; tx0: number; ty0: number } | null>(null)
-
-  // Refs moduli (per future integrazioni)
-  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-  const registerRef = useCallback((id: string, el: HTMLDivElement | null) => {
-    if (el) cardRefs.current.set(id, el)
-    else cardRefs.current.delete(id)
-  }, [])
+  const { positions, setPosition, resetLayout } = useLavagnaPositions(metodoId, moduli, edges)
 
   // Sidebar state
   const [filtroSidebar, setFiltroSidebar] = useState<FiltroSidebar>('tutti')
   const [hoveredAnalita, setHoveredAnalita] = useState<string | null>(null)
 
-  // Highlighted modules: mix/sng che coprono l'analita hover
+  // Highlighted module ids (hover su analita in sidebar)
   const highlightedIds = useMemo(() => {
     if (!hoveredAnalita) return new Set<string>()
     const a = analiti.find(x => x.nome === hoveredAnalita)
@@ -893,105 +843,33 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     return out
   }, [hoveredAnalita, analiti, removedMix])
 
-  // Archi
-  const archi = useMemo(() => computeArchi(moduli, positions), [moduli, positions])
-
-  // World size
-  const worldSize = useMemo(() => computeWorldSize(moduli, positions), [moduli, positions])
-
-  // Wheel: zoom-to-cursor
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const vp = viewportRef.current
-    if (!vp) return
-    const rect = vp.getBoundingClientRect()
-    const mx = e.clientX - rect.left
-    const my = e.clientY - rect.top
-    setView(prev => {
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-      const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prev.scale * factor))
-      if (newScale === prev.scale) return prev
-      const worldX = (mx - prev.tx) / prev.scale
-      const worldY = (my - prev.ty) / prev.scale
-      return {
-        tx: mx - worldX * newScale,
-        ty: my - worldY * newScale,
-        scale: newScale,
+  // Nodes per React Flow: una entry per ogni modulo con posizione corrente
+  const nodes: Node[] = useMemo(() => {
+    return moduli.map(m => {
+      const p = positions[m.id] || { x: 0, y: 0 }
+      const base = {
+        id: m.id,
+        position: p,
+        draggable: true,
+        selectable: false,
       }
+      if (m.kind === 'mix') {
+        return { ...base, type: 'mix', data: { meta: m, highlighted: highlightedIds.has(m.id) } as MixNodeData }
+      }
+      if (m.kind === 'sng') {
+        return { ...base, type: 'sng', data: { meta: m, highlighted: highlightedIds.has(m.id) } as SngNodeData }
+      }
+      return { ...base, type: 'work', data: { meta: m, highlighted: highlightedIds.has(m.id) } as WorkNodeData }
     })
-  }, [])
+  }, [moduli, positions, highlightedIds])
 
-  // Non-passive wheel listener per consentire preventDefault
-  useEffect(() => {
-    const vp = viewportRef.current
-    if (!vp) return
-    const handler = (e: WheelEvent) => {
-      e.preventDefault()
-      const rect = vp.getBoundingClientRect()
-      const mx = e.clientX - rect.left
-      const my = e.clientY - rect.top
-      setView(prev => {
-        const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-        const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prev.scale * factor))
-        if (newScale === prev.scale) return prev
-        const worldX = (mx - prev.tx) / prev.scale
-        const worldY = (my - prev.ty) / prev.scale
-        return {
-          tx: mx - worldX * newScale,
-          ty: my - worldY * newScale,
-          scale: newScale,
-        }
-      })
+  // Persisti su drag finito
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    for (const ch of changes) {
+      if (ch.type === 'position' && !ch.dragging && ch.position) {
+        setPosition(ch.id, ch.position.x, ch.position.y)
+      }
     }
-    vp.addEventListener('wheel', handler, { passive: false })
-    return () => vp.removeEventListener('wheel', handler as EventListener)
-  }, [])
-
-  // Pan: mouse down su viewport (solo se target è viewport stesso)
-  const handleViewportMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return
-    if (e.target !== e.currentTarget) return
-    panningRef.current = { sx: e.clientX, sy: e.clientY, tx0: view.tx, ty0: view.ty }
-    const onMove = (ev: MouseEvent) => {
-      if (!panningRef.current) return
-      const dx = ev.clientX - panningRef.current.sx
-      const dy = ev.clientY - panningRef.current.sy
-      setView(prev => ({ ...prev, tx: panningRef.current!.tx0 + dx, ty: panningRef.current!.ty0 + dy }))
-    }
-    const onUp = () => {
-      panningRef.current = null
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [view.tx, view.ty])
-
-  // Double-click su sfondo → reset viewport
-  const handleViewportDoubleClick = useCallback((e: React.MouseEvent) => {
-    if (e.target !== e.currentTarget) return
-    setView({ tx: 20, ty: 20, scale: 1 })
-  }, [])
-
-  // Zoom buttons
-  const zoomBy = useCallback((factor: number) => {
-    const vp = viewportRef.current
-    if (!vp) return
-    const rect = vp.getBoundingClientRect()
-    const mx = rect.width / 2
-    const my = rect.height / 2
-    setView(prev => {
-      const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prev.scale * factor))
-      if (newScale === prev.scale) return prev
-      const worldX = (mx - prev.tx) / prev.scale
-      const worldY = (my - prev.ty) / prev.scale
-      return { tx: mx - worldX * newScale, ty: my - worldY * newScale, scale: newScale }
-    })
-  }, [])
-
-  // Handler drag modulo → salva posizione
-  const handleModuleDragEnd = useCallback((id: string, x: number, y: number) => {
-    setPosition(id, x, y)
   }, [setPosition])
 
   return (
@@ -1005,76 +883,60 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
         onCambiaFiltro={setFiltroSidebar}
         onHoverAnalita={setHoveredAnalita}
       />
-      <div
-        ref={viewportRef}
-        onMouseDown={handleViewportMouseDown}
-        onDoubleClick={handleViewportDoubleClick}
-        onWheel={handleWheel}
-        style={{
-          flex: 1, position: 'relative', overflow: 'hidden',
-          background: '#fafaf7',
-          backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(20,17,15,0.08) 1px, transparent 0)',
-          backgroundSize: '22px 22px',
-          cursor: panningRef.current ? 'grabbing' : 'default',
-        }}
-      >
-        {/* World trasformato */}
-        <div style={{
-          position: 'absolute', left: 0, top: 0,
-          width: worldSize.w, height: worldSize.h,
-          transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`,
-          transformOrigin: '0 0',
-        }}>
-          <ArchiSVG archi={archi} worldW={worldSize.w} worldH={worldSize.h} />
-          {moduli.map(m => {
-            const p = positions[m.id]
-            if (!p) return null
-            const hl = highlightedIds.has(m.id)
-            if (m.kind === 'mix') {
-              return <ModuloMix key={m.id} meta={m} pos={p} scale={view.scale}
-                                onDragEnd={handleModuleDragEnd}
-                                registerRef={registerRef} highlighted={hl} />
-            }
-            if (m.kind === 'sng') {
-              return <ModuloSng key={m.id} meta={m} pos={p} scale={view.scale}
-                                onDragEnd={handleModuleDragEnd}
-                                registerRef={registerRef} highlighted={hl} />
-            }
-            return <ModuloWork key={m.id} meta={m} pos={p} scale={view.scale}
-                               onDragEnd={handleModuleDragEnd}
-                               registerRef={registerRef} highlighted={hl} />
-          })}
-        </div>
-
-        {/* Controlli zoom (bottom right) */}
-        <div style={{
-          position: 'absolute', right: 16, bottom: 16, display: 'flex',
-          gap: 4, background: C.page.sur, border: `1px solid ${C.page.brd}`,
-          borderRadius: 6, padding: 4, boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-        }}>
-          <button onClick={() => zoomBy(1 / 1.2)} title="Zoom out" style={zoomBtnStyle()}>−</button>
-          <button onClick={() => setView({ tx: 20, ty: 20, scale: 1 })} title="Reset vista"
-                  style={zoomBtnStyle()}>⤾</button>
-          <button onClick={() => zoomBy(1.2)} title="Zoom in" style={zoomBtnStyle()}>＋</button>
-          <div style={{ width: 1, background: C.page.brd, margin: '2px 2px' }} />
-          <button onClick={resetLayout} title="Riallinea moduli (L→R)" style={{
-            ...zoomBtnStyle(), width: 'auto', padding: '0 10px', fontSize: 11,
-          }}>Riallinea</button>
+      <div style={{
+        flex: 1, position: 'relative', minWidth: 0,
+        background: '#fafaf7',
+      }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          minZoom={0.25}
+          maxZoom={2}
+          fitView
+          fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+          nodesDraggable
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag
+          panOnScroll={false}
+          zoomOnScroll
+          zoomOnPinch
+          zoomOnDoubleClick={false}
+          proOptions={{ hideAttribution: true }}
+          defaultEdgeOptions={{ type: 'smoothstep' }}
+        >
+          <Background gap={22} size={1} color="rgba(20,17,15,0.08)" />
+          <Controls showInteractive={false} />
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={(n: Node) => {
+              if (n.type === 'mix') return C.mix.bg
+              if (n.type === 'sng') return C.sng.bg
+              const wd = n.data as WorkNodeData | undefined
+              return wd?.meta?.colIdx && wd.meta.colIdx > 0 ? C.inter.bg : C.work.bg
+            }}
+            style={{ width: 160, height: 110 }}
+          />
           <div style={{
-            fontFamily: '"IBM Plex Mono", monospace', fontSize: 10, color: C.page.t2,
-            display: 'flex', alignItems: 'center', padding: '0 6px',
-          }}>{Math.round(view.scale * 100)}%</div>
-        </div>
+            position: 'absolute', right: 16, top: 16, zIndex: 5,
+            display: 'flex', gap: 4,
+          }}>
+            <button
+              onClick={resetLayout}
+              title="Riallinea moduli (L→R)"
+              style={{
+                height: 26, padding: '0 10px',
+                border: `1px solid ${C.page.brd2}`, borderRadius: 4,
+                background: C.page.sur, color: C.page.t1,
+                fontSize: 11, cursor: 'pointer',
+              }}
+            >Riallinea</button>
+          </div>
+        </ReactFlow>
       </div>
     </div>
   )
-}
-
-function zoomBtnStyle(): React.CSSProperties {
-  return {
-    width: 26, height: 26, border: `1px solid ${C.page.brd2}`,
-    borderRadius: 4, background: C.page.sur, color: C.page.t1,
-    fontSize: 14, cursor: 'pointer', lineHeight: 1,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  }
 }
