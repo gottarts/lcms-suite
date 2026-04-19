@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef, PrepStockItem } from './SchemaCalibrazione.types'
+import type { AnalitoItem, CrmItem, SorgenteSel, WorkInSchema, RegisterCardRef, PrepStockItem, DestUso } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import { getConcInfo, calcolaVols, targetColIdx, getCompsFromWork } from './SchemaCalibrazione.logic'
 
@@ -49,12 +49,15 @@ interface GrigliaProps {
   onChangeMixLotto?: (firmaId: string, oldMixId: string, newMixId: string) => void
   // Lotto attivo per firma, derivato da removedMix nel componente padre (fix reload)
   mixLottoSel?: Map<string, string>
+  filtroDestUso?: DestUso
+  onChangeFiltroDestUso?: (d: DestUso) => void
 }
 
 export function GrigliaAnalitiCrm({
   analiti, crmItems, selSrcs, removedMix,
   onToggleMix, onToggleSng, onTogglePrepStock, onClose, registerCardRef, gridBodyRef,
   onOpenScenar, onChangeMixLotto, mixLottoSel: mixLottoSelProp,
+  filtroDestUso, onChangeFiltroDestUso,
 }: GrigliaProps) {
   const navigate = useNavigate()
   const oggi = useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -219,7 +222,9 @@ export function GrigliaAnalitiCrm({
   // Separatori tra gruppi
   const nSoloSng    = analiti.filter(a => !a.mixId && a.sngIds.length > 0).length
   const nConMix     = analiti.filter(a =>  a.mixId).length
-  const hasSenzaCrm = analiti.some(a => !a.mixId && a.sngIds.length === 0)
+  const nCrmFilt    = analiti.filter(a => !a.mixId && a.sngIds.length === 0 &&  a.crmFiltrati).length
+  const hasSenzaCrm = analiti.some(a =>   !a.mixId && a.sngIds.length === 0 && !a.crmFiltrati)
+  const hasCrmFilt  = nCrmFilt > 0
   const hasConMix   = nConMix > 0
 
   // Posizione verticale assoluta di ogni mix (top e height in px)
@@ -299,14 +304,24 @@ export function GrigliaAnalitiCrm({
         {/* Colonna Analiti + Singoli (scorrono insieme) */}
         <div style={{ display:'flex', flexDirection:'column', flexShrink:0 }}>
           {analiti.map((a, i) => {
-            const isSepSngMix  = i === nSoloSng && nSoloSng > 0 && hasConMix
-            const isSepSenzaCrm = i === nSoloSng + nConMix && nConMix > 0 && hasSenzaCrm
+            const isSepSngMix   = i === nSoloSng && nSoloSng > 0 && hasConMix
+            const isSepCrmFilt  = i === nSoloSng + nConMix && (nConMix > 0 || nSoloSng > 0) && hasCrmFilt
+            const isSepSenzaCrm = i === nSoloSng + nConMix + nCrmFilt && (nConMix > 0 || nCrmFilt > 0) && hasSenzaCrm
             const senzaCrm = !a.mixId && a.sngIds.length === 0
+            const senzaCrmVero = senzaCrm && !a.crmFiltrati
             const h = rowHeight(a)
+
+            // Colori per il badge destinazione d'uso filtrata
+            const destUsoColors: Record<string, { border: string; text: string; bg: string }> = {
+              taratura: { border: C.mix.border, text: C.mix.text, bg: C.mix.bg },
+              qc:       { border: C.sng.border, text: C.sng.text, bg: C.sng.bg },
+              is:       { border: C.inter.border, text: C.inter.text, bg: C.inter.bg },
+            }
+            const destUsoLabels: Record<string, string> = { taratura: 'Tar', qc: 'QC', is: 'IS' }
 
             return (
               <div key={a.nome}>
-                {(isSepSngMix || isSepSenzaCrm) && (
+                {(isSepSngMix || isSepCrmFilt || isSepSenzaCrm) && (
                   <div style={{ height:1, background:C.page.brd2, margin:'4px 0' }} />
                 )}
 
@@ -318,19 +333,37 @@ export function GrigliaAnalitiCrm({
                                 borderRight:`1px solid ${C.page.brd}`,
                                 display:'flex', alignItems:'center' }}>
                     <div style={{
-                      background: senzaCrm ? C.page.sur : C.ana.bg,
-                      border:`1px ${senzaCrm ? 'dashed' : (a.isIS ? 'dashed' : 'solid')} ${senzaCrm ? C.page.brd : C.ana.border}`,
-                      opacity: senzaCrm ? 0.4 : (a.isIS ? 0.68 : 1),
+                      background: senzaCrmVero ? C.page.sur : C.ana.bg,
+                      border:`1px ${senzaCrmVero ? 'dashed' : (a.isIS && !a.crmFiltrati ? 'dashed' : 'solid')} ${senzaCrmVero ? C.page.brd : C.ana.border}`,
+                      opacity: senzaCrmVero ? 0.4 : (a.isIS && !a.crmFiltrati ? 0.68 : 1),
                       borderRadius:8, padding:'4px 8px', fontSize:11,
                       fontFamily:'IBM Plex Mono, monospace', width:'100%',
-                      color: senzaCrm ? C.page.th : undefined,
+                      color: senzaCrmVero ? C.page.th : undefined,
                       display:'flex', alignItems:'center', justifyContent:'space-between', gap:4,
                     }}>
-                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>
-                        {a.nome}{a.isIS ? ' [IS]' : ''}{senzaCrm ? ' ·' : ''}
+                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0, flex:1 }}>
+                        {a.nome}{a.isIS ? ' [IS]' : ''}
                       </span>
+                      {a.crmFiltrati && a.destUsoCrm && a.destUsoCrm.length > 0 && onChangeFiltroDestUso && (
+                        <span style={{ display:'flex', gap:2, flexShrink:0 }}>
+                          {a.destUsoCrm.map(d => (
+                            <button
+                              key={d}
+                              onClick={e => { e.stopPropagation(); onChangeFiltroDestUso(d) }}
+                              title={`CRM disponibile in ${d} — clicca per cambiare filtro`}
+                              style={{
+                                padding:'1px 5px', borderRadius:4, fontSize:9, fontWeight:700,
+                                border:`1px solid ${destUsoColors[d].border}`,
+                                background: destUsoColors[d].bg,
+                                color: destUsoColors[d].text,
+                                cursor:'pointer', lineHeight:1.4,
+                              }}
+                            >{destUsoLabels[d]}</button>
+                          ))}
+                        </span>
+                      )}
                       <button
-                        onClick={e => { e.stopPropagation(); goToComposto(a.nome, senzaCrm) }}
+                        onClick={e => { e.stopPropagation(); goToComposto(a.nome, senzaCrmVero) }}
                         title="Apri nel DB Composti"
                         style={{
                           flexShrink:0, background:'none', border:'none', cursor:'pointer',

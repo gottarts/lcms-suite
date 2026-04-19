@@ -4,7 +4,7 @@
 // Calcola la combinazione ottimale di CRM (mix + singoli) che massimizza la
 // copertura degli analiti rispettando la disgiunzione tra mix.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useMemo } from 'react'
+import React, { useMemo } from 'react'
 import type { AnalitoItem, CrmItem } from './SchemaCalibrazione.types'
 import { C } from './SchemaCalibrazione.types'
 import {
@@ -20,10 +20,11 @@ interface AutoSelectDialogProps {
   removedMix: Set<string>
   onClose: () => void
   onApply: (mixIds: string[], sngIds: string[]) => void
+  onGoToComposto?: (nome: string) => void
 }
 
 export function AutoSelectDialog({
-  analiti, crmItems, firmaToMixIds, mixNomiMap, removedMix, onClose, onApply,
+  analiti, crmItems, firmaToMixIds, mixNomiMap, removedMix, onClose, onApply, onGoToComposto,
 }: AutoSelectDialogProps) {
 
   const risultato = useMemo(() => {
@@ -125,7 +126,7 @@ export function AutoSelectDialog({
           flexShrink: 0,
         }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.page.t1 }}>
-            Selezione automatica CRM
+            Selezione automatica — Riepilogo copertura
           </div>
           <div style={{
             fontSize: 10, color: C.page.th, marginTop: 3,
@@ -149,11 +150,11 @@ export function AutoSelectDialog({
                   }}>{m.nomeDisplay}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                     {m.analiti.map(n => (
-                      <span key={n} style={{
+                      <AnalitaChip key={n} nome={n} onGoToComposto={onGoToComposto} chipStyle={{
                         fontSize: 10, padding: '1px 7px', borderRadius: 8,
                         background: C.mix.chip, color: C.mix.text,
                         border: `1px solid ${C.mix.border}`,
-                      }}>{n}</span>
+                      }} />
                     ))}
                   </div>
                 </div>
@@ -166,11 +167,11 @@ export function AutoSelectDialog({
             <Section label="Singoli selezionati" count={risultato.singoleScelti.length}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                 {risultato.singoleScelti.map(s => (
-                  <span key={s.sngId} style={{
+                  <AnalitaChip key={s.sngId} nome={s.nome} onGoToComposto={onGoToComposto} chipStyle={{
                     fontSize: 10, padding: '1px 7px', borderRadius: 8,
                     background: C.sng.chip, color: C.sng.text,
                     border: `1px solid ${C.sng.border}`,
-                  }}>{s.nome}</span>
+                  }} />
                 ))}
               </div>
             </Section>
@@ -181,11 +182,11 @@ export function AutoSelectDialog({
             <Section label="Non coperti" count={risultato.nonCopertiNemmeno.length} warn>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                 {risultato.nonCopertiNemmeno.map(n => (
-                  <span key={n} style={{
+                  <AnalitaChip key={n} nome={n} onGoToComposto={onGoToComposto} chipStyle={{
                     fontSize: 10, padding: '1px 7px', borderRadius: 8,
                     background: C.page.sur, color: C.page.th,
                     border: `1px solid ${C.page.brd}`,
-                  }}>{n}</span>
+                  }} />
                 ))}
               </div>
             </Section>
@@ -257,6 +258,29 @@ export function AutoSelectDialog({
 }
 
 // ── Helper UI ─────────────────────────────────────────────────────────────────
+
+function AnalitaChip({
+  nome, chipStyle, onGoToComposto,
+}: {
+  nome: string
+  chipStyle: React.CSSProperties
+  onGoToComposto?: (nome: string) => void
+}) {
+  const [hovered, setHovered] = React.useState(false)
+  return (
+    <span
+      key={nome}
+      onClick={onGoToComposto ? () => onGoToComposto(nome) : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        ...chipStyle,
+        cursor: onGoToComposto ? 'pointer' : 'default',
+        textDecoration: hovered && onGoToComposto ? 'underline' : 'none',
+      }}
+    >{nome}</span>
+  )
+}
 
 function Section({
   label, count, warn, muted, children,

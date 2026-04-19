@@ -98,34 +98,63 @@ function _buildSngMaps(itemsFiltrati: CrmItem[]): {
 }
 
 export function buildAnalitiData(
-  items: CrmItem[],
+  items: CrmItem[],            // CRM già filtrati per dest. uso corrente
   analitiRows: { id: number; nome: string }[],
-  filtroDestUso?: DestUso,
+  filtroDestUso?: DestUso,     // dest. uso corrente (usato per calcolare destUsoCrm nei crmFiltrati)
+  itemsTotali?: CrmItem[],     // tutti i CRM non dismessi (pre-filtro dest. uso)
 ): {
   analiti: AnalitoItem[]
   firmaToMixIds: Map<string, string[]>
   mixNomiMap: Map<string, Set<string>>
 } {
-  const itemsFiltrati = filtroDestUso
-    ? items.filter(item => matchesFiltroDestUso(item.destinazione_uso, filtroDestUso))
-    : items
+  // items è già filtrato dal chiamante — non ri-filtrare
+  const { mixNomiMap, firmaToMixIds, mixMap } = _buildMixMaps(items)
+  const { sngMap, isMap } = _buildSngMaps(items)
 
-  const { mixNomiMap, firmaToMixIds, mixMap } = _buildMixMaps(itemsFiltrati)
-  const { sngMap, isMap } = _buildSngMaps(itemsFiltrati)
+  // Mappe su tutti i CRM (pre-filtro) per calcolare crmFiltrati
+  const allDestUso: DestUso[] = ['taratura', 'qc', 'is']
+  const mixMapTotali = itemsTotali ? _buildMixMaps(itemsTotali).mixMap : null
+  const sngMapTotali = itemsTotali ? _buildSngMaps(itemsTotali).sngMap : null
 
-  const analitiCalc: AnalitoItem[] = analitiRows.map(row => ({
-    nome:   row.nome,
-    mixId:  mixMap.get(row.nome.toUpperCase())?.[0] ?? null,
-    mixIds: mixMap.get(row.nome.toUpperCase()) ?? [],
-    sngIds: sngMap.get(row.nome.toUpperCase()) ?? [],
-    isCon:  mixMap.has(row.nome.toUpperCase()) && sngMap.has(row.nome.toUpperCase()),
-    isIS:   isMap.get(row.nome.toUpperCase()) ?? false,
-  }))
+  const analitiCalc: AnalitoItem[] = analitiRows.map(row => {
+    const key = row.nome.toUpperCase()
+    const mixId  = mixMap.get(key)?.[0] ?? null
+    const sngIds = sngMap.get(key) ?? []
+    const senzaCrm = !mixId && sngIds.length === 0
+    let crmFiltrati: boolean | undefined
+    let destUsoCrm: DestUso[] | undefined
+    if (senzaCrm && filtroDestUso && itemsTotali && (mixMapTotali!.has(key) || sngMapTotali!.has(key))) {
+      crmFiltrati = true
+      // Destinazioni d'uso in cui ha CRM (escluso il filtro corrente, che non lo copre)
+      destUsoCrm = allDestUso.filter(d => {
+        if (d === filtroDestUso) return false
+        const itemsPerDest = itemsTotali.filter(item => matchesFiltroDestUso(item.destinazione_uso, d))
+        const { mixMap: mm } = _buildMixMaps(itemsPerDest)
+        const { sngMap: sm } = _buildSngMaps(itemsPerDest)
+        return mm.has(key) || sm.has(key)
+      })
+    }
+    return {
+      nome:   row.nome,
+      mixId,
+      mixIds: mixMap.get(key) ?? [],
+      sngIds,
+      isCon:  mixMap.has(key) && sngMap.has(key),
+      isIS:   isMap.get(key) ?? false,
+      crmFiltrati,
+      destUsoCrm,
+    }
+  })
 
-  // Ordine: singoli senza mix → analiti con mix (raggruppati per mix) → senza CRM
-  const soloSng  = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
-  const conMix   = analitiCalc.filter(a =>  a.mixId)
-  const senzaCrm = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0)
+  // Ordine: singoli senza mix → analiti con mix (raggruppati per mix) → CRM filtrati per dest. uso → senza CRM in DB
+  const soloSng       = analitiCalc.filter(a => !a.mixId && a.sngIds.length > 0)
+  const conMix        = analitiCalc.filter(a =>  a.mixId)
+  const crmFiltAll    = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0 && a.crmFiltrati)
+  const crmFilt       = [
+    ...crmFiltAll.filter(a => a.destUsoCrm?.some(d => d === 'taratura' || d === 'qc')),
+    ...crmFiltAll.filter(a => !a.destUsoCrm?.some(d => d === 'taratura' || d === 'qc')),
+  ]
+  const senzaCrmVero  = analitiCalc.filter(a => !a.mixId && a.sngIds.length === 0 && !a.crmFiltrati)
   const mixOrder: string[] = []
   for (const a of conMix) {
     if (!mixOrder.includes(a.mixId!)) mixOrder.push(a.mixId!)
@@ -137,7 +166,7 @@ export function buildAnalitiData(
   }
 
   return {
-    analiti: [...soloSng, ...mixGrouped, ...senzaCrm],
+    analiti: [...soloSng, ...mixGrouped, ...crmFilt, ...senzaCrmVero],
     firmaToMixIds,
     mixNomiMap,
   }

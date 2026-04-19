@@ -11,30 +11,28 @@
 
 
 ##
+in stato tracciabilita della dashboar la card 
 Analiti accreditati scoperti
 1
+
 Nessun CRM attivo con nome corrispondente
 NON DA INFO AGGIUNTIVE... (CHE ANALITA?)    FAI QUALCOSA... 
-PROPOSTA. SOSTITUIRE QUELLA CASELLA CON WORK DA PREPARE (SI PUO FARE CHE CLICCANDO SI ARRIVI IN WORKPAGE CON UN FILTRO DA IMPLEMNTARE ACNHE IN WORKPAGE CHE EVIDENZI LE WORK SENZA PREPARAZIONI ATTIVE O DA RINONVARE PERCHE SCADUTE)
+PROPOSTA. SOSTITUIRE QUELLA card CON una card "WORK DA PREPARE" (SI PUO FARE CHE CLICCANDO SI ARRIVI IN WORKPAGE CON UN FILTRO DA IMPLEMNTARE ACNHE IN WORKPAGE CHE EVIDENZI LE WORK SENZA PREPARAZIONI ATTIVE O DA RINONVARE PERCHE SCADUTE)
 
 PER QUANTO RIGUARDA Analiti accreditati scoperti FAREI UNA COSA IN STILE "SCADENZE PROSSIMI 60 GIORNI" MA NEL BLOCCO STATO TRACCIABILITA. QUINDI CON ELENCO DEGLI ANALITI SCOPERTI CON COLLEGAMENTI AL DB COMPOSTI PER QUELLI SCADUTI O DISMESSI.
 AGGIUNGEREI ANCHE UNA COSA SIMILE CON GLI ANALITI ACCREDITATI NON COPERTI DA CRM CON ACCREDITAMENTO 17034.
 
-
+- in metodi-> schemi gli analiti in cui i crm sono filtrati dalla destinazione duso non dovrebbero essere diasattivati come se il crm non ci fosse (scaduto o dismesso) ma deve essere formattato come un normale analita. Magari ragruppa gli analiti in questa condizione e metti un collegamnto al filtro "destinazione duso" con il colore di riferimento in maniera che cambi il filtro (è un secondo metodo di cambio filtro della destinazione d'uso alternativo a quello esistente e piu naturale)
+- selezione automatica è utile perche permette di vedere tutti gli analiti del metodo. Sarebbe bello mettere anche il colegamento a db composti con filtro nome in maniera che punti al database.
+si potrebbe rinominare "Selezione automatica e ripilogo"
+- etichette per work standard
+-metti moduli consumabili e struemnti come beta nel selettore pannello a sinistra in quanto non sono implementate ma solo abbozzzate
  ## importante
 
 
  ## altri
 BAZZI - SUGGERIMENTI
 
-- "Forma commerciale" indica il nome dello standard in db comspoti si puo cambiare in nome CRM
--   In "Nuova preparazione stock", cambio "Forma" con "Forma neat"
-- in PREPARAZIONE, pescare il nome operatore da Anagrafiche su windowns non lo fa ma su mac si...)
-
-- bug per stock solution in scadenza il giorno medesimo (le da come preparazioni scadute, ma non c'e' l'alert vicino al nome in db comspoti)
-
-- implementare in DASHBOARD l'elenco delle prparazioni neat in scadenza o scadute 
-- sarebbe bello avere un badge in db compsoti con i work in cui è coinvolta la crm (non penso abbia senso aggiungere colonne ma sarebbe bello un badge ma in caso si aggiunge una colonna solo lettura)
 
 
 

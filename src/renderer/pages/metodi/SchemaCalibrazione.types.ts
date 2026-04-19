@@ -85,6 +85,8 @@ export interface AnalitoItem {
   sngIds: string[]          // id (String) di tutti i CRM singoli non scaduti per questo analita
   isCon: boolean            // ha sia mix che almeno un singolo
   isIS: boolean
+  crmFiltrati?: boolean     // true = ha CRM ma esclusi dal filtro destinazione d'uso corrente
+  destUsoCrm?: DestUso[]    // destinazioni d'uso in cui ha CRM (se crmFiltrati=true)
 }
 
 export interface ConnectionLine {

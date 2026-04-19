@@ -14,6 +14,7 @@
 //   - SchemaCalibrazione.grid.tsx
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useCallback, useRef, useLayoutEffect, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type {
   SorgenteSel, WorkInSchema, SchemaCalibrazioneProps, ConnectionLine, RegisterCardRef, DestUso
 } from './SchemaCalibrazione.types'
@@ -373,6 +374,7 @@ const ColonneWork = React.forwardRef<HTMLDivElement, ColonneWorkProps>(function 
 // Componente principale SchemaCalibrazione
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: SchemaCalibrazioneProps) {
+  const navigate = useNavigate()
   const { crmItems, analiti: analitiAll, loading, error, reload, firmaToMixIds, mixNomiMap, analitiRows } = useSchemaData(metodoId)
 
   // ── Ref registry per SVG connections ───────────────────────────────────────
@@ -431,7 +433,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     )
 
     const filtered = crmItems.filter(c => c.mix_id ? mixIdValidi.has(c.mix_id) : passaDest(c.destinazione_uso))
-    const { analiti: analitiAllFiltrati, firmaToMixIds: firmaToMixIdsFiltrati, mixNomiMap: mixNomiMapFiltrati } = buildAnalitiData(filtered, analitiRows)
+    const { analiti: analitiAllFiltrati, firmaToMixIds: firmaToMixIdsFiltrati, mixNomiMap: mixNomiMapFiltrati } = buildAnalitiData(filtered, analitiRows, filtroDestUso, crmItems)
     return { crmItemsPerDestUso: filtered, analitiAllFiltrati, firmaToMixIdsFiltrati, mixNomiMapFiltrati }
   }, [crmItems, analitiRows, filtroDestUso])
 
@@ -453,9 +455,9 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       for (const mid of firmaToMixIds.get(firma) ?? []) mixIdAmmessi.add(mid)
     }
     const filtered = crmItemsPerDestUso.filter(c => !c.mix_id || mixIdAmmessi.has(c.mix_id))
-    const { analiti } = buildAnalitiData(filtered, analitiRows)
+    const { analiti } = buildAnalitiData(filtered, analitiRows, filtroDestUso, crmItems)
     return { analiti, crmItemsFiltrati: filtered }
-  }, [scenarioScelto, removedMix, crmItemsPerDestUso, analitiAllFiltrati, analitiRows, firmaToMixIds])
+  }, [scenarioScelto, removedMix, crmItemsPerDestUso, analitiAllFiltrati, analitiRows, firmaToMixIds, filtroDestUso, crmItems])
 
   // ── removedMix effettivo per la griglia ──────────────────────────────────
   // Se un mix_id è in removedMix ma è l'unico lotto disponibile nel filtro
@@ -830,6 +832,8 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             onOpenScenar={() => setDialogs(d => ({ ...d, scenar: true }))}
             onChangeMixLotto={handleChangeMixLotto}
             mixLottoSel={mixLottoSel}
+            filtroDestUso={filtroDestUso}
+            onChangeFiltroDestUso={setFiltroDestUso}
           />
           <ColonneWork
             ref={workColsRef}
@@ -881,7 +885,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             padding:'5px 12px', borderRadius:8, border:`1px solid ${C.mix.border}`,
             background:C.page.sur, cursor:'pointer', fontSize:11,
             fontWeight:500, color:C.mix.text,
-          }}>Selezione automatica</button>
+          }}>Selezione automatica — Riepilogo copertura</button>
           {selSrcs.size > 0 && (
             <button onClick={() => setSelSrcs(new Map())} style={{
               padding:'5px 12px', borderRadius:8, border:`1px solid ${C.page.brd}`,
@@ -940,6 +944,11 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
           removedMix={removedMix}
           onClose={() => setDialogs(d => ({ ...d, autoSelect: false }))}
           onApply={handleAutoSelect}
+          onGoToComposto={(nome) => {
+            setDialogs(d => ({ ...d, autoSelect: false }))
+            onClose()
+            navigate('/composti', { state: { searchFilter: nome, mostraDismessi: false } })
+          }}
         />
       )}
 
