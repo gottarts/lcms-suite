@@ -833,6 +833,17 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
             mixLottoSel={mixLottoSel}
             workCols={workCols}
             filtroDestUso={filtroDestUso}
+            onToggleMix={toggleMix}
+            onToggleSng={toggleSng}
+            onTogglePrepStock={togglePrepStock}
+            onToggleWork={toggleWork}
+            onDeleteWork={handleDeleteWork}
+            onOpenWorkDrawer={(w, ci) => { setDrawerWork(w); setDrawerCol(ci) }}
+            onRicaricaWork={(id) => setDialogs(d => ({ ...d, ricaricaWorkId: id }))}
+            onRemoveMix={(mixId) => setRemovedMix(prev => { const s = new Set(prev); s.add(mixId); return s })}
+            onRemoveSng={(sngId) => {
+              setSelSrcs(prev => { const m = new Map(prev); m.delete(sngId); return m })
+            }}
           />
         )}
         <div ref={workspaceRef} style={{ flex:1, display: vista === 'griglia' ? 'flex' : 'none', flexDirection:'row',

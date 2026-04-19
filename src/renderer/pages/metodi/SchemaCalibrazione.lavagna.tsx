@@ -38,6 +38,15 @@ export interface SchemaLavagnaProps {
   workCols: WorkInSchema[][]
   filtroDestUso: DestUso
   onSelectModulo?: (id: string) => void
+  onToggleMix?: (mixId: string) => void
+  onToggleSng?: (sngId: string) => void
+  onTogglePrepStock?: (prepKey: string, prepId: number, crmNome: string, cv: number, lotto: string | null, flacone: string | null, progressivo: number | null) => void
+  onToggleWork?: (work: WorkInSchema, colSrc: number) => void
+  onDeleteWork?: (colIdx: number, workIdx: number) => void
+  onOpenWorkDrawer?: (work: WorkInSchema, colIdx: number) => void
+  onRicaricaWork?: (workId: number) => void
+  onRemoveMix?: (mixId: string) => void
+  onRemoveSng?: (sngId: string) => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1001,7 +1010,13 @@ const nodeTypes = {
 // Root: SchemaLavagna
 // ─────────────────────────────────────────────────────────────────────────────
 export function SchemaLavagna(props: SchemaLavagnaProps) {
-  const { metodoId, analiti, crmItems, removedMix, mixLottoSel, workCols } = props
+  const {
+    metodoId, analiti, crmItems, removedMix, mixLottoSel, workCols,
+    selSrcs,
+    onToggleMix, onToggleSng, onTogglePrepStock, onToggleWork,
+    onDeleteWork, onOpenWorkDrawer, onRicaricaWork,
+    onRemoveMix, onRemoveSng,
+  } = props
 
   const moduli = useMemo(
     () => deriveModuli(analiti, crmItems, removedMix, mixLottoSel, workCols),
