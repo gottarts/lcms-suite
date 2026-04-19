@@ -24,6 +24,7 @@ import {
   salvaWorkNelDb, computeConnections, buildSorgenteMix,
 } from './SchemaCalibrazione.logic'
 import { GrigliaAnalitiCrm, ModalCreaWork } from './SchemaCalibrazione.grid'
+import { SchemaLavagna } from './SchemaCalibrazione.lavagna'
 import { ScenarDialog } from './ScenarDialog'
 import { AutoSelectDialog } from './AutoSelectDialog'
 import { buildMixComposizioni, generaScenari } from './SchemaCalibrazione.scenari'
@@ -407,6 +408,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     ricaricaWorkId: number | null
   }>({ import: false, scenar: false, autoSelect: false, confirmReset: null, ricaricaWorkId: null })
   const [filtroDestUso,   setFiltroDestUso]   = useState<DestUso>('taratura')
+  const [vista,           setVista]           = useState<'griglia' | 'lavagna'>('griglia')
 
   // Filtra crmItems per destinazione d'uso selezionata e ricalcola analitiAll filtrati
   const { crmItemsPerDestUso, analitiAllFiltrati, firmaToMixIdsFiltrati, mixNomiMapFiltrati } = useMemo(() => {
@@ -807,6 +809,18 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                       color:C.con.text, fontSize:13 }}>
           Errore: {error}
         </div>
+      ) : vista === 'lavagna' ? (
+        <SchemaLavagna
+          metodoId={metodoId}
+          metodoNome={metodoNome}
+          analiti={analiti}
+          crmItems={crmItemsFiltrati}
+          selSrcs={selSrcs}
+          removedMix={removedMixEffettivo}
+          mixLottoSel={mixLottoSel}
+          workCols={workCols}
+          filtroDestUso={filtroDestUso}
+        />
       ) : (
         <div ref={workspaceRef} style={{ flex:1, display:'flex', flexDirection:'row',
                       overflowX:'auto', overflowY:'hidden', minHeight:0, position:'relative',
@@ -855,6 +869,23 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
                     padding:'10px 24px', display:'flex', alignItems:'center',
                     justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          {/* ── Toggle vista: Lavagna ↔ Griglia (edit) ── */}
+          <div style={{ display:'flex', alignItems:'center', gap:4, marginRight:8,
+                        borderRight:`1px solid ${C.page.brd}`, paddingRight:12 }}>
+            {(['griglia', 'lavagna'] as const).map(v => {
+              const active = vista === v
+              const labels: Record<'griglia' | 'lavagna', string> = { griglia: 'Griglia (edit)', lavagna: 'Lavagna' }
+              return (
+                <button key={v} onClick={() => setVista(v)} style={{
+                  padding:'4px 10px', borderRadius:6, fontSize:11, fontWeight:600,
+                  cursor:'pointer',
+                  border:`1px solid ${C.page.brd2}`,
+                  background: active ? C.page.t1 : C.page.sur,
+                  color: active ? '#fff' : C.page.t2,
+                }}>{labels[v]}</button>
+              )
+            })}
+          </div>
           {/* ── Selector destinazione d'uso ── */}
           <div style={{ display:'flex', alignItems:'center', gap:4, marginRight:4 }}>
             {(['taratura', 'qc', 'is'] as DestUso[]).map(d => {
