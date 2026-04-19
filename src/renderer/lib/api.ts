@@ -174,7 +174,19 @@ export const dashboardApi = {
       work: any[]
       stats_tracciabilita: {
         work_con_lotto_mismatch: number
-        analiti_accreditati_scoperti: number
+        work_da_preparare: number
+        analiti_scoperti: Array<{
+          analita_nome: string
+          metodo_id: string
+          metodo_nome: string
+          composto_dismesso_id: number | null
+          composto_scaduto_id: number | null
+        }>
+        analiti_non_coperti_17034: Array<{
+          analita_nome: string
+          metodo_id: string
+          metodo_nome: string
+        }>
       }
     }>,
   auditCrm: (metodo_id: string, data: string) =>

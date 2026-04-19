@@ -35,6 +35,7 @@ export function WorkPage() {
   const [mostraArchivio, setMostraArchivio] = useState(false)
   const [addToSchemaWork, setAddToSchemaWork] = useState<{ id: number; nome: string } | null>(null)
   const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null)
+  const [filtroStatoLab, setFiltroStatoLab] = useState<'da_preparare' | null>(null)
   const [expandId, setExpandId] = useState<number | null>(null)
   const [pendingExpandId, setPendingExpandId] = useState<number | null>(null)
   const [prepCount, setPrepCount] = useState<Record<number, number>>({})
@@ -53,9 +54,10 @@ export function WorkPage() {
   useEffect(() => { load(mostraArchivio) }, [mostraArchivio])
   useDbChange(() => load(mostraArchivio))
 
-  // Apertura automatica da link esterno (es. Audit) — espande lo storico preparazioni
+  // Apertura automatica da link esterno (es. Audit, Dashboard) — filtri e/o espansione
   useEffect(() => {
-    const state = location.state as { openWorkId?: number; archiviata?: boolean; filtroMetodo?: string; searchWork?: string } | null
+    const state = location.state as { openWorkId?: number; archiviata?: boolean; filtroMetodo?: string; searchWork?: string; filtroStatoLab?: 'da_preparare' } | null
+    if (state?.filtroStatoLab) setFiltroStatoLab(state.filtroStatoLab)
     if (!state?.openWorkId) return
     if (state.filtroMetodo) setFiltroMetodo(state.filtroMetodo)
     if (state.searchWork) setSearch(state.searchWork)
@@ -80,6 +82,9 @@ export function WorkPage() {
     if (filtroMetodo) {
       result = result.filter(w => w.metodi_ids?.includes(filtroMetodo))
     }
+    if (filtroStatoLab === 'da_preparare') {
+      result = result.filter(w => ['non_preparata', 'scaduta', 'in_scadenza'].includes(w.stato_lab))
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(w =>
@@ -89,7 +94,7 @@ export function WorkPage() {
       )
     }
     return result
-  }, [works, search, filtroMetodo])
+  }, [works, search, filtroMetodo, filtroStatoLab])
 
   const metodiConWork = useMemo(() => {
     const ids = new Set<string>()
@@ -148,7 +153,7 @@ export function WorkPage() {
           <Button
             size="sm"
             variant={mostraArchivio ? 'secondary' : 'outline'}
-            onClick={() => { setMostraArchivio(v => !v); setSearch(''); setFiltroMetodo(null) }}
+            onClick={() => { setMostraArchivio(v => !v); setSearch(''); setFiltroMetodo(null); setFiltroStatoLab(null) }}
           >
             <Archive className="h-4 w-4 mr-1" />
             {mostraArchivio ? 'Archiviate' : 'Archivio'}
@@ -166,7 +171,7 @@ export function WorkPage() {
         />
       </div>
 
-      {!mostraArchivio && metodiConWork.length > 0 && (
+      {!mostraArchivio && (
         <div className="flex flex-wrap gap-1.5 mb-4">
           <button
             onClick={() => setFiltroMetodo(null)}
@@ -176,6 +181,14 @@ export function WorkPage() {
                 : 'bg-background text-muted-foreground border-border hover:border-foreground/40'
             }`}
           >Tutti</button>
+          <button
+            onClick={() => setFiltroStatoLab(v => v === 'da_preparare' ? null : 'da_preparare')}
+            className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
+              filtroStatoLab === 'da_preparare'
+                ? 'bg-amber-500 text-white border-amber-500'
+                : 'bg-background text-amber-700 border-amber-300 hover:bg-amber-50'
+            }`}
+          >Da preparare</button>
           {metodiConWork.map(mid => (
             <button
               key={mid}

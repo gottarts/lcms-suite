@@ -763,7 +763,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
     <div style={{
       position:'relative', background:C.page.bg,
       display:'flex', flexDirection:'column',
-      height:'100%', margin:-16, overflow:'hidden',
+      height:'100%', margin:-16, marginTop:-60, overflow:'hidden',
       fontFamily:'Lato, sans-serif',
     }}>
       {/* ── Header ── */}

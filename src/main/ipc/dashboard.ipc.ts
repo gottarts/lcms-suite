@@ -108,17 +108,81 @@ export function registerDashboardIpc(): void {
         AND (w.archiviato = 0 OR w.archiviato IS NULL)
     `).get() as { n: number }).n
 
-    // Analiti accreditati senza alcun composto matchato per nome (cross-metodo)
-    const analitiAccreditatiScoperti = (db.prepare(`
+    // Work da preparare: attive, tracciate, non bloccate, con stato_lab non_preparata/scaduta/in_scadenza
+    // Replica la logica di calcolaStatoLab: soglia in_scadenza = 20% della validità
+    const workDaPreparare = (db.prepare(`
       SELECT COUNT(*) AS n
+      FROM (
+        SELECT
+          w.id,
+          w.validita_mesi,
+          (SELECT wp.data_prep FROM work_preparazioni wp
+            WHERE wp.work_id = w.id ORDER BY wp.data_prep DESC LIMIT 1) AS ultima_prep_data,
+          (SELECT COUNT(*)
+             FROM work_ingredienti wi JOIN composti c ON c.id = wi.source_id
+             WHERE wi.work_id = w.id AND wi.source_type = 'crm'
+               AND c.data_dismissione IS NOT NULL
+          ) AS n_bloccati
+        FROM work w
+        WHERE (w.archiviato = 0 OR w.archiviato IS NULL)
+          AND w.validita_mesi IS NOT NULL
+      ) sub
+      WHERE n_bloccati = 0
+        AND (
+          ultima_prep_data IS NULL
+          OR DATE(ultima_prep_data, '+' || CAST(ROUND(validita_mesi * 30.44 * 0.8) AS INT) || ' days') < date('now')
+        )
+    `).get() as { n: number }).n
+
+    // Analiti accreditati scoperti (per metodo): lista dettagliata con info composto scaduto/dismesso
+    const analitiScoperti = db.prepare(`
+      SELECT
+        ma.nome AS analita_nome,
+        ma.metodo_id,
+        m.nome AS metodo_nome,
+        (SELECT c.id FROM composti c
+          WHERE LOWER(c.nome) = LOWER(ma.nome)
+            AND c.data_dismissione IS NOT NULL
+          ORDER BY c.data_dismissione DESC LIMIT 1) AS composto_dismesso_id,
+        (SELECT c.id FROM composti c
+          WHERE LOWER(c.nome) = LOWER(ma.nome)
+            AND c.scadenza_prodotto < date('now')
+            AND c.data_dismissione IS NULL
+          LIMIT 1) AS composto_scaduto_id
       FROM metodo_analiti ma
+      JOIN metodi m ON m.id = ma.metodo_id
       WHERE ma.accreditato = 1
         AND NOT EXISTS (
           SELECT 1 FROM composti c
           WHERE LOWER(c.nome) = LOWER(ma.nome)
             AND c.data_dismissione IS NULL
+            AND (c.scadenza_prodotto IS NULL OR c.scadenza_prodotto >= date('now'))
         )
-    `).get() as { n: number }).n
+      ORDER BY m.nome, ma.ordine, ma.nome
+    `).all() as { analita_nome: string; metodo_id: string; metodo_nome: string; composto_dismesso_id: number | null; composto_scaduto_id: number | null }[]
+
+    // Analiti accreditati con composto attivo ma nessuno con accreditamento_crm contenente '17034'
+    const analitiNonCoperti17034 = db.prepare(`
+      SELECT
+        ma.nome AS analita_nome,
+        ma.metodo_id,
+        m.nome AS metodo_nome
+      FROM metodo_analiti ma
+      JOIN metodi m ON m.id = ma.metodo_id
+      WHERE ma.accreditato = 1
+        AND EXISTS (
+          SELECT 1 FROM composti c
+          WHERE LOWER(c.nome) = LOWER(ma.nome)
+            AND c.data_dismissione IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM composti c
+          WHERE LOWER(c.nome) = LOWER(ma.nome)
+            AND c.data_dismissione IS NULL
+            AND c.accreditamento_crm LIKE '%17034%'
+        )
+      ORDER BY m.nome, ma.ordine, ma.nome
+    `).all() as { analita_nome: string; metodo_id: string; metodo_nome: string }[]
 
     return {
       composti,
@@ -126,7 +190,9 @@ export function registerDashboardIpc(): void {
       work: workOut,
       stats_tracciabilita: {
         work_con_lotto_mismatch: workConLottoMismatch,
-        analiti_accreditati_scoperti: analitiAccreditatiScoperti,
+        work_da_preparare: workDaPreparare,
+        analiti_scoperti: analitiScoperti,
+        analiti_non_coperti_17034: analitiNonCoperti17034,
       },
     }
   })
