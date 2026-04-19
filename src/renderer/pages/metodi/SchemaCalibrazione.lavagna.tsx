@@ -735,7 +735,7 @@ function computeAnalitiEdges(analiti: AnalitoItem[], moduli: ModuloMeta[]): Edge
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom Node: Mix
 // ─────────────────────────────────────────────────────────────────────────────
-type MixNodeData = { meta: Extract<ModuloMeta, { kind: 'mix' }>; highlighted: boolean }
+type MixNodeData = { meta: Extract<ModuloMeta, { kind: 'mix' }>; highlighted: boolean; onRemoveMix?: (mixId: string) => void }
 function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
   const meta = data.meta
   const crm = meta.crm
@@ -772,6 +772,18 @@ function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
             background: C.page.sur, border: `1px solid ${C.mix.border}`,
             color: C.mix.text, whiteSpace: 'nowrap', flexShrink: 0,
           }}>+{meta.lottiAlt} lotti</span>
+        )}
+        {data.onRemoveMix && (
+          <button
+            onClick={(e) => { e.stopPropagation(); data.onRemoveMix!(meta.mixId) }}
+            title="Rimuovi dalla lavagna"
+            style={{
+              width: 18, height: 18, borderRadius: '50%', border: 'none',
+              background: C.con.bg, color: C.con.text, cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', flexShrink: 0, padding: 0,
+            }}
+          >×</button>
         )}
       </div>
       <div style={{ padding: '6px 12px', fontFamily: '"IBM Plex Mono", monospace', fontSize: 10.5, lineHeight: 1.55 }}>
@@ -819,7 +831,7 @@ function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom Node: Sng
 // ─────────────────────────────────────────────────────────────────────────────
-type SngNodeData = { meta: Extract<ModuloMeta, { kind: 'sng' }>; highlighted: boolean }
+type SngNodeData = { meta: Extract<ModuloMeta, { kind: 'sng' }>; highlighted: boolean; onRemoveSng?: (sngId: string) => void }
 function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
   const meta = data.meta
   const crm = meta.crm
@@ -837,15 +849,30 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
     >
       <div style={{
         padding: '8px 12px 6px', borderBottom: `1px solid ${C.sng.chip}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8,
       }}>
-        <div style={{
-          fontSize: 8.5, letterSpacing: '0.14em', textTransform: 'uppercase',
-          color: C.sng.text, opacity: 0.7, fontWeight: 600, marginBottom: 2,
-        }}>{isNeat ? 'Singolo · Neat' : 'Singolo CRM'}</div>
-        <div style={{
-          fontSize: 13.5, fontWeight: 700, color: C.sng.text,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }} title={crm.nome}>{crm.nome}</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{
+            fontSize: 8.5, letterSpacing: '0.14em', textTransform: 'uppercase',
+            color: C.sng.text, opacity: 0.7, fontWeight: 600, marginBottom: 2,
+          }}>{isNeat ? 'Singolo · Neat' : 'Singolo CRM'}</div>
+          <div style={{
+            fontSize: 13.5, fontWeight: 700, color: C.sng.text,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }} title={crm.nome}>{crm.nome}</div>
+        </div>
+        {data.onRemoveSng && (
+          <button
+            onClick={(e) => { e.stopPropagation(); data.onRemoveSng!(meta.id) }}
+            title="Rimuovi dalla lavagna"
+            style={{
+              width: 18, height: 18, borderRadius: '50%', border: 'none',
+              background: C.con.bg, color: C.con.text, cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', flexShrink: 0, padding: 0,
+            }}
+          >×</button>
+        )}
       </div>
       <div style={{ padding: '6px 12px', fontFamily: '"IBM Plex Mono", monospace', fontSize: 10.5, lineHeight: 1.55 }}>
         <div style={{ color: C.page.t2 }}>
@@ -1115,15 +1142,15 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
       const p = positions[m.id] || { x: 0, y: 0 }
       const base = { id: m.id, position: p, draggable: true, selectable: true }
       if (m.kind === 'mix') {
-        return { ...base, type: 'mix', data: { meta: m, highlighted: false } as MixNodeData }
+        return { ...base, type: 'mix', data: { meta: m, highlighted: false, onRemoveMix } as MixNodeData }
       }
       if (m.kind === 'sng') {
-        return { ...base, type: 'sng', data: { meta: m, highlighted: false } as SngNodeData }
+        return { ...base, type: 'sng', data: { meta: m, highlighted: false, onRemoveSng } as SngNodeData }
       }
       return { ...base, type: 'work', data: { meta: m, highlighted: false } as WorkNodeData }
     })
     return [analitiNode, ...moduliNodes]
-  }, [moduli, positions, analitiPos, analitiNodeData])
+  }, [moduli, positions, analitiPos, analitiNodeData, onRemoveMix, onRemoveSng])
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(structuralNodes)
 
