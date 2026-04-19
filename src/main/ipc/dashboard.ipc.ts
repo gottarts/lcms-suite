@@ -42,7 +42,7 @@ export function registerDashboardIpc(): void {
     const preparazioni = db.prepare(`
       SELECT
         p.id, p.composto_id, p.flacone, p.scadenza, p.data_prep,
-        c.nome AS composto_nome
+        c.nome AS composto_nome, c.forma AS composto_forma
       FROM preparazioni p
       JOIN composti c ON c.id = p.composto_id
       WHERE p.stato = 'Attiva'

@@ -17,17 +17,17 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Riga 1 — KPI */}
-      <KpiCards />
+      {/* Riga 1 — KPI (sinistra) + Scadenze 60gg (destra) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <KpiCards />
+        <ScadenzeTimeline />
+      </div>
 
       {/* Riga 2 — Tracciabilità */}
       <TracciabilitaCard />
 
       {/* Riga 3 — Audit CRM */}
       <AuditCrmSection />
-
-      {/* Riga 4 — Scadenze separate per tipo */}
-      <ScadenzeTimeline />
     </div>
   )
 }

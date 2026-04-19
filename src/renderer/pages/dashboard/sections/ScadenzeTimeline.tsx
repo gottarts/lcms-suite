@@ -241,13 +241,13 @@ export function ScadenzeTimeline() {
   const allClosed = !openCrm && !openPrep && !openWork
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle>Scadenze prossimi 60 giorni</CardTitle>
             <CardDescription>
-              CRM, preparazioni e Work — separati per tipo
+              CRM, preparazioni Neat e Work — separati per tipo
             </CardDescription>
           </div>
           {!loading && !error && (
@@ -290,9 +290,9 @@ export function ScadenzeTimeline() {
               />
             </Sezione>
 
-            {/* ── Preparati ── */}
+            {/* ── Preparati Neat ── */}
             <Sezione
-              title="Preparati"
+              title="Preparati Neat"
               count={prep.length}
               accentClass="bg-cyan-100 text-cyan-800 border-cyan-200"
               open={openPrep}

@@ -70,7 +70,31 @@ SELECT c.*,
   (SELECT MAX(nuova_scadenza) FROM composti_storia
    WHERE composto_id = c.id AND tipo = 'Rivalidazione' AND nuova_scadenza IS NOT NULL)   AS ultima_rivalidazione,
   (SELECT GROUP_CONCAT(metodo_id) FROM composti_metodi
-   WHERE composto_id = c.id)                                                             AS metodi_ids_raw
+   WHERE composto_id = c.id)                                                             AS metodi_ids_raw,
+  (SELECT COUNT(DISTINCT w.id)
+   FROM work w
+   WHERE (w.archiviato = 0 OR w.archiviato IS NULL)
+     AND w.id IN (
+       SELECT wi.work_id FROM work_ingredienti wi
+       WHERE wi.source_type = 'crm' AND wi.source_id = c.id
+       UNION
+       SELECT wi.work_id FROM work_ingredienti wi
+       JOIN preparazioni p ON p.id = COALESCE(wi.prep_id, wi.source_id)
+       WHERE wi.source_type = 'prep' AND p.composto_id = c.id
+     ))                                                                                  AS work_count,
+  (SELECT GROUP_CONCAT(nome, ', ') FROM (
+     SELECT DISTINCT w.nome FROM work w
+     WHERE (w.archiviato = 0 OR w.archiviato IS NULL)
+       AND w.id IN (
+         SELECT wi.work_id FROM work_ingredienti wi
+         WHERE wi.source_type = 'crm' AND wi.source_id = c.id
+         UNION
+         SELECT wi.work_id FROM work_ingredienti wi
+         JOIN preparazioni p ON p.id = COALESCE(wi.prep_id, wi.source_id)
+         WHERE wi.source_type = 'prep' AND p.composto_id = c.id
+       )
+     ORDER BY w.nome LIMIT 10
+  ))                                                                                     AS work_nomi
 FROM composti c`
 
     const params: unknown[] = []

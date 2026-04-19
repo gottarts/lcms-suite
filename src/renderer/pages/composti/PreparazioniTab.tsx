@@ -65,7 +65,7 @@ export function PreparazioniTab({ compostoId, preparazioni, onRefresh, composto 
   const [dismissId, setDismissId] = useState<number | null>(null)
   const [dismissDate, setDismissDate] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
-  const [filtroStato, setFiltroStato] = useState<'tutte' | 'attive' | 'scadute'>('attive')
+  const [filtroStato, setFiltroStato] = useState<'tutte' | 'attive' | 'scadute'>('tutte')
   const [suggestSolvente, setSuggestSolvente] = useState<string[]>([])
   const [suggestOperatore, setSuggestOperatore] = useState<string[]>([])
   const [suggestUbicazione, setSuggestUbicazione] = useState<string[]>([])

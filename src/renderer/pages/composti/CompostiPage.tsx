@@ -62,6 +62,7 @@ const COL_DEFS: { key: string; label: string }[] = [
   { key: 'mw',               label: 'MW' },
   { key: 'formula',          label: 'Formula' },
   { key: 'metodi_analitici', label: 'Metodi' },
+  { key: 'work',            label: 'Work' },
 ]
 
 const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
@@ -86,6 +87,7 @@ const DEFAULT_COL_VISIBLE: Record<string, boolean> = {
   mw:                false,
   formula:           false,
   metodi_analitici:  false,
+  work:              true,
 }
 
 // ─── Tipi mix-scope (per decidere selected/all sui mix parziali) ──────────────
@@ -354,6 +356,8 @@ export function CompostiPage() {
   }
 
   const [filtroStati, setFiltroStati] = useState<string[]>((location.state as any)?.filtroStati ?? [])
+  const [filtroFormaNav] = useState<string | null>((location.state as any)?.filtroForma ?? null)
+  const [filtroCompostoIds] = useState<number[] | null>((location.state as any)?.filtroCompostoIds ?? null)
   const [filtroDestinazioni, setFiltroDestinazioni] = useState<string[]>([])
   const [filtroMetodi, setFiltroMetodi] = useState<string[]>([])
   const [filtroAttenzione, setFiltroAttenzione] = useState(false)
@@ -497,6 +501,7 @@ export function CompostiPage() {
 
   const filtered = useMemo(() => {
     let result = composti
+    // filtroFormaNav viene prima degli altri filtri
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase()
       result = result.filter(c =>
@@ -526,6 +531,8 @@ export function CompostiPage() {
         )
       )
     }
+    if (filtroFormaNav) result = result.filter(c => c.forma === filtroFormaNav)
+    if (filtroCompostoIds) result = result.filter(c => filtroCompostoIds.includes(c.id))
     if (filtroStati.length > 0) result = result.filter(c => filtroStati.some(s => computeStato(c) === STATO_MAP[s]))
     if (filtroDestinazioni.length > 0) result = result.filter(c => filtroDestinazioni.includes(c.destinazione_uso))
     if (filtroMetodi.length > 0) result = result.filter(c => c.metodi_ids?.some((id: string) => filtroMetodi.includes(id)))
@@ -537,7 +544,7 @@ export function CompostiPage() {
     if (soloIncompleti) result = result.filter(c => isIncompleto(c))
     return result
   }, [composti, metodiNomeMap, debouncedSearch, colFilters,
-      filtroStati, filtroDestinazioni, filtroMetodi,
+      filtroFormaNav, filtroCompostoIds, filtroStati, filtroDestinazioni, filtroMetodi,
       filtroAttenzione, filtroInScadenza, mostraDismessi, mostraDaAprire,
       nascondiScaduti, soloIncompleti])
 

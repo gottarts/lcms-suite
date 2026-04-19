@@ -149,6 +149,20 @@ export const CompostiTable = memo(function CompostiTable({
         },
       },
       {
+        key: 'work', label: 'Work', sortable: true,
+        render: (_, row) => {
+          if (!row.work_count) return <span className="text-muted-foreground">—</span>
+          return (
+            <Badge
+              title={row.work_nomi || ''}
+              className="text-[10px] px-1.5 py-0 bg-teal-100 text-teal-700 border-teal-300 hover:bg-teal-100 cursor-help"
+            >
+              W {row.work_count}
+            </Badge>
+          )
+        },
+      },
+      {
         key: 'stato', label: 'Stato', sortable: false,
         render: (_, row) => {
           const stato = computeStato(row)

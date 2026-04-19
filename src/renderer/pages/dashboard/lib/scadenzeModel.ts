@@ -22,6 +22,7 @@ export type ScadenzaItem =
       flacone: string | null
       scadenza: string
       giorni: number
+      composto_forma: string | null
     }
   | {
       kind: 'work'
@@ -100,7 +101,7 @@ export function computeStatoAllaData(
 // ─────────────────────────────────────────────────────────────────────────────
 // giorniTra: giorni interi tra `data` (ISO) e oggi (a mezzanotte).
 // ─────────────────────────────────────────────────────────────────────────────
-function giorniTra(isoDate: string): number {
+export function giorniTra(isoDate: string): number {
   const oggi = new Date()
   oggi.setHours(0, 0, 0, 0)
   const target = new Date(isoDate)
@@ -154,6 +155,7 @@ export function buildScadenzeItems(summary: {
       flacone: p.flacone ?? null,
       scadenza: p.scadenza,
       giorni: giorniTra(p.scadenza),
+      composto_forma: p.composto_forma ?? null,
     })
   }
 
