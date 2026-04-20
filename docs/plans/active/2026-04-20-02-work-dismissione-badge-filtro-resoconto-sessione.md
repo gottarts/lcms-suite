@@ -80,7 +80,7 @@ Operatori devono poter visualizzare in blocco tutte le work dismesse per verific
 
 ---
 
-## Note per sessioni future
+## Note per sessioni future (tutti i bug e problemi risolti con deepseek VG)
 
 - **Badge non visibile in tabella**: Durante dev, il badge è stato aggiunto ma non visibile in tutti gli edge case. Potrebbe essere necessario:
   - Verificare che `work?.data_dismissione` sia correttamente caricato dal backend
