@@ -611,24 +611,42 @@ function SidebarAnaliti({
 // Card wrapper: base stilistica + Handle L/R per React Flow
 // ─────────────────────────────────────────────────────────────────────────────
 function CardBase({
-  width, bg, border, borderLeftColor, highlighted, children,
+  width,
+  bg, border, borderLeftColor,
+  highlighted,
+  selected,
+  children,
 }: {
   width: number
   bg: string; border: string; borderLeftColor: string
   highlighted: boolean
+  selected?: boolean
   children: React.ReactNode
 }) {
+  // Stili base
+  const baseStyle: React.CSSProperties = {
+    width,
+    background: bg,
+    border: `1.5px solid ${border}`,
+    borderLeft: `4px solid ${borderLeftColor}`,
+    borderRadius: 6,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+    transition: 'box-shadow 0.1s ease, border-color 0.1s ease',
+  }
+
+  // Stile per evidenziazione (hover / connessione)
+  if (highlighted && !selected) {
+    baseStyle.boxShadow = `0 0 0 3px rgba(155,134,214,0.35), 0 2px 6px rgba(0,0,0,0.05)`
+  }
+
+  // Stile per selezione (click sulla card) – molto più visibile
+  if (selected) {
+    baseStyle.border = `2px solid #2b6cb0`          // bordo blu spesso
+    baseStyle.boxShadow = `0 0 0 2px rgba(49,130,206,0.4), 0 4px 12px rgba(0,0,0,0.15)`
+  }
+
   return (
-    <div style={{
-      width,
-      background: bg,
-      border: `1.5px solid ${border}`,
-      borderLeft: `4px solid ${borderLeftColor}`,
-      borderRadius: 6,
-      boxShadow: highlighted
-        ? `0 0 0 3px rgba(155,134,214,0.35), 0 2px 6px rgba(0,0,0,0.05)`
-        : '0 1px 3px rgba(0,0,0,0.06)',
-    }}>
+    <div style={baseStyle}>
       <Handle
         type="target"
         position={HandlePosition.Left}
@@ -830,7 +848,7 @@ function computeAnalitiEdges(analiti: AnalitoItem[], moduli: ModuloMeta[]): Edge
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom Node: Mix
 // ─────────────────────────────────────────────────────────────────────────────
-type MixNodeData = { meta: Extract<ModuloMeta, { kind: 'mix' }>; highlighted: boolean; onRemoveMix?: (mixId: string) => void }
+type MixNodeData = { meta: Extract<ModuloMeta, { kind: 'mix' }>; highlighted: boolean; selected?: boolean; onRemoveMix?: (mixId: string) => void }
 function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
   const meta = data.meta
   const crm = meta.crm
@@ -848,6 +866,7 @@ function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
       width={LAYOUT.MODULE_W.mix}
       bg={C.mix.bg} border={C.mix.border} borderLeftColor={C.mix.border}
       highlighted={data.highlighted}
+      selected={data.selected}
     >
       <div style={{
         padding: '8px 12px 6px', borderBottom: `1px solid ${C.mix.chip}`,
@@ -942,7 +961,7 @@ function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom Node: Sng
 // ─────────────────────────────────────────────────────────────────────────────
-type SngNodeData = { meta: Extract<ModuloMeta, { kind: 'sng' }>; highlighted: boolean; onRemoveSng?: (sngId: string) => void }
+type SngNodeData = { meta: Extract<ModuloMeta, { kind: 'sng' }>; highlighted: boolean; selected?: boolean; onRemoveSng?: (sngId: string) => void }
 function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
   const meta = data.meta
   const crm = meta.crm
@@ -966,6 +985,7 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
       width={LAYOUT.MODULE_W.sng}
       bg={C.sng.bg} border={C.sng.border} borderLeftColor={C.sng.border}
       highlighted={data.highlighted}
+      selected={data.selected}
     >
       <div style={{
         padding: '8px 12px 6px', borderBottom: `1px solid ${C.sng.chip}`,
@@ -1076,6 +1096,7 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
 type WorkNodeData = {
   meta: Extract<ModuloMeta, { kind: 'work' }>
   highlighted: boolean
+  selected?: boolean
   alertBadge?: { color: string; label: string } | null
   onOpenDrawer?: (work: WorkInSchema, colIdx: number) => void
   onRicarica?: (workId: number) => void
@@ -1097,6 +1118,7 @@ function ModuloWorkNode({ data }: NodeProps<Node<WorkNodeData>>) {
       width={LAYOUT.MODULE_W.work}
       bg={col.bg} border={col.border} borderLeftColor={col.border}
       highlighted={data.highlighted}
+      selected={data.selected}
     >
       <div style={{
         padding: '8px 12px 6px', borderBottom: `1px solid ${col.chip}`,
@@ -1324,7 +1346,7 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     return out
   }, [selectedId, moduliEdges, analitiEdgesBase])
 
-  // highlightedIds: hover analita OR selezione nodo
+  // highlightedIds: hover analita OR connessioni (escluso il nodo selezionato stesso)
   const highlightedIds = useMemo(() => {
     if (hoveredAnalita) {
       const a = analiti.find(x => x.nome === hoveredAnalita)
@@ -1335,12 +1357,13 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
       return out
     }
     if (selectedId) {
-      return new Set<string>([selectedId, ...connectedToSelected])
+      // Evidenzia solo i nodi connessi, non il selezionato stesso (che avrà selected=true)
+      return new Set<string>(connectedToSelected)
     }
     return new Set<string>()
   }, [hoveredAnalita, selectedId, connectedToSelected, analiti, removedMix])
 
-  // Merge: evidenzia anche i CRM/Work selezionati in selSrcs
+  // Merge: evidenzia anche i CRM/Work selezionati in selSrcs E il nodo cliccato (per ombra)
   const highlightedIdsWithSel = useMemo(() => {
     const out = new Set(highlightedIds)
     for (const m of moduli) {
@@ -1348,8 +1371,10 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
       if (m.kind === 'sng' && selSrcs.has(m.id)) out.add(m.id)
       if (m.kind === 'work' && selSrcs.has(m.id)) out.add(m.id)
     }
+    // Aggiungi il nodo cliccato (selectedId) in modo che riceva l'ombra (highlighted)
+    if (selectedId) out.add(selectedId)
     return out
-  }, [highlightedIds, moduli, selSrcs])
+  }, [highlightedIds, selSrcs, moduli, selectedId])
 
   // Edges con evidenziazione quando c'è selezione
   const edges = useMemo(() => {
@@ -1376,7 +1401,7 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     onHoverAnalita: setHoveredAnalita,
   }), [analiti, filtroSidebar])
 
-  // Nodi strutturali: posizioni + meta. NON include highlighted per evitare
+  // Nodi strutturali: posizioni + meta. NON include highlighted/selected per evitare
   // che l'hover ricostruisca tutti i nodi e triggeri setRfNodes in loop.
   const structuralNodes: Node[] = useMemo(() => {
     const analitiNode: Node = {
@@ -1419,40 +1444,41 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
         ...(clusterId ? { parentId: clusterId, extent: 'parent' as const } : {}),
       }
       if (m.kind === 'mix') {
-        return { ...base, type: 'mix', data: { meta: m, highlighted: false, onRemoveMix } as MixNodeData }
+        return { ...base, type: 'mix', data: { meta: m, highlighted: false, selected: false, onRemoveMix } as MixNodeData }
       }
       if (m.kind === 'sng') {
-        return { ...base, type: 'sng', data: { meta: m, highlighted: false, onRemoveSng } as SngNodeData }
+        return { ...base, type: 'sng', data: { meta: m, highlighted: false, selected: false, onRemoveSng } as SngNodeData }
       }
-      return { ...base, type: 'work', data: { meta: m, highlighted: false, alertBadge: workAlertBadge(m.work, crmById), onOpenDrawer: onOpenWorkDrawer, onRicarica: onRicaricaWork, onDelete: onDeleteWork } as WorkNodeData }
+      return { ...base, type: 'work', data: { meta: m, highlighted: false, selected: false, alertBadge: workAlertBadge(m.work, crmById), onOpenDrawer: onOpenWorkDrawer, onRicarica: onRicaricaWork, onDelete: onDeleteWork } as WorkNodeData }
     })
     return [...groupNodes, analitiNode, ...moduliNodes]
   }, [moduli, positions, analitiPos, analitiNodeData, clusters, nodeToCluster, crmById, onRemoveMix, onRemoveSng, onOpenWorkDrawer, onRicaricaWork, onDeleteWork])
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(structuralNodes)
 
-  // Sincronizza struttura (posizioni, lista moduli) senza toccare highlighted
+  // Sincronizza struttura (posizioni, lista moduli) senza toccare highlighted/selected
   const isDraggingRef = useRef(false)
   useEffect(() => {
     if (isDraggingRef.current) return
     setRfNodes(prev => {
-      // Aggiorna solo id/position/data strutturale — preserva highlighted dal prev
+      // Aggiorna solo id/position/data strutturale — preserva highlighted/selected dal prev
       const prevMap = new Map(prev.map(n => [n.id, n]))
       return structuralNodes.map(n => {
         const old = prevMap.get(n.id)
         if (!old) return n
-        // Preserva highlighted dal prev per non cancellare l'evidenziazione corrente
+        // Preserva highlighted e selected dal prev per non cancellare lo stato corrente
         const oldHighlighted = (old.data as { highlighted?: boolean }).highlighted ?? false
+        const oldSelected = (old.data as { selected?: boolean }).selected ?? false
         return {
           ...n,
           position: old.position, // usa posizione RF (potrebbe essere diversa da structuralNodes dopo drag)
-          data: { ...n.data, highlighted: oldHighlighted },
+          data: { ...n.data, highlighted: oldHighlighted, selected: oldSelected },
         }
       })
     })
   }, [structuralNodes, setRfNodes])
 
-  // Aggiorna solo il flag highlighted — chirurgico, non tocca posizioni
+  // Aggiorna solo i flag highlighted — chirurgico, non tocca posizioni
   useEffect(() => {
     if (isDraggingRef.current) return
     setRfNodes(prev => prev.map(n => {
@@ -1462,6 +1488,32 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
       return { ...n, data: { ...n.data, highlighted: shouldHighlight } }
     }))
   }, [highlightedIdsWithSel, setRfNodes])
+
+  // Aggiorna il flag selected in base a selSrcs (selezione persistente per costruire Work)
+  useEffect(() => {
+    if (isDraggingRef.current) return
+    setRfNodes(prev => prev.map(node => {
+      let shouldBeSelected = false
+      // Mix
+      if (node.type === 'mix') {
+        const mixId = (node.data as MixNodeData)?.meta?.mixId
+        if (mixId && selSrcs.has(mixId)) shouldBeSelected = true
+      }
+      // Singolo
+      else if (node.type === 'sng') {
+        const sngId = (node.data as SngNodeData)?.meta?.id
+        if (sngId && selSrcs.has(sngId)) shouldBeSelected = true
+      }
+      // Work
+      else if (node.type === 'work') {
+        const workId = (node.data as WorkNodeData)?.meta?.id
+        if (workId && selSrcs.has(workId)) shouldBeSelected = true
+      }
+      const currentSelected = (node.data as any).selected ?? false
+      if (shouldBeSelected === currentSelected) return node
+      return { ...node, data: { ...node.data, selected: shouldBeSelected } }
+    }))
+  }, [selSrcs, setRfNodes])
 
   // Persisti posizione a fine drag (converti relativa→assoluta per nodi in gruppo)
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
@@ -1485,7 +1537,7 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     const id = node.id
     setHoveredAnalita(null)
-    // Sempre aggiorna selezione visiva (highlight frecce)
+    // Se clicchi lo stesso nodo, deseleziona; altrimenti seleziona il nuovo
     setSelectedId(prev => prev === id ? null : id)
 
     const m = moduli.find(x => x.id === id)
