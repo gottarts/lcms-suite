@@ -34,11 +34,16 @@ export function WorkPage() {
   const [preparaNote, setPreparaNote] = useState('')
   const [preparaSaving, setPreparaSaving] = useState(false)
   const [archiviaId, setArchiviaId] = useState<number | null>(null)
+  const [dismetti_id, setDismetti_id] = useState<number | null>(null)
+  const [dismetti_data, setDismetti_data] = useState('')
+  const [dismetti_motivo, setDismetti_motivo] = useState('')
+  const [dismetti_loading, setDismetti_loading] = useState(false)
   const [mostraArchivio, setMostraArchivio] = useState(false)
   const [addToSchemaWork, setAddToSchemaWork] = useState<{ id: number; nome: string } | null>(null)
   const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null)
   const [filtroStatoLab, setFiltroStatoLab] = useState<'da_preparare' | null>(null)
   const [filtroProblemi, setFiltroProblemi] = useState(false) // Nuovo filtro per work con problemi
+  const [filtroDismesse, setFiltroDismesse] = useState(false) // Nuovo filtro per work dismesse
   const [expandId, setExpandId] = useState<number | null>(null)
   const [etichettaTarget, setEtichettaTarget] = useState<{ work: any; prep: any; scadenza: string | null } | null>(null)
   const [suggestOperatore, setSuggestOperatore] = useState<string[]>([])
@@ -101,6 +106,10 @@ export function WorkPage() {
     if (filtroProblemi) {
       result = result.filter(w => w.bloccata || w.ha_crm_scaduti || w.ha_prep_scadute || w.ha_figlie_obsolete || w.ha_sorgente_rinnovata)
     }
+    // Filtro per work dismesse
+    if (filtroDismesse) {
+      result = result.filter(w => w.data_dismissione)
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(w =>
@@ -110,7 +119,7 @@ export function WorkPage() {
       )
     }
     return result
-  }, [works, search, filtroMetodo, filtroStatoLab, filtroProblemi])
+  }, [works, search, filtroMetodo, filtroStatoLab, filtroProblemi, filtroDismesse])
 
   const metodiConWork = useMemo(() => {
     const ids = new Set<string>()
@@ -135,6 +144,24 @@ export function WorkPage() {
       setArchiviaId(null)
       setDrawerId(null)
       load(false)
+    }
+  }
+
+  const handleDismetti = async () => {
+    if (!dismetti_id || !dismetti_data.trim()) return
+    setDismetti_loading(true)
+    try {
+      await workApi.dismetti(dismetti_id, dismetti_data, dismetti_motivo.trim() || undefined)
+      setDismetti_id(null)
+      setDismetti_data('')
+      setDismetti_motivo('')
+      load(mostraArchivio)
+    } catch (err) {
+      console.error('Errore durante dismissione:', err)
+      const message = err instanceof Error ? err.message : 'Errore durante dismissione della work'
+      alert(message)
+    } finally {
+      setDismetti_loading(false)
     }
   }
 
@@ -169,7 +196,7 @@ export function WorkPage() {
           <Button
             size="sm"
             variant={mostraArchivio ? 'secondary' : 'outline'}
-            onClick={() => { setMostraArchivio(v => !v); setSearch(''); setFiltroMetodo(null); setFiltroStatoLab(null); setFiltroProblemi(false) }}
+            onClick={() => { setMostraArchivio(v => !v); setSearch(''); setFiltroMetodo(null); setFiltroStatoLab(null); setFiltroProblemi(false); setFiltroDismesse(false) }}
           >
             <Archive className="h-4 w-4 mr-1" />
             {mostraArchivio ? 'Archiviate' : 'Archivio'}
@@ -231,6 +258,22 @@ export function WorkPage() {
         </div>
       )}
 
+      {mostraArchivio && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {/* Filtro per work dismesse - solo in archivio */}
+          <button
+            onClick={() => setFiltroDismesse(v => !v)}
+            className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
+              filtroDismesse
+                ? 'bg-slate-500 text-white border-slate-500'
+                : 'bg-background text-slate-700 border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            🗑️ Dismesse
+          </button>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="text-center text-muted-foreground py-16 text-sm">
           <FlaskConical className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -245,7 +288,19 @@ export function WorkPage() {
       ) : mostraArchivio ? (
         <div className="space-y-2">
           {filtered.map(w => (
-            <WorkRowArchivio key={w.id} work={w} metodiNomi={metodiNomi} onClick={() => setDrawerId(w.id)} initialExpanded={expandId === w.id} onEtichetta={(prep, scad) => setEtichettaTarget({ work: w, prep, scadenza: scad })} />
+            <WorkRowArchivio
+              key={w.id}
+              work={w}
+              metodiNomi={metodiNomi}
+              onClick={() => setDrawerId(w.id)}
+              initialExpanded={expandId === w.id}
+              onEtichetta={(prep, scad) => setEtichettaTarget({ work: w, prep, scadenza: scad })}
+              onDismetti={() => {
+                setDismetti_id(w.id)
+                setDismetti_data(new Date().toISOString().slice(0, 10))
+                setDismetti_motivo('')
+              }}
+            />
           ))}
         </div>
       ) : (
@@ -268,6 +323,7 @@ export function WorkPage() {
               onArchivia={() => { setDrawerId(null); setArchiviaId(w.id) }}
               onEtichetta={(prep, scad) => setEtichettaTarget({ work: w, prep, scadenza: scad })}
               initialExpanded={expandId === w.id}
+              mostraArchivio={mostraArchivio}
             />
           ))}
         </div>
@@ -286,6 +342,7 @@ export function WorkPage() {
         onEdit={handleEdit}
         onDelete={id => { setDrawerId(null); setDeleteId(id) }}
         onArchivia={!mostraArchivio ? id => { setDrawerId(null); setArchiviaId(id) } : undefined}
+        onDismetti={mostraArchivio ? (id) => { setDrawerId(null); setDismetti_id(id); setDismetti_data(new Date().toISOString().slice(0, 10)); setDismetti_motivo('') } : undefined}
         onVaiASchema={(metodoId) => { setDrawerId(null); navigate('/metodi', { state: { schemaMetodoId: metodoId } }) }}
         metodiNomi={metodiNomi}
       />
@@ -378,13 +435,54 @@ export function WorkPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog di dismissione */}
+      <Dialog open={dismetti_id !== null} onOpenChange={v => { if (!v) { setDismetti_id(null); setDismetti_data(''); setDismetti_motivo('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Dismetti Work</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2">
+              <Label className="w-20 text-xs shrink-0">Data *</Label>
+              <input
+                type="date"
+                className="flex-1 border rounded px-2 py-1 text-sm"
+                value={dismetti_data}
+                onChange={e => setDismetti_data(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Motivo (facoltativo)</Label>
+              <Textarea
+                placeholder="es. Ricetta non più usata, Preparazione errata, ..."
+                value={dismetti_motivo}
+                onChange={e => setDismetti_motivo(e.target.value)}
+                className="min-h-[80px] mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDismetti_id(null); setDismetti_data(''); setDismetti_motivo('') }} disabled={dismetti_loading}>
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!dismetti_data.trim() || dismetti_loading}
+              onClick={handleDismetti}
+            >
+              {dismetti_loading ? 'Dismissione...' : 'Dismetti'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
 
 // ─── Riga Work Archiviata ─────────────────────────────────────────────────────
 
-function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded, onEtichetta }: { work: any; metodiNomi: Record<string, string>; onClick: () => void; initialExpanded?: boolean; onEtichetta: (prep: any, scadenza: string | null) => void }) {
+function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded, onEtichetta, onDismetti }: { work: any; metodiNomi: Record<string, string>; onClick: () => void; initialExpanded?: boolean; onEtichetta: (prep: any, scadenza: string | null) => void; onDismetti?: () => void }) {
   const [expanded, setExpanded] = useState(true)
   const [storico, setStorico] = useState<any[] | null>(null)
   const [loadingStorico, setLoadingStorico] = useState(false)
@@ -442,6 +540,12 @@ function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded, onEtichet
           <Archive className="h-2.5 w-2.5 mr-1" />
           Archiviata
         </Badge>
+        {/* Nuovo badge per work dismesse nell'archivio */}
+        {work.data_dismissione && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-slate-400 text-slate-700 bg-slate-100">
+            🗑️ Dismesse • {formatDate(work.data_dismissione)}
+          </Badge>
+        )}
         {isTracciata && (
           <Button
             size="sm" variant="ghost"
@@ -450,6 +554,17 @@ function WorkRowArchivio({ work, metodiNomi, onClick, initialExpanded, onEtichet
             title={expanded ? 'Nascondi storico preparazioni' : 'Mostra storico preparazioni'}
           >
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </Button>
+        )}
+        {/* Pulsante Dismetti tutte le preparazioni per work archiviate e non ancora dismesse */}
+        {onDismetti && !work.data_dismissione && (
+          <Button
+            size="sm" variant="outline"
+            className="h-6 text-[10px] px-2 text-red-600 border-red-300 hover:bg-red-50 shrink-0"
+            onClick={e => { e.stopPropagation(); onDismetti() }}
+            title="Dismetti tutte le preparazioni"
+          >
+            🗑️ Dismetti tutte le preparazioni
           </Button>
         )}
       </div>
@@ -520,6 +635,7 @@ function WorkRow({
   onArchivia,
   onEtichetta,
   initialExpanded,
+  mostraArchivio,
 }: {
   work: any
   metodiNomi?: Record<string, string>
@@ -531,6 +647,7 @@ function WorkRow({
   onArchivia?: () => void
   onEtichetta?: (prep: any, scadenza: string | null) => void
   initialExpanded?: boolean
+  mostraArchivio?: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
   const [storico, setStorico] = useState<any[] | null>(null)
@@ -607,6 +724,11 @@ function WorkRow({
           {work.codice && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 font-mono border-slate-300 text-slate-600 bg-slate-50">
               {work.codice}
+            </Badge>
+          )}
+          {mostraArchivio && work?.data_dismissione && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-slate-400 text-slate-700 bg-slate-100">
+              🗑️ Dismesse • {formatDate(work.data_dismissione)}
             </Badge>
           )}
           {onPrepara && isTracciata && (
@@ -751,6 +873,16 @@ function WorkRow({
               title="Archivia work"
             >
               <Archive className="h-3 w-3" />
+            </Button>
+          )}
+          {mostraArchivio && work?.archiviato && !work?.data_dismissione && (
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[10px] px-2 text-red-600 border-red-300 hover:bg-red-50"
+              onClick={() => { setDismetti_id(work.id); setDismetti_data(new Date().toISOString().slice(0, 10)); setDismetti_motivo('') }}
+              title="Dismetti tutte le preparazioni"
+            >
+              🗑️ Dismetti tutte le preparazioni
             </Button>
           )}
           {isTracciata && (

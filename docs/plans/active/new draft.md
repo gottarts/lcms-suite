@@ -16,6 +16,8 @@ nelle card delle work in lavagna è sempre visibile il tasto ricarica che deve c
 
  ## importante
 
+### audit work e work dismesse
+quando una work finisce in archiviata deve poter essere dismessa in maniera che non al di la della scadenza non appaia piu nell audit. attualmente la scadenza dipende dalla ricetta e anche se archiviata la ricetta la work compare ancora tra le work utilizzabili anche se ha crm scaduti. Esiste anche la possibilita che una work venga ripreparata perche finita fisicamente. in quel caso il problema è che in auti mi copare fino a scadenza una work non piu presente fisicamente in lab.
 
  ## altri
 BAZZI - SUGGERIMENTI

@@ -273,6 +273,7 @@ export function registerDashboardIpc(): void {
       JOIN work_metodi wm ON wm.work_id = w.id
       WHERE wm.metodo_id = @metodo_id
         AND w.validita_mesi IS NOT NULL
+        AND (w.data_dismissione IS NULL OR w.data_dismissione > @data)
         AND EXISTS (
           SELECT 1 FROM work_preparazioni wp2
           WHERE wp2.work_id = w.id AND wp2.data_prep <= @data

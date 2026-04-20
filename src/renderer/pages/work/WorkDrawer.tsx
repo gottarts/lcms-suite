@@ -20,6 +20,7 @@ interface WorkDrawerProps {
   onEdit: (work: any) => void
   onDelete: (id: number) => void
   onArchivia?: (id: number) => void
+  onDismetti?: (id: number) => void
   onVaiASchema?: (metodoId: string) => void
   metodiNomi?: Record<string, string>
   openPrepForm?: boolean
@@ -188,7 +189,7 @@ function buildWorkSchema(dbWork: any, allDbWorks: Map<number, any>): WorkInSchem
 
 // ── Componente principale ────────────────────────────────────────────────────
 
-export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVaiASchema, metodiNomi, openPrepForm }: WorkDrawerProps) {
+export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onDismetti, onVaiASchema, metodiNomi, openPrepForm }: WorkDrawerProps) {
   const [work, setWork]           = useState<any>(null)
   const [workChain, setWorkChain] = useState<Map<number, any>>(new Map())
   const [storico, setStorico]     = useState<any[]>([])
@@ -466,6 +467,11 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
             {statoBadge.label}
           </Badge>
         )}
+        {work?.data_dismissione && (
+          <Badge variant="outline" className="border-slate-400 text-slate-700 bg-slate-100">
+            🗑️ Dismetti tutte le preparazioni • {formatDate(work.data_dismissione)}
+          </Badge>
+        )}
       </>}
     >
       <div className="space-y-4">
@@ -506,6 +512,16 @@ export function WorkDrawer({ workId, onClose, onEdit, onDelete, onArchivia, onVa
             {onArchivia && (
               <Button size="sm" variant="outline" className="text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => onArchivia(work.id)}>
                 <Archive className="h-3.5 w-3.5 mr-1" /> Archivia
+              </Button>
+            )}
+            {onDismetti && work?.archiviato && !work?.data_dismissione && (
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="text-red-600 border-red-300 hover:bg-red-50" 
+                onClick={() => onDismetti(work.id)}
+              >
+                🗑️ Dismetti tutte le preparazioni
               </Button>
             )}
             <DropdownMenu onOpenChange={open => { if (open) loadStorico() }}>

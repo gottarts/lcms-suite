@@ -540,6 +540,28 @@ export function registerWorkIpc(): void {
     return { ok: true }
   })
 
+  // ── DISMETTI: dismissione work indipendente da archiviazione ──────────────
+  ipcMain.handle('work:dismetti', (_, id: number, data_dismissione: string, motivo_dismissione?: string) => {
+    const db = getDb()
+    
+    // Controlla se la work è già dismessa
+    const existing = db.prepare('SELECT data_dismissione FROM work WHERE id = ?').get(id) as any
+    if (!existing) {
+      throw new Error('Work non trovata')
+    }
+    if (existing.data_dismissione) {
+      throw new Error('Questa work è già stata dismessa il ' + existing.data_dismissione)
+    }
+    
+    db.prepare(`
+      UPDATE work SET
+        data_dismissione = ?,
+        motivo_dismissione = ?
+      WHERE id = ?
+    `).run(data_dismissione, motivo_dismissione || null, id)
+    return { ok: true }
+  })
+
   // ── SET-SOSTITUITO-DA: imposta il link di tracciabilità sulla work archiviata
   ipcMain.handle('work:set-sostituito-da', (_, oldId: number, newId: number) => {
     getDb().prepare(`
