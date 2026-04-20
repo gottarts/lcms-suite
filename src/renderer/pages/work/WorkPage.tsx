@@ -38,6 +38,7 @@ export function WorkPage() {
   const [addToSchemaWork, setAddToSchemaWork] = useState<{ id: number; nome: string } | null>(null)
   const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null)
   const [filtroStatoLab, setFiltroStatoLab] = useState<'da_preparare' | null>(null)
+  const [filtroProblemi, setFiltroProblemi] = useState(false) // Nuovo filtro per work con problemi
   const [expandId, setExpandId] = useState<number | null>(null)
   const [etichettaTarget, setEtichettaTarget] = useState<{ work: any; prep: any; scadenza: string | null } | null>(null)
   const [suggestOperatore, setSuggestOperatore] = useState<string[]>([])
@@ -96,6 +97,10 @@ export function WorkPage() {
     if (filtroStatoLab === 'da_preparare') {
       result = result.filter(w => ['non_preparata', 'scaduta', 'in_scadenza'].includes(w.stato_lab))
     }
+    // Filtro per work con problemi (almeno una delle flag problematiche è vera)
+    if (filtroProblemi) {
+      result = result.filter(w => w.bloccata || w.ha_crm_scaduti || w.ha_prep_scadute || w.ha_figlie_obsolete || w.ha_sorgente_rinnovata)
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(w =>
@@ -105,7 +110,7 @@ export function WorkPage() {
       )
     }
     return result
-  }, [works, search, filtroMetodo, filtroStatoLab])
+  }, [works, search, filtroMetodo, filtroStatoLab, filtroProblemi])
 
   const metodiConWork = useMemo(() => {
     const ids = new Set<string>()
@@ -164,7 +169,7 @@ export function WorkPage() {
           <Button
             size="sm"
             variant={mostraArchivio ? 'secondary' : 'outline'}
-            onClick={() => { setMostraArchivio(v => !v); setSearch(''); setFiltroMetodo(null); setFiltroStatoLab(null) }}
+            onClick={() => { setMostraArchivio(v => !v); setSearch(''); setFiltroMetodo(null); setFiltroStatoLab(null); setFiltroProblemi(false) }}
           >
             <Archive className="h-4 w-4 mr-1" />
             {mostraArchivio ? 'Archiviate' : 'Archivio'}
@@ -200,6 +205,18 @@ export function WorkPage() {
                 : 'bg-background text-amber-700 border-amber-300 hover:bg-amber-50'
             }`}
           >Da preparare</button>
+          {/* Nuovo filtro per work con problemi */}
+          <button
+            onClick={() => setFiltroProblemi(v => !v)}
+            className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
+              filtroProblemi
+                ? 'bg-red-500 text-white border-red-500'
+                : 'bg-background text-red-700 border-red-300 hover:bg-red-50'
+            }`}
+          >
+            <AlertCircle className="h-3 w-3 inline mr-1 -mt-0.5" />
+            Problemi
+          </button>
           {metodiConWork.map(mid => (
             <button
               key={mid}
