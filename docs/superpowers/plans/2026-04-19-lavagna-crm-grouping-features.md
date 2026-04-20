@@ -228,6 +228,7 @@ git commit -m "feat(lavagna): click su card CRM aggiorna selSrcs condiviso per C
 **File:**
 - Modify: `src/renderer/pages/metodi/SchemaCalibrazione.lavagna.tsx`
 
+
 - [ ] **Step 1: Aggiungi pulsante × su ModuloMixNode**
 
 In `ModuloMixNode` (riga 730–808), aggiungi il pulsante × nell'header, passando `onRemoveMix` tramite `data`:
