@@ -61,6 +61,7 @@ const LAYOUT = {
   ROW_GAP: 80,
   Y_START: 40,
 }
+const GROUP_GAP = 120 // Spazio verticale extra tra cluster CRM
 const SIDEBAR_W = 240
 const LS_KEY_PREFIX = 'lcms:lavagna:positions:v2:'
 const LS_VERSION = 2
@@ -373,7 +374,7 @@ function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[], clusters?: Ma
     return LAYOUT.COL_WORK_BASE + ci * LAYOUT.COL_WORK_GAP
   }
 
-  // Calcola Y stacked per colonna con ROW_GAP
+  // Calcola Y stacked per colonna con ROW_GAP e GROUP_GAP
   // Se clusters forniti: riordina ogni colonna in modo che i nodi dello stesso
   // cluster siano consecutivi (minimizza dimensioni GroupNode).
   const positions: Positions = {}
@@ -409,11 +410,22 @@ function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[], clusters?: Ma
     }
 
     let cursorY = LAYOUT.Y_START
+    let currentCluster: string | null = null
+
     for (const n of ordered) {
       const m = modById.get(n.id)
       if (!m) continue
+
+      const clusterId = nodeClusterMap.get(n.id) || null
+
+      // Aggiungi gap quando si cambia cluster (o si passa a nodi senza cluster)
+      if (currentCluster !== clusterId && cursorY > LAYOUT.Y_START) {
+        cursorY += GROUP_GAP
+      }
+
       positions[n.id] = { x: xOf(k), y: cursorY }
       cursorY += estimatedHeight(m) + LAYOUT.ROW_GAP
+      currentCluster = clusterId
     }
   }
   return positions
@@ -1229,7 +1241,7 @@ function ModuloWorkNode({ data }: NodeProps<Node<WorkNodeData>>) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Custom Node: Gruppo CRM con analiti in comune
+// Custom Node: Gruppo CRM con analiti in comune (modificato per essere draggabile)
 // ─────────────────────────────────────────────────────────────────────────────
 type CrmGroupNodeData = { analitiCondivisi: string[] }
 function CrmGroupNode({ data }: NodeProps<Node<CrmGroupNodeData>>) {
@@ -1241,12 +1253,13 @@ function CrmGroupNode({ data }: NodeProps<Node<CrmGroupNodeData>>) {
       width: '100%', height: '100%',
       border: `1.5px dashed ${C.page.brd2}`, borderRadius: 10,
       background: 'rgba(245,245,243,0.55)', boxSizing: 'border-box',
-      pointerEvents: 'none',
+      cursor: 'grab',               // ← indica che l'area è trascinabile
     }}>
       <div style={{
         padding: '5px 10px', fontSize: 9, color: C.page.t2, fontWeight: 600,
         letterSpacing: '0.08em', textTransform: 'uppercase',
-        display: 'flex', flexWrap: 'wrap', gap: 3, pointerEvents: 'none',
+        display: 'flex', flexWrap: 'wrap', gap: 3,
+        pointerEvents: 'none',       // i badge non devono interferire con il drag del gruppo
       }}>
         {visible.map(n => (
           <span key={n} style={{ background: C.page.bg, border: `1px solid ${C.page.brd}`, borderRadius: 2, padding: '0 4px' }}>{n}</span>
@@ -1424,7 +1437,7 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
         type: 'group',
         position: { x: dims.x, y: dims.y },
         style: { width: dims.width, height: dims.height },
-        draggable: false,
+        draggable: true,          // ← abilita il trascinamento del gruppo
         selectable: false,
         data: { analitiCondivisi: cluster.analitiCondivisi } as CrmGroupNodeData,
         zIndex: -1,
@@ -1516,18 +1529,45 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
   }, [selSrcs, setRfNodes])
 
   // Persisti posizione a fine drag (converti relativa→assoluta per nodi in gruppo)
+  // Gestisce anche il trascinamento dei gruppi, aggiornando le posizioni assolute delle card figlie.
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     onNodesChange(changes)
     let dragging = false
+
     for (const ch of changes) {
       if (ch.type === 'position') {
-        if (ch.dragging) { dragging = true }
-        else if (ch.position) {
-          const clusterId = nodeToCluster.get(ch.id)
-          const groupNode = clusterId ? rfNodes.find(n => n.id === clusterId) : undefined
-          const absX = groupNode ? ch.position.x + groupNode.position.x : ch.position.x
-          const absY = groupNode ? ch.position.y + groupNode.position.y : ch.position.y
-          setPosition(ch.id, absX, absY)
+        if (ch.dragging) {
+          dragging = true
+        } else if (ch.position) {
+          const node = rfNodes.find(n => n.id === ch.id)
+          if (!node) continue
+
+          if (node.type === 'group') {
+            // Spostamento di un gruppo → aggiorna posizioni assolute di tutte le card figlie
+            const groupId = ch.id
+            const newGroupPos = ch.position
+            const oldGroupNode = rfNodes.find(n => n.id === groupId)
+            if (!oldGroupNode) continue
+
+            const dx = newGroupPos.x - oldGroupNode.position.x
+            const dy = newGroupPos.y - oldGroupNode.position.y
+
+            const childNodes = rfNodes.filter(n => n.parentId === groupId)
+            for (const child of childNodes) {
+              const oldChildAbs = {
+                x: oldGroupNode.position.x + child.position.x,
+                y: oldGroupNode.position.y + child.position.y,
+              }
+              setPosition(child.id, oldChildAbs.x + dx, oldChildAbs.y + dy)
+            }
+          } else {
+            // Card normale (mix, sng, work, analiti)
+            const clusterId = nodeToCluster.get(ch.id)
+            const groupNode = clusterId ? rfNodes.find(n => n.id === clusterId) : undefined
+            const absX = groupNode ? ch.position.x + groupNode.position.x : ch.position.x
+            const absY = groupNode ? ch.position.y + groupNode.position.y : ch.position.y
+            setPosition(ch.id, absX, absY)
+          }
         }
       }
     }
