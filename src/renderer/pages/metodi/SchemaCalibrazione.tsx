@@ -764,10 +764,7 @@ export default function SchemaCalibrazione({ metodoId, metodoNome, onClose }: Sc
       const cols = prev.map(c => [...c])
       const w    = cols[colIdx]?.[workIdx]
       const wid  = w?.id
-      if (w?.dbId) {
-        // Rimuovi solo il link al metodo — non archiviare mai dallo schema
-        workApi.removeFromMetodo(w.dbId, metodoId).catch(() => {})
-      }
+      if (w?.dbId) workApi.removeFromMetodo(w.dbId, metodoId).catch(() => {})
       cols[colIdx].splice(workIdx, 1)
       if (wid) setSelSrcs(p => { const m = new Map(p); m.delete(wid); return m })
       // Rimuovi colonne vuote in coda (mantieni la 0)
