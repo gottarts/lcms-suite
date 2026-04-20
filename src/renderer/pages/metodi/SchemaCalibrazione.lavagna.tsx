@@ -319,7 +319,7 @@ function computeEdges(moduli: ModuloMeta[]): Edge[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // Layout iniziale: colonne L→R fisse + dagre per ordinare Y riducendo incroci
 // ─────────────────────────────────────────────────────────────────────────────
-function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[]): Positions {
+function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[], clusters?: Map<string, { nodeIds: string[]; analitiCondivisi: string[] }>): Positions {
   // 1) Costruisco un grafo dagre solo per capire l'ordinamento verticale
   //    suggerito da una layout Left→Right standard.
   const g = new dagre.graphlib.Graph()
@@ -374,11 +374,42 @@ function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[]): Positions {
   }
 
   // Calcola Y stacked per colonna con ROW_GAP
+  // Se clusters forniti: riordina ogni colonna in modo che i nodi dello stesso
+  // cluster siano consecutivi (minimizza dimensioni GroupNode).
   const positions: Positions = {}
   const modById = new Map<string, ModuloMeta>(moduli.map(m => [m.id, m]))
+
+  // Mappa nodeId → clusterId (solo mix/sng)
+  const nodeClusterMap = new Map<string, string>()
+  if (clusters) {
+    let ci = 0
+    for (const [, cl] of clusters) {
+      const gid = `c${ci++}`
+      for (const id of cl.nodeIds) nodeClusterMap.set(id, gid)
+    }
+  }
+
   for (const [k, arr] of grouped) {
+    // Se clusters presenti, riordina: prima i cluster raggruppati, poi i singoli
+    let ordered = arr
+    if (clusters && nodeClusterMap.size > 0) {
+      const clusterOrder = new Map<string, number>()
+      let clusterRank = 0
+      for (const n of arr) {
+        const cid = nodeClusterMap.get(n.id)
+        if (cid && !clusterOrder.has(cid)) clusterOrder.set(cid, clusterRank++ * 1000)
+      }
+      ordered = [...arr].sort((a, b) => {
+        const ca = nodeClusterMap.get(a.id); const cb = nodeClusterMap.get(b.id)
+        if (ca && cb && ca === cb) return a.dagreY - b.dagreY
+        const rankA = ca ? (clusterOrder.get(ca) ?? 0) + a.dagreY : 1e9 + a.dagreY
+        const rankB = cb ? (clusterOrder.get(cb) ?? 0) + b.dagreY : 1e9 + b.dagreY
+        return rankA - rankB
+      })
+    }
+
     let cursorY = LAYOUT.Y_START
-    for (const n of arr) {
+    for (const n of ordered) {
       const m = modById.get(n.id)
       if (!m) continue
       positions[n.id] = { x: xOf(k), y: cursorY }
@@ -391,7 +422,7 @@ function computeInitialLayout(moduli: ModuloMeta[], edges: Edge[]): Positions {
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook: posizioni in localStorage (per metodoId) — chiave v2
 // ─────────────────────────────────────────────────────────────────────────────
-function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[], edges: Edge[]) {
+function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[], edges: Edge[], clusters: Map<string, { nodeIds: string[]; analitiCondivisi: string[] }>) {
   const key = LS_KEY_PREFIX + metodoId
   const [positions, setPositions] = useState<Positions>(() => {
     try {
@@ -412,7 +443,7 @@ function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[], edges: Edge
     setPositions(prev => {
       const missing = moduli.filter(m => !(m.id in prev))
       if (missing.length === 0) return prev
-      const auto = computeInitialLayout(moduli, edges)
+      const auto = computeInitialLayout(moduli, edges, clusters)
       const merged = { ...prev }
       for (const m of missing) merged[m.id] = auto[m.id] ?? { x: 0, y: 0 }
       return merged
@@ -443,10 +474,10 @@ function useLavagnaPositions(metodoId: string, moduli: ModuloMeta[], edges: Edge
 
   const resetLayout = useCallback(() => {
     try { localStorage.removeItem(key) } catch { /* noop */ }
-    const auto = computeInitialLayout(moduli, edges)
+    const auto = computeInitialLayout(moduli, edges, clusters)
     dirtyRef.current = true
     setPositions(auto)
-  }, [key, moduli, edges])
+  }, [key, moduli, edges, clusters])
 
   return { positions, setPosition, resetLayout }
 }
@@ -832,6 +863,13 @@ function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }} title={nomeMix}>{nomeMix}</div>
         </div>
+        {sBadge && sBadge.color !== C.page.th && (
+          <span style={{
+            fontSize: 9, padding: '2px 5px', borderRadius: 3,
+            background: sBadge.color, color: '#fff',
+            whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 700,
+          }}>{sBadge.color === '#dc2626' ? 'SCAD' : 'SCAD~'}</span>
+        )}
         {meta.lottiAlt > 0 && (
           <span style={{
             fontSize: 9, padding: '2px 5px', borderRadius: 3,
@@ -912,6 +950,13 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
   const isNeat = (crm.forma || '').toLowerCase().includes('neat')
   const sBadge = scadenzaBadge(crm.scadenza_prodotto)
   const rival = crm.ultima_rivalidazione
+  // Badge alert prep NEAT scadute/in scadenza
+  const worstPrepBadge = isNeat ? meta.preps.reduce<{ color: string; label: string } | null>((worst, p) => {
+    const b = scadenzaBadge(p.scadenza)
+    if (!b || b.color === C.page.th) return worst
+    if (!worst) return b
+    return b.color === '#dc2626' ? b : worst
+  }, null) : null
   const MAX_PREP = 2
   const preps = prepExpanded ? meta.preps : meta.preps.slice(0, MAX_PREP)
   const prepExtra = meta.preps.length - MAX_PREP
@@ -936,6 +981,20 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }} title={crm.nome}>{crm.nome}</div>
         </div>
+        {sBadge && sBadge.color !== C.page.th && (
+          <span style={{
+            fontSize: 9, padding: '2px 5px', borderRadius: 3,
+            background: sBadge.color, color: '#fff',
+            whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 700,
+          }}>{sBadge.color === '#dc2626' ? 'SCAD' : 'SCAD~'}</span>
+        )}
+        {worstPrepBadge && (
+          <span style={{
+            fontSize: 9, padding: '2px 5px', borderRadius: 3,
+            background: worstPrepBadge.color, color: '#fff',
+            whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 700,
+          }}>{worstPrepBadge.color === '#dc2626' ? 'NEAT SCAD' : 'NEAT~'}</span>
+        )}
         {data.onRemoveSng && (
           <button
             onClick={(e) => { e.stopPropagation(); data.onRemoveSng!(meta.id) }}
@@ -1017,6 +1076,7 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
 type WorkNodeData = {
   meta: Extract<ModuloMeta, { kind: 'work' }>
   highlighted: boolean
+  alertBadge?: { color: string; label: string } | null
   onOpenDrawer?: (work: WorkInSchema, colIdx: number) => void
   onRicarica?: (workId: number) => void
   onDelete?: (colIdx: number, workIdx: number) => void
@@ -1051,6 +1111,15 @@ function ModuloWorkNode({ data }: NodeProps<Node<WorkNodeData>>) {
             fontSize: 13.5, fontWeight: 700, color: col.text,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }} title={w.nome}>{w.nome}</div>
+        </div>
+        {data.alertBadge && (
+          <span style={{
+            fontSize: 9, padding: '2px 5px', borderRadius: 3,
+            background: data.alertBadge.color, color: '#fff',
+            whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 700, alignSelf: 'flex-start',
+          }}>{data.alertBadge.label}</span>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
           <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
             {w.dbId != null && data.onOpenDrawer && (
               <button onClick={(e) => { e.stopPropagation(); data.onOpenDrawer!(w, meta.colIdx) }}
@@ -1166,6 +1235,29 @@ function CrmGroupNode({ data }: NodeProps<Node<CrmGroupNodeData>>) {
   )
 }
 
+// Calcola il badge alert peggiore per una Work (CRM scaduto, dismisso o prep NEAT scaduta)
+function workAlertBadge(work: WorkInSchema, crmById: Map<number, CrmItem>): { color: string; label: string } | null {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  let worst: { color: string; label: string } | null = null
+  const upgrade = (b: { color: string; label: string } | null) => {
+    if (!b) return
+    if (!worst || (worst.color !== '#dc2626' && b.color === '#dc2626')) worst = b
+  }
+  for (const src of work.srcs) {
+    if (src.tipo === 'prep' && src.scadenza) {
+      const b = scadenzaBadge(src.scadenza)
+      if (b && b.color !== C.page.th) upgrade({ color: b.color, label: b.color === '#dc2626' ? 'NEAT SCAD' : 'NEAT~' })
+    } else if (src.tipo === 'mix' || src.tipo === 'sng') {
+      const crm = crmById.get(Number(src.id))
+      if (crm) {
+        const b = scadenzaBadge(crm.scadenza_prodotto)
+        if (b && b.color !== C.page.th) upgrade({ color: b.color, label: b.color === '#dc2626' ? 'CRM SCAD' : 'CRM~' })
+      }
+    }
+  }
+  return worst
+}
+
 // nodeTypes definito fuori dal componente per evitare ri-render spuri di RF
 const nodeTypes = {
   mix: ModuloMixNode,
@@ -1187,6 +1279,8 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     onRemoveMix, onRemoveSng,
   } = props
 
+  const crmById = useMemo(() => new Map(crmItems.map(c => [c.id, c])), [crmItems])
+
   const moduli = useMemo(
     () => deriveModuli(analiti, crmItems, removedMix, mixLottoSel, workCols),
     [analiti, crmItems, removedMix, mixLottoSel, workCols],
@@ -1207,7 +1301,7 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
   const moduliEdges = useMemo(() => computeEdges(moduli), [moduli])
   const analitiEdgesBase = useMemo(() => computeAnalitiEdges(analiti, moduli), [analiti, moduli])
 
-  const { positions, setPosition, resetLayout } = useLavagnaPositions(metodoId, moduli, moduliEdges)
+  const { positions, setPosition, resetLayout } = useLavagnaPositions(metodoId, moduli, moduliEdges, clusters)
 
   const [filtroSidebar, setFiltroSidebar] = useState<FiltroSidebar>('tutti')
   const [hoveredAnalita, setHoveredAnalita] = useState<string | null>(null)
@@ -1246,12 +1340,13 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     return new Set<string>()
   }, [hoveredAnalita, selectedId, connectedToSelected, analiti, removedMix])
 
-  // Merge: evidenzia anche i CRM selezionati in selSrcs
+  // Merge: evidenzia anche i CRM/Work selezionati in selSrcs
   const highlightedIdsWithSel = useMemo(() => {
     const out = new Set(highlightedIds)
     for (const m of moduli) {
       if (m.kind === 'mix' && selSrcs.has(m.mixId)) out.add(m.id)
       if (m.kind === 'sng' && selSrcs.has(m.id)) out.add(m.id)
+      if (m.kind === 'work' && selSrcs.has(m.id)) out.add(m.id)
     }
     return out
   }, [highlightedIds, moduli, selSrcs])
@@ -1329,10 +1424,10 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
       if (m.kind === 'sng') {
         return { ...base, type: 'sng', data: { meta: m, highlighted: false, onRemoveSng } as SngNodeData }
       }
-      return { ...base, type: 'work', data: { meta: m, highlighted: false, onOpenDrawer: onOpenWorkDrawer, onRicarica: onRicaricaWork, onDelete: onDeleteWork } as WorkNodeData }
+      return { ...base, type: 'work', data: { meta: m, highlighted: false, alertBadge: workAlertBadge(m.work, crmById), onOpenDrawer: onOpenWorkDrawer, onRicarica: onRicaricaWork, onDelete: onDeleteWork } as WorkNodeData }
     })
     return [...groupNodes, analitiNode, ...moduliNodes]
-  }, [moduli, positions, analitiPos, analitiNodeData, clusters, nodeToCluster, onRemoveMix, onRemoveSng, onOpenWorkDrawer, onRicaricaWork, onDeleteWork])
+  }, [moduli, positions, analitiPos, analitiNodeData, clusters, nodeToCluster, crmById, onRemoveMix, onRemoveSng, onOpenWorkDrawer, onRicaricaWork, onDeleteWork])
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(structuralNodes)
 
@@ -1389,11 +1484,10 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     const id = node.id
-    // Selezione visiva (highlight connessioni)
-    setSelectedId(prev => prev === id ? null : id)
     setHoveredAnalita(null)
+    // Sempre aggiorna selezione visiva (highlight frecce)
+    setSelectedId(prev => prev === id ? null : id)
 
-    // Toggle selSrcs per CRM mix e sng (aggiorna lo stato condiviso nel parent)
     const m = moduli.find(x => x.id === id)
     if (!m) return
 
@@ -1401,9 +1495,10 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
       onToggleMix(m.mixId)
     } else if (m.kind === 'sng' && onToggleSng) {
       onToggleSng(m.id)
+    } else if (m.kind === 'work' && onToggleWork) {
+      onToggleWork(m.work, m.colIdx)
     }
-    // I nodi Work non aggiornano selSrcs al click semplice
-  }, [moduli, onToggleMix, onToggleSng])
+  }, [moduli, onToggleMix, onToggleSng, onToggleWork])
 
   const handlePaneClick = useCallback(() => {
     setSelectedId(null)
