@@ -167,6 +167,70 @@ function deriveModuli(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Clustering: raggruppa CRM (mix/sng) con analiti in comune (union-find)
+// ─────────────────────────────────────────────────────────────────────────────
+function computeClusters(
+  moduli: ModuloMeta[],
+  analiti: AnalitoItem[],
+): Map<string, { nodeIds: string[]; analitiCondivisi: string[] }> {
+  const nodeAnaliti = new Map<string, Set<string>>()
+  for (const m of moduli) {
+    if (m.kind !== 'mix' && m.kind !== 'sng') continue
+    const covered = new Set<string>()
+    for (const a of analiti) {
+      if (m.kind === 'mix' && m.mixIds.some(mid => a.mixIds.includes(mid))) covered.add(a.nome)
+      if (m.kind === 'sng' && a.sngIds.includes(m.id)) covered.add(a.nome)
+    }
+    if (covered.size > 0) nodeAnaliti.set(m.id, covered)
+  }
+  const parent = new Map<string, string>()
+  const find = (x: string): string => {
+    if (!parent.has(x)) parent.set(x, x)
+    if (parent.get(x) !== x) parent.set(x, find(parent.get(x)!))
+    return parent.get(x)!
+  }
+  const union = (a: string, b: string) => { parent.set(find(a), find(b)) }
+  const nodeIds = [...nodeAnaliti.keys()]
+  for (let i = 0; i < nodeIds.length; i++) {
+    for (let j = i + 1; j < nodeIds.length; j++) {
+      const ai = nodeAnaliti.get(nodeIds[i])!
+      const aj = nodeAnaliti.get(nodeIds[j])!
+      for (const nome of ai) { if (aj.has(nome)) { union(nodeIds[i], nodeIds[j]); break } }
+    }
+  }
+  const groups = new Map<string, string[]>()
+  for (const id of nodeIds) {
+    const root = find(id)
+    const arr = groups.get(root) || []; arr.push(id); groups.set(root, arr)
+  }
+  const result = new Map<string, { nodeIds: string[]; analitiCondivisi: string[] }>()
+  for (const [root, ids] of groups) {
+    if (ids.length < 2) continue
+    const countMap = new Map<string, number>()
+    for (const id of ids) for (const nome of nodeAnaliti.get(id)!) countMap.set(nome, (countMap.get(nome) || 0) + 1)
+    const condivisi = [...countMap.entries()].filter(([, cnt]) => cnt >= 2).map(([nome]) => nome)
+    result.set(root, { nodeIds: ids, analitiCondivisi: condivisi })
+  }
+  return result
+}
+
+const GROUP_PADDING = 60
+
+function groupDimensions(nodeIds: string[], moduli: ModuloMeta[], positions: Positions) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const id of nodeIds) {
+    const pos = positions[id]; if (!pos) continue
+    const m = moduli.find(x => x.id === id)
+    const w = m ? LAYOUT.MODULE_W[m.kind] : 260
+    const h = m ? estimatedHeight(m) : 200
+    minX = Math.min(minX, pos.x); minY = Math.min(minY, pos.y)
+    maxX = Math.max(maxX, pos.x + w); maxY = Math.max(maxY, pos.y + h)
+  }
+  if (!isFinite(minX)) return { x: 0, y: 0, width: 400, height: 300 }
+  return { x: minX - GROUP_PADDING, y: minY - GROUP_PADDING, width: maxX - minX + GROUP_PADDING * 2, height: maxY - minY + GROUP_PADDING * 2 }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Altezza stimata del modulo (l'altezza reale può essere leggermente diversa
 // ma questa stima serve solo a dagre per ordinare le righe)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -739,12 +803,14 @@ type MixNodeData = { meta: Extract<ModuloMeta, { kind: 'mix' }>; highlighted: bo
 function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
   const meta = data.meta
   const crm = meta.crm
+  const [expanded, setExpanded] = useState(false)
   const sBadge = scadenzaBadge(crm.scadenza_prodotto)
   const rival = crm.ultima_rivalidazione
   const nomeMix = crm.mix || meta.mixId
   const nComp = meta.comps.length
-  const compVisible = meta.comps.slice(0, 6)
-  const rimanenti = nComp - compVisible.length
+  const MAX_CHIP = 4
+  const compVisible = expanded ? meta.comps : meta.comps.slice(0, MAX_CHIP)
+  const rimanenti = nComp - MAX_CHIP
 
   return (
     <CardBase
@@ -816,12 +882,19 @@ function ModuloMixNode({ data }: NodeProps<Node<MixNodeData>>) {
             whiteSpace: 'nowrap', verticalAlign: 'bottom',
           }}>{n}</span>
         ))}
-        {rimanenti > 0 && (
-          <span style={{
-            display: 'inline-block', fontSize: 9.5,
-            padding: '1px 5px', margin: '1px 3px',
-            color: C.page.t2, fontWeight: 600,
-          }}>+{rimanenti}</span>
+        {!expanded && rimanenti > 0 && (
+          <button onClick={(e) => { e.stopPropagation(); setExpanded(true) }} style={{
+            display: 'inline-block', fontSize: 9.5, padding: '1px 6px', margin: '1px 3px',
+            background: 'transparent', border: `1px solid ${C.mix.border}`,
+            borderRadius: 2, color: C.mix.text, cursor: 'pointer',
+          }}>▼ +{rimanenti}</button>
+        )}
+        {expanded && nComp > MAX_CHIP && (
+          <button onClick={(e) => { e.stopPropagation(); setExpanded(false) }} style={{
+            display: 'block', marginTop: 4, fontSize: 9.5, padding: '1px 6px',
+            background: 'transparent', border: `1px solid ${C.mix.border}`,
+            borderRadius: 2, color: C.mix.text, cursor: 'pointer',
+          }}>▲ Comprimi</button>
         )}
       </div>
     </CardBase>
@@ -835,11 +908,13 @@ type SngNodeData = { meta: Extract<ModuloMeta, { kind: 'sng' }>; highlighted: bo
 function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
   const meta = data.meta
   const crm = meta.crm
+  const [prepExpanded, setPrepExpanded] = useState(false)
   const isNeat = (crm.forma || '').toLowerCase().includes('neat')
   const sBadge = scadenzaBadge(crm.scadenza_prodotto)
   const rival = crm.ultima_rivalidazione
-  const preps = meta.preps.slice(0, 2)
-  const prepExtra = meta.preps.length - preps.length
+  const MAX_PREP = 2
+  const preps = prepExpanded ? meta.preps : meta.preps.slice(0, MAX_PREP)
+  const prepExtra = meta.preps.length - MAX_PREP
 
   return (
     <CardBase
@@ -916,8 +991,19 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
               </div>
             )
           })}
-          {prepExtra > 0 && (
-            <div style={{ fontSize: 9.5, color: C.page.th, marginTop: 3 }}>+{prepExtra} altre preparazioni</div>
+          {!prepExpanded && prepExtra > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); setPrepExpanded(true) }} style={{
+              marginTop: 3, fontSize: 9.5, padding: '1px 6px',
+              background: 'transparent', border: `1px solid ${C.sng.border}`,
+              borderRadius: 2, color: C.sng.text, cursor: 'pointer',
+            }}>▼ +{prepExtra} prep.</button>
+          )}
+          {prepExpanded && meta.preps.length > MAX_PREP && (
+            <button onClick={(e) => { e.stopPropagation(); setPrepExpanded(false) }} style={{
+              marginTop: 3, fontSize: 9.5, padding: '1px 6px',
+              background: 'transparent', border: `1px solid ${C.sng.border}`,
+              borderRadius: 2, color: C.sng.text, cursor: 'pointer',
+            }}>▲ Comprimi</button>
           )}
         </div>
       )}
@@ -928,7 +1014,13 @@ function ModuloSngNode({ data }: NodeProps<Node<SngNodeData>>) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom Node: Work
 // ─────────────────────────────────────────────────────────────────────────────
-type WorkNodeData = { meta: Extract<ModuloMeta, { kind: 'work' }>; highlighted: boolean }
+type WorkNodeData = {
+  meta: Extract<ModuloMeta, { kind: 'work' }>
+  highlighted: boolean
+  onOpenDrawer?: (work: WorkInSchema, colIdx: number) => void
+  onRicarica?: (workId: number) => void
+  onDelete?: (colIdx: number, workIdx: number) => void
+}
 function ModuloWorkNode({ data }: NodeProps<Node<WorkNodeData>>) {
   const meta = data.meta
   const w = meta.work
@@ -959,6 +1051,26 @@ function ModuloWorkNode({ data }: NodeProps<Node<WorkNodeData>>) {
             fontSize: 13.5, fontWeight: 700, color: col.text,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }} title={w.nome}>{w.nome}</div>
+          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+            {w.dbId != null && data.onOpenDrawer && (
+              <button onClick={(e) => { e.stopPropagation(); data.onOpenDrawer!(w, meta.colIdx) }}
+                style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 3, border: `1px solid ${col.border}`, background: col.chip, color: col.text, cursor: 'pointer' }}>
+                Dettaglio
+              </button>
+            )}
+            {w.dbId != null && data.onRicarica && (
+              <button onClick={(e) => { e.stopPropagation(); data.onRicarica!(w.dbId!) }}
+                style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 3, border: `1px solid ${col.border}`, background: col.chip, color: col.text, cursor: 'pointer' }}>
+                Ricarica
+              </button>
+            )}
+            {data.onDelete && (
+              <button onClick={(e) => { e.stopPropagation(); data.onDelete!(meta.colIdx, meta.rowIdx) }}
+                style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 3, border: `1px solid ${C.con.border}`, background: C.con.bg, color: C.con.text, cursor: 'pointer' }}>
+                ×
+              </button>
+            )}
+          </div>
         </div>
       </div>
       <div style={{ padding: '6px 12px', fontFamily: '"IBM Plex Mono", monospace', fontSize: 10.5, lineHeight: 1.55 }}>
@@ -1025,12 +1137,42 @@ function ModuloWorkNode({ data }: NodeProps<Node<WorkNodeData>>) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Node: Gruppo CRM con analiti in comune
+// ─────────────────────────────────────────────────────────────────────────────
+type CrmGroupNodeData = { analitiCondivisi: string[] }
+function CrmGroupNode({ data }: NodeProps<Node<CrmGroupNodeData>>) {
+  const MAX_LABEL = 4
+  const visible = data.analitiCondivisi.slice(0, MAX_LABEL)
+  const resto = data.analitiCondivisi.length - MAX_LABEL
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      border: `1.5px dashed ${C.page.brd2}`, borderRadius: 10,
+      background: 'rgba(245,245,243,0.55)', boxSizing: 'border-box',
+      pointerEvents: 'none',
+    }}>
+      <div style={{
+        padding: '5px 10px', fontSize: 9, color: C.page.t2, fontWeight: 600,
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+        display: 'flex', flexWrap: 'wrap', gap: 3, pointerEvents: 'none',
+      }}>
+        {visible.map(n => (
+          <span key={n} style={{ background: C.page.bg, border: `1px solid ${C.page.brd}`, borderRadius: 2, padding: '0 4px' }}>{n}</span>
+        ))}
+        {resto > 0 && <span style={{ color: C.page.th }}>+{resto}</span>}
+      </div>
+    </div>
+  )
+}
+
 // nodeTypes definito fuori dal componente per evitare ri-render spuri di RF
 const nodeTypes = {
   mix: ModuloMixNode,
   sng: ModuloSngNode,
   work: ModuloWorkNode,
   analiti: AnalitiNode,
+  group: CrmGroupNode,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1049,6 +1191,18 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     () => deriveModuli(analiti, crmItems, removedMix, mixLottoSel, workCols),
     [analiti, crmItems, removedMix, mixLottoSel, workCols],
   )
+
+  const clusters = useMemo(() => computeClusters(moduli, analiti), [moduli, analiti])
+
+  const nodeToCluster = useMemo(() => {
+    const map = new Map<string, string>()
+    let idx = 0
+    for (const [, cluster] of clusters) {
+      const groupId = `GROUP-${idx++}`
+      for (const id of cluster.nodeIds) map.set(id, groupId)
+    }
+    return map
+  }, [clusters])
 
   const moduliEdges = useMemo(() => computeEdges(moduli), [moduli])
   const analitiEdgesBase = useMemo(() => computeAnalitiEdges(analiti, moduli), [analiti, moduli])
@@ -1138,19 +1292,47 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
       selectable: true,
       data: analitiNodeData,
     }
+
+    // GroupNode per cluster di CRM con analiti in comune
+    const groupNodes: Node[] = []
+    let clusterIdx = 0
+    for (const [, cluster] of clusters) {
+      const groupId = `GROUP-${clusterIdx++}`
+      const dims = groupDimensions(cluster.nodeIds, moduli, positions)
+      groupNodes.push({
+        id: groupId,
+        type: 'group',
+        position: { x: dims.x, y: dims.y },
+        style: { width: dims.width, height: dims.height },
+        draggable: false,
+        selectable: false,
+        data: { analitiCondivisi: cluster.analitiCondivisi } as CrmGroupNodeData,
+        zIndex: -1,
+      })
+    }
+
     const moduliNodes = moduli.map(m => {
       const p = positions[m.id] || { x: 0, y: 0 }
-      const base = { id: m.id, position: p, draggable: true, selectable: true }
+      const clusterId = nodeToCluster.get(m.id)
+      let nodePos = p
+      if (clusterId) {
+        const gn = groupNodes.find(g => g.id === clusterId)
+        if (gn) nodePos = { x: p.x - gn.position.x, y: p.y - gn.position.y }
+      }
+      const base = {
+        id: m.id, position: nodePos, draggable: true, selectable: true,
+        ...(clusterId ? { parentId: clusterId, extent: 'parent' as const } : {}),
+      }
       if (m.kind === 'mix') {
         return { ...base, type: 'mix', data: { meta: m, highlighted: false, onRemoveMix } as MixNodeData }
       }
       if (m.kind === 'sng') {
         return { ...base, type: 'sng', data: { meta: m, highlighted: false, onRemoveSng } as SngNodeData }
       }
-      return { ...base, type: 'work', data: { meta: m, highlighted: false } as WorkNodeData }
+      return { ...base, type: 'work', data: { meta: m, highlighted: false, onOpenDrawer: onOpenWorkDrawer, onRicarica: onRicaricaWork, onDelete: onDeleteWork } as WorkNodeData }
     })
-    return [analitiNode, ...moduliNodes]
-  }, [moduli, positions, analitiPos, analitiNodeData, onRemoveMix, onRemoveSng])
+    return [...groupNodes, analitiNode, ...moduliNodes]
+  }, [moduli, positions, analitiPos, analitiNodeData, clusters, nodeToCluster, onRemoveMix, onRemoveSng, onOpenWorkDrawer, onRicaricaWork, onDeleteWork])
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(structuralNodes)
 
@@ -1186,18 +1368,24 @@ export function SchemaLavagna(props: SchemaLavagnaProps) {
     }))
   }, [highlightedIdsWithSel, setRfNodes])
 
-  // Persisti posizione a fine drag
+  // Persisti posizione a fine drag (converti relativa→assoluta per nodi in gruppo)
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     onNodesChange(changes)
     let dragging = false
     for (const ch of changes) {
       if (ch.type === 'position') {
         if (ch.dragging) { dragging = true }
-        else if (ch.position) { setPosition(ch.id, ch.position.x, ch.position.y) }
+        else if (ch.position) {
+          const clusterId = nodeToCluster.get(ch.id)
+          const groupNode = clusterId ? rfNodes.find(n => n.id === clusterId) : undefined
+          const absX = groupNode ? ch.position.x + groupNode.position.x : ch.position.x
+          const absY = groupNode ? ch.position.y + groupNode.position.y : ch.position.y
+          setPosition(ch.id, absX, absY)
+        }
       }
     }
     isDraggingRef.current = dragging
-  }, [onNodesChange, setPosition])
+  }, [onNodesChange, setPosition, nodeToCluster, rfNodes])
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     const id = node.id
