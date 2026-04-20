@@ -4,29 +4,7 @@
 
 ##
 
-## Bug noti / TODO rimasti aperti (da risolvere nella prossima sessione)
-
-### ⚠ Frecce non appaiono
-**Sintomo:** Le frecce tra moduli CRM/Work non sono visibili in produzione.
-**Causa probabile:** `computeArchi()` richiede che le Work abbiano `srcs` popolato con `tipo` corretto (`'mix' | 'sng' | 'prep' | 'work'`). Se lo schema non ha Work create (o le Work non hanno sorgenti in `selSrcs`), non viene disegnato nessun arco. Possibile anche che i moduli derivati non matchino per `id` le chiavi usate nelle frecce (es. `MIX-${mixId}` vs l'id usato in `w.srcs`).
-**Da verificare:** Aggiungere `console.log` temporaneo su `archi` dopo `computeArchi()` per vedere se è vuoto. Controllare che `w.srcs[i].id` corrisponda al `mixId` o `sngId` usato come chiave in `mixMod` / `sngMod`.
-Ho visto che appaiono ma in uno schema solo (con intermedie) e non collegano tutto. In piu appaiono ma ci sono sovrapposizioni e schifezze. In piu non si muovono con lo spostamento della chips.
-
-### ⚠ Pan con click sullo sfondo buggy
-**Sintomo:** Il pan inizia male (scatti, salti) quando si clicca sullo sfondo del viewport.
-**Causa probabile:** Il check `e.target !== e.currentTarget` nel `handleViewportMouseDown` fallisce perché il world div intercetta l'evento prima del viewport. Il world occupa tutta l'area del viewport (anche se è più grande con overflow) e `e.target` risulta il world, non il viewport stesso.
-**Fix suggerito:** Cambiare la condizione: usare un ref separato per il "background" del canvas (un div con z-index basso dietro i moduli), oppure accettare qualsiasi target che non sia un `.modulo` (classe da aggiungere ai moduli). In alternativa: usare mouse button centrale (button=1) per pan sempre, e button=0 solo su sfondo.
-ha bloccato proprio l'pp
-
-### ⚠ Zoom troppo repentino
-**Sintomo:** Lo zoom con wheel è percepito come troppo veloce/brusco.
-**Fix suggerito:** Ridurre il `factor` da `1.1` a `1.05` (mezza variazione per step). Opzionale: leggere `e.deltaMode` (0=pixel, 1=righe, 2=pagine) e scalare `deltaY` di conseguenza per trackpad vs mouse wheel.
- 
- ### altro
- alcune card sono sovrappost (quelle con rivette piu lunghe...)
- generale aspetto buggato della lavagna. deve essere una mappa con card collegate senza sovrapposizioni ( o comunque minime) e piu espnsa. Ci deve essere un livello di sovrapposizione per le freccie. Qelle di una card non devono sovrapporsi a quelle di un altra card. 
-
- Se non riesci a far tutto usa una libreira a un certo punto tentanto di mantenere lo schema. Ma questo lo sai tu sei tu il developer.
+I possono ragruppare le crm con analiti in comune (adesso nello schema stann osulla stessa riga... Sarebbe da mettere vicini o cumunque dovrebbe essere evidente che alcuni analiti siano in comune (sia il caso di cmr mix e singoli con analiti condivisi che il caso piu singoli per lo stesso composto.
 
  ## importante
 
